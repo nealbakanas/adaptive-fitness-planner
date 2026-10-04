@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "Adaptive Fitness Planner",
+  "short_name": "Train",
+  "description": "Picks today's training session from your weekly goals.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101317",
+  "theme_color": "#101317",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

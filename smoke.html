@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UI smoke test</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    #summary, #out { max-width: 720px; margin: 0 auto; padding: 8px 16px; font: 14px/1.6 ui-monospace, Consolas, monospace; }
+    .PASS { color: #4cd98b; }
+    .FAIL { color: #ff6b6b; font-weight: 700; }
+    #stage { position: absolute; left: -10000px; top: 0; width: 600px; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <div id="out"></div>
+  <div id="stage">
+    <main id="app"></main>
+    <div id="timer" hidden></div>
+    <nav id="nav"></nav>
+    <div id="sheet" hidden></div>
+  </div>
+  <script>globalThis.AFP_STORAGE_KEY = 'afp.smoke'; // the app under test saves here, never over real data</script>
+  <script type="module" src="js/smoke.js"></script>
+</body>
+</html>

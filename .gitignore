@@ -1,0 +1,3 @@
+# Backups hold personal training history: keep them out of the repo.
+*.fitnotes
+fitness-backup-*.json

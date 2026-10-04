@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rules tests</title>
+  <style>
+    body { font: 14px/1.6 ui-monospace, Consolas, monospace; background: #101317; color: #e8ecf1; padding: 16px; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    .PASS { color: #4cd98b; }
+    .FAIL { color: #ff6b6b; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Running…</h1>
+  <div id="out"></div>
+  <script>globalThis.AFP_STORAGE_KEY = 'afp.tests'; // never touch the real saved data</script>
+  <script type="module" src="js/tests.js"></script>
+</body>
+</html>
