@@ -1,5 +1,5 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
-import { seed, defaultAnytime } from './seed.js';
+import { seed, defaultAnytime, HYPER_PRO_ONLY } from './seed.js';
 import { guessRegion, guessExplosive } from './logic.js';
 
 // Test pages set their own key so they never touch real data.
@@ -107,6 +107,37 @@ export function migrate(s) {
     const threeFives = s.schemes.find(x => x.id === 's-t1-3x5');
     if (threeFives && threeFives.tiers.join() === 'T1') threeFives.tiers = ['T2'];
     s.version = 7;
+  }
+  if (s.version < 8) {
+    // v8: Freak Athlete Hyper Pro + Leg Developer movements as accessories, the gear at the Basement.
+    // Families and exercises you already have by the same name (e.g. imported from FitNotes) are reused, not doubled.
+    const basement = s.locations.find(l => l.id === 'loc-basement');
+    for (const eq of ['hyper-pro', 'leg-developer']) {
+      if (!s.equipment.includes(eq)) s.equipment.push(eq);
+      if (basement && !basement.equipment.includes(eq)) basement.equipment.push(eq);
+    }
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const famIds = {};
+    for (const fam of base.families) {
+      const have = s.families.find(f => f.id === fam.id || norm(f.name) === norm(fam.name));
+      if (have) famIds[fam.id] = have.id;
+      else if (['fam-hams', 'fam-hinge', 'fam-quads', 'fam-calves'].includes(fam.id)) { s.families.push({ ...fam }); famIds[fam.id] = fam.id; }
+    }
+    for (const e of base.exercises) {
+      if (!e.equipment.includes('hyper-pro')) continue;
+      const have = s.exercises.find(x => x.id === e.id || norm(x.name) === norm(e.name));
+      if (have) {
+        if (HYPER_PRO_ONLY.includes(e.id) && !(have.equipment || []).length) have.equipment = [...e.equipment];
+        continue;
+      }
+      const familyId = famIds[e.familyId];
+      if (!familyId) continue;
+      const rank = Math.max(0, ...s.exercises.filter(x => x.familyId === familyId).map(x => x.rank || 0)) + 1;
+      s.exercises.push({ ...e, familyId, rank: familyId === e.familyId && !s.exercises.some(x => x.familyId === familyId) ? e.rank : rank });
+      const fam = s.families.find(f => f.id === familyId);
+      if (fam && !fam.defaultExerciseId) fam.defaultExerciseId = e.id;
+    }
+    s.version = 8;
   }
   return s;
 }

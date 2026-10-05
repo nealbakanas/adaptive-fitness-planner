@@ -3,7 +3,12 @@
 export const EQUIPMENT = [
   'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell',
   'dip-belt', 'pullup-bar', 'rings', 'dip-station', 'bands', 'ab-wheel', 'box',
+  'hyper-pro', 'leg-developer', // Freak Athlete Hyper Pro and its leg extension / leg curl attachment
 ];
+
+// Movements that need the Hyper Pro itself (a back extension, GHR or leg curl can't be done without it).
+export const HYPER_PRO_ONLY = ['ex-back-ext', 'ex-back-ext-90', 'ex-reverse-hyper', 'ex-ghr', 'ex-ghd-situp', 'ex-sorensen',
+  'ex-belt-squat', 'ex-leg-ext', 'ex-seated-legcurl', 'ex-lying-legcurl'];
 
 // Gear that doesn't need a gym session: an exercise using only these can be done in a spare few minutes.
 export const ANYTIME_GEAR = ['pullup-bar', 'rings', 'bands', 'ab-wheel'];
@@ -11,7 +16,8 @@ export const defaultAnytime = (equipment, bodyweight = false) => !bodyweight && 
 
 // Region matters for explosive work: heavy work in a region makes explosive work there technique, not power.
 const FAMILY_REGION = { 'fam-squat': 'lower', 'fam-vpull': 'upper', 'fam-dip': 'upper', 'fam-clean': 'full', 'fam-incline': 'upper',
-  'fam-upperback': 'upper', 'fam-arms': 'upper', 'fam-core': 'full', 'fam-jumps': 'lower' };
+  'fam-upperback': 'upper', 'fam-arms': 'upper', 'fam-core': 'full', 'fam-jumps': 'lower',
+  'fam-hams': 'lower', 'fam-hinge': 'lower', 'fam-quads': 'lower', 'fam-calves': 'lower' };
 const EXPLOSIVE_FAMILIES = ['fam-clean', 'fam-jumps'];
 
 function ex(id, name, familyId, rank, metric, equipment, opts = {}) {
@@ -35,6 +41,10 @@ export function seed() {
     { id: 'fam-arms', name: 'Arms (pump)', defaultExerciseId: 'ex-db-curl' },
     { id: 'fam-core', name: 'Core', defaultExerciseId: 'ex-hanging-knee' },
     { id: 'fam-jumps', name: 'Jumps', defaultExerciseId: 'ex-broad-jump' },
+    { id: 'fam-hams', name: 'Hamstrings', defaultExerciseId: 'ex-nordic' },
+    { id: 'fam-hinge', name: 'Hinge', defaultExerciseId: 'ex-back-ext' },
+    { id: 'fam-quads', name: 'Quads', defaultExerciseId: 'ex-leg-ext' },
+    { id: 'fam-calves', name: 'Calves', defaultExerciseId: 'ex-calf-raise' },
   ];
 
   // Rank runs harder (1) to easier within each family.
@@ -90,6 +100,23 @@ export function seed() {
     ex('ex-jump-squat', 'Jump squat', 'fam-jumps', 4, 'reps', [], { maxReps: 8 }),
     ex('ex-skater-jump', 'Skater jump', 'fam-jumps', 5, 'reps', [], { maxReps: 8 }),
     ex('ex-jump-lunge', 'Jump lunge', 'fam-jumps', 6, 'reps', [], { maxReps: 10 }),
+
+    // Freak Athlete Hyper Pro (with the GHD pad) and the Leg Developer attachment: accessory (T3) work.
+    ex('ex-nordic', 'Nordic curl', 'fam-hams', 1, 'reps', ['hyper-pro']),
+    ex('ex-ghr', 'Glute-ham raise', 'fam-hams', 2, 'reps', ['hyper-pro']),
+    ex('ex-seated-legcurl', 'Seated leg curl', 'fam-hams', 3, 'load_reps', ['hyper-pro', 'leg-developer']),
+    ex('ex-lying-legcurl', 'Lying leg curl', 'fam-hams', 4, 'load_reps', ['hyper-pro', 'leg-developer']),
+    ex('ex-back-ext-90', '90° back extension', 'fam-hinge', 1, 'load_reps', ['hyper-pro']),
+    ex('ex-back-ext', 'Back extension', 'fam-hinge', 2, 'load_reps', ['hyper-pro']),
+    ex('ex-reverse-hyper', 'Reverse hyper', 'fam-hinge', 3, 'load_reps', ['hyper-pro']),
+    ex('ex-hip-thrust', 'Hip thrust', 'fam-hinge', 4, 'load_reps', ['hyper-pro']),
+    ex('ex-sorensen', 'Sorensen hold', 'fam-hinge', 5, 'time', ['hyper-pro']),
+    ex('ex-belt-squat', 'Belt squat', 'fam-quads', 1, 'load_reps', ['hyper-pro']),
+    ex('ex-leg-ext', 'Leg extension', 'fam-quads', 2, 'load_reps', ['hyper-pro', 'leg-developer']),
+    ex('ex-reverse-nordic', 'Reverse Nordic', 'fam-quads', 3, 'reps', ['hyper-pro']),
+    ex('ex-calf-raise', 'Calf raise', 'fam-calves', 1, 'load_reps', ['hyper-pro']),
+    ex('ex-ghd-situp', 'GHD sit-up', 'fam-core', 5, 'reps', ['hyper-pro']),
+    ex('ex-trap3', 'Trap 3 raise', 'fam-upperback', 4, 'load_reps', ['hyper-pro']),
   ];
 
   const sc = (id, sets, reps, restSec, minutes, tiers) =>
@@ -138,7 +165,7 @@ export function seed() {
   ];
 
   return {
-    version: 7,
+    version: 8,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,

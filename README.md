@@ -50,6 +50,7 @@ After the first visit it works offline: `sw.js` fetches from the network first (
 - **Pause and more time**: Finish with sets left offers *Pause for later*; the paused workout waits on the check-in screen with Resume (paused workouts close at the end of the day like open ones). *+ Time* in the session header adds goal work that fits the extra minutes, from families not already in the workout.
 - **Real rest** = time since the same block's previous set minus roughly the set's work (3 s a rep, or the set's time); gaps over 15 minutes count as breaks. Shown per block, for the session, in the finish message and in "Done today", next to the planned rest.
 - **Timed and distance sets** (holds, sprints) count as one rep each toward a goal.
+- **Freak Athlete Hyper Pro** (with its GHD pad and the Leg Developer attachment) movements are in the library as accessory work, needing the `hyper-pro` / `leg-developer` gear, which starts at the Basement: Nordic curl, glute-ham raise, seated and lying leg curl, back extension (45° and 90°), reverse hyper, hip thrust, Sorensen hold, belt squat, leg extension, reverse Nordic, calf raise, GHD sit-up and Trap 3 raise. Upgrading existing data reuses families and exercises you already have by the same name.
 - **Archived exercises** stay in history but are left out of suggestions, swaps and pickers (Library → Show archived).
 - Week starts Monday by default. Sleep is 1–5, stored as a number.
 

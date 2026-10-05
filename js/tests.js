@@ -209,7 +209,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 7);
+  eq(m.version, 8);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -228,7 +228,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 7);
+  eq(m.version, 8);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -474,6 +474,43 @@ test('timed and distance sets count toward a goal, one per set', () => {
 });
 
 // ---------- supersets, extra time, energy ----------
+test('Hyper Pro and leg attachment movements are accessories at the Basement, not the Office', () => {
+  const s = seed();
+  const ids = ['ex-nordic', 'ex-ghr', 'ex-seated-legcurl', 'ex-lying-legcurl', 'ex-back-ext-90', 'ex-back-ext', 'ex-reverse-hyper', 'ex-hip-thrust',
+    'ex-sorensen', 'ex-belt-squat', 'ex-leg-ext', 'ex-reverse-nordic', 'ex-calf-raise', 'ex-ghd-situp', 'ex-trap3'];
+  const get = id => s.exercises.find(e => e.id === id);
+  ok(ids.every(get), 'all in the library');
+  const [office, basement] = s.locations;
+  ok(ids.every(id => L.isAvailable(get(id), basement) && !L.isAvailable(get(id), office)), 'Basement only');
+  ok(ids.every(id => !get(id).explosive), 'none explosive');
+  const pat = id => L.movementPattern(s, get(id));
+  eq(['ex-nordic', 'ex-seated-legcurl', 'ex-back-ext', 'ex-reverse-hyper', 'ex-sorensen', 'ex-leg-ext', 'ex-reverse-nordic', 'ex-belt-squat', 'ex-calf-raise', 'ex-ghd-situp', 'ex-trap3'].map(pat),
+    ['hinge', 'hinge', 'hinge', 'hinge', 'hinge', 'knee', 'knee', 'knee', 'calf', 'core', 'pull']);
+  ok(L.pairScore(s, get('ex-back-squat'), get('ex-seated-legcurl')) === 3 && L.pairScore(s, { name: 'Romanian deadlift', familyId: null }, get('ex-leg-ext')) === 3, 'squat with leg curls, RDL with leg extensions');
+});
+test('v7 data gets the Hyper Pro movements without doubling ones you already have', () => {
+  const s = seed();
+  s.version = 7;
+  const hyperIds = new Set(s.exercises.filter(e => e.equipment.includes('hyper-pro')).map(e => e.id));
+  s.exercises = s.exercises.filter(e => !hyperIds.has(e.id));
+  s.families = s.families.filter(f => !['fam-hams', 'fam-hinge', 'fam-quads', 'fam-calves'].includes(f.id));
+  s.equipment = s.equipment.filter(e => e !== 'hyper-pro' && e !== 'leg-developer');
+  for (const l of s.locations) l.equipment = l.equipment.filter(e => e !== 'hyper-pro' && e !== 'leg-developer');
+  s.families.push({ id: 'my-hams', name: 'Hamstrings', defaultExerciseId: 'my-nordic' });
+  s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
+  s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
+  const m = migrate(s);
+  eq(m.version, 8);
+  ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
+  eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
+  eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
+  eq(m.families.filter(f => f.name === 'Hamstrings').length, 1, 'your Hamstrings family is reused');
+  eq(m.exercises.find(e => e.name === 'Seated leg curl').familyId, 'my-hams');
+  eq(m.families.find(f => f.id === 'my-hams').defaultExerciseId, 'my-nordic', 'your usual choice stays');
+  ok(m.exercises.some(e => e.id === 'ex-leg-ext') && m.families.some(f => f.id === 'fam-quads'), 'new families where needed');
+  const again = migrate(structuredClone(m));
+  eq(again.exercises.length, m.exercises.length, 'idempotent');
+});
 test('movement patterns from names', () => {
   const s = seed();
   const pat = name => L.movementPattern(s, { name, familyId: null });

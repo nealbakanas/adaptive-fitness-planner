@@ -148,6 +148,9 @@ const ALIASES = {
   inclinebarbellbenchpress: 'ex-incline-bench', inclinebenchpress: 'ex-incline-bench', inclinedumbbellbenchpress: 'ex-incline-db', inclinedbpress: 'ex-incline-db',
   bandpullapart: 'ex-band-pullapart', dumbbellcurl: 'ex-db-curl', dbcurl: 'ex-db-curl',
   hanginglegraise: 'ex-hanging-leg', hangingkneeraise: 'ex-hanging-knee', abwheelrollout: 'ex-ab-wheel', deadbug: 'ex-dead-bug',
+  nordiccurls: 'ex-nordic', nordic: 'ex-nordic', ghr: 'ex-ghr', backextensions: 'ex-back-ext', hyperextension: 'ex-back-ext', hyperextensions: 'ex-back-ext',
+  reversehyperextension: 'ex-reverse-hyper', reversehypers: 'ex-reverse-hyper', legextensions: 'ex-leg-ext', legcurl: 'ex-seated-legcurl',
+  hipthrusts: 'ex-hip-thrust', calfraises: 'ex-calf-raise', ghdsitups: 'ex-ghd-situp', reversenordics: 'ex-reverse-nordic',
   boxjump: 'ex-box-jump', depthjump: 'ex-depth-jump', broadjump: 'ex-broad-jump', jumpsquat: 'ex-jump-squat', skaterjump: 'ex-skater-jump', jumplunge: 'ex-jump-lunge',
 };
 // Weighted and plain versions of the same movement in the starter library.

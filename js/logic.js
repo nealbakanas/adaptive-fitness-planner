@@ -442,10 +442,11 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
 const PATTERNS = [
   ['core', /\bcore\b|\babs?\b|plank|crunch|sit[- ]?up|leg raise|knee raise|rollout|ab[- ]?wheel|dead ?bug|hollow|pallof|l[- ]?sit|toes to bar|v[- ]?up/i],
   ['calf', /\bcalf|calves/i],
-  ['hinge', /deadlift|\brdls?\b|romanian|good ?morning|back extension|hyperextension|hip thrust|glute|nordic|hamstring|\bghr\b|leg curl|swing|hinge|(block|rack|deficit) pulls?\b/i],
+  ['knee', /reverse nordic|sissy/i],
+  ['hinge', /reverse hyper|sorensen|deadlift|\brdls?\b|romanian|good ?morning|back extension|hyperextension|hip thrust|glute|nordic|hamstring|\bghr\b|leg curl|swing|hinge|(block|rack|deficit) pulls?\b/i],
   ['full', /clean|snatch|jerk|thruster|burpee/i],
   ['knee', /squat|lunge|split|step[- ]?up|leg press|leg extension|pistol|jump|bound|\bhops?\b|skater/i],
-  ['pull', /pull[- ]?ups?|chin[- ]?ups?|\brows?\b|pulldown|face pull|pull[- ]?apart|rear[- ]?delt|curl|shrug|vertical pull|upper back|\blats?\b/i],
+  ['pull', /\btrap\b|pull[- ]?ups?|chin[- ]?ups?|\brows?\b|pulldown|face pull|pull[- ]?apart|rear[- ]?delt|curl|shrug|vertical pull|upper back|\blats?\b/i],
   ['push', /\bdips?\b|press|push[- ]?ups?|bench|incline|tricep|telle|extension|skull|push ?down|raise|\bfly\b|chest|shoulder/i],
 ];
 export function movementPattern(state, e) {
