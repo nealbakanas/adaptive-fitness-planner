@@ -58,7 +58,7 @@ function removeSession(s) {
 function closeStale() {
   const today = L.dayKey();
   for (const s of [...state.sessions]) {
-    if (s.status !== 'open' || s.day === today) continue;
+    if ((s.status !== 'open' && s.status !== 'paused') || s.day === today) continue;
     endSession(s);
   }
 }
@@ -73,6 +73,21 @@ function endSession(s) {
 }
 
 const blockSets = b => state.sets.filter(s => s.blockId === b.id);
+
+// Supersets: a block with pairOf is done in the rest of the block it points to.
+const partnerOf = (s, b) => b.pairOf ? s.blocks.find(x => x.id === b.pairOf) : s.blocks.find(x => x.pairOf === b.id);
+const inPair = (s, b) => !!partnerOf(s, b);
+
+// Rough time a set takes, so "real rest" is the gap between sets minus the work.
+const workSec = st => st.time > 0 ? Number(st.time) : Math.max(5, (Number(st.reps) || 1) * 3);
+
+function restSummary(sets) {
+  const m = sets.filter(x => x.done && x.restSec != null);
+  if (!m.length) return null;
+  const avg = Math.round(m.reduce((t, x) => t + x.restSec, 0) / m.length);
+  const plan = Math.round(m.reduce((t, x) => t + (x.restPlan || 0), 0) / m.length);
+  return { avg, plan, n: m.length, text: `real rest ${clock(avg)} avg · planned ${clock(plan)}` };
+}
 
 function newSet(session, block, ex, sc, load) {
   return {
@@ -173,8 +188,8 @@ function planBlocks(plan) {
 }
 
 function sessionBudget(s, exceptBlock) {
-  return s.minutes - s.blocks.filter(b => b !== exceptBlock)
-    .reduce((m, b) => m + (schOf(b.schemeId)?.minutes || 0) + L.WARMUP[b.tier], 0);
+  return Math.round(s.minutes - s.blocks.filter(b => b !== exceptBlock)
+    .reduce((m, b) => m + ((schOf(b.schemeId)?.minutes || 0) + L.WARMUP[b.tier]) * (b.pairOf ? 0.5 : 1), 0));
 }
 
 function videoUrl(ex) {
@@ -250,10 +265,19 @@ function nextSetLabel(s) {
   return null;
 }
 
+// In a superset the partner's next set comes next while it's behind; otherwise this block's next set.
+function nextLabelAfter(s, b) {
+  const p = partnerOf(s, b);
+  const doneIn = x => blockSets(x).filter(st => st.done).length;
+  const label = x => { const i = blockSets(x).findIndex(st => !st.done); return i >= 0 ? `${exOf(x.exerciseId)?.name ?? ''} · set ${i + 1}` : null; };
+  if (p && doneIn(p) <= doneIn(b) && label(p)) return label(p);
+  return label(b) ?? (p && label(p)) ?? nextSetLabel(s);
+}
+
 function startTimer(s, b, setId = null) {
   const secs = effectiveRest(b);
   if (!secs) return;
-  state.timer = { endsAt: Date.now() + secs * 1000, total: secs, blockId: b.id, setId, next: nextSetLabel(s), warned: false, alerted: false };
+  state.timer = { endsAt: Date.now() + secs * 1000, total: secs, blockId: b.id, setId, next: nextLabelAfter(s, b), warned: false, alerted: false };
   setWakeLock(true);
 }
 
@@ -387,14 +411,23 @@ function seg(key, items, cur) {
 function viewCheckin() {
   const ci = ui.ci;
   const doneToday = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'done');
+  const paused = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'paused');
   let h = `<header class="top"><h1>Check in</h1></header>`;
+  for (const p of paused) {
+    const left = state.sets.filter(x => x.sessionId === p.id && !x.done).length;
+    const blocksLeft = p.blocks.filter(b => blockSets(b).some(x => !x.done)).length;
+    const at = new Date(p.pausedAt ?? p.checkinAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    h += `<div class="card resume"><div><b>Paused at ${at}</b><div class="meta">${left} set${left === 1 ? '' : 's'} left in ${blocksLeft} exercise${blocksLeft === 1 ? '' : 's'}</div></div>
+      <button class="primary" data-act="resume" data-id="${p.id}">Resume</button></div>`;
+  }
   if (doneToday.length) {
-    const n = state.sets.filter(x => x.done && doneToday.some(s => s.id === x.sessionId)).length;
-    h += `<div class="card muted">Done today: ${doneToday.length} session${doneToday.length > 1 ? 's' : ''}, ${n} sets.</div>`;
+    const sets = state.sets.filter(x => x.done && doneToday.some(s => s.id === x.sessionId));
+    const rest = restSummary(sets);
+    h += `<div class="card muted">Done today: ${doneToday.length} session${doneToday.length > 1 ? 's' : ''}, ${sets.length} sets${rest ? ` · ${rest.text}` : ''}.</div>`;
   }
   h += `<div class="field"><label>Where</label>${seg('locationId', state.locations.map(l => [l.id, esc(l.name)]), ci.locationId)}</div>
     <div class="field"><label>Time (min)</label>${seg('minutes', TIMES.map(t => [t, t]), ci.minutes)}</div>
-    <div class="field"><label>Fatigue <span class="hint">1 fresh · 5 wrecked</span></label>${seg('fatigue', [1, 2, 3, 4, 5].map(n => [n, n]), ci.fatigue)}</div>
+    <div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${seg('energy', [1, 2, 3, 4, 5].map(n => [n, n]), 6 - ci.fatigue)}</div>
     <div class="field"><label>Sleep <span class="hint">optional · 1 poor · 5 great · tap again to clear</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
     <div class="field"><label>Intent</label>${seg('intent', INTENTS, ci.intent)}</div>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
@@ -411,13 +444,22 @@ function viewSession(s) {
   const credit = L.creditWeek(state);
   const est = s.minutes - sessionBudget(s);
   const intent = INTENTS.find(i => i[0] === s.intent)?.[1] ?? s.intent;
+  const rest = restSummary(state.sets.filter(x => x.sessionId === s.id));
   let h = `<header class="top"><div><h1>Today</h1>
-    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)} · est ${est} min</div>${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}</div>
-    <span class="badge ${s.source}">${s.source}</span></header>`;
+    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)} · est ${est} min</div>${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
+    ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
+    <div class="hbtns"><span class="badge ${s.source}">${s.source}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   if (!s.blocks.length) {
     h += `<div class="card muted">Nothing from your weekly goals fits this location and time. Add an exercise below, use a plan, or check in with more time.</div>`;
   }
-  h += s.blocks.map(b => viewBlock(s, b, credit)).join('');
+  // Each superset partner renders right after the block it's paired with.
+  const ordered = [];
+  for (const b of s.blocks) {
+    if (b.pairOf && s.blocks.some(x => x.id === b.pairOf)) continue;
+    ordered.push(b, ...s.blocks.filter(x => x.pairOf === b.id));
+  }
+  const ideas = pairIdeas(s, ordered, credit);
+  h += ordered.map(b => viewBlock(s, b, credit, ideas.get(b.id))).join('');
   h += `<button class="addblock" data-act="addEx">+ Add exercise</button>`;
   if (s.why?.length) {
     h += `<details class="why" ${ui.whyOpen ? 'open' : ''} data-why><summary>Why this session</summary><ul>${s.why.map(w =>
@@ -426,11 +468,27 @@ function viewSession(s) {
   h += `<div class="actions">
     <button data-act="usePlan">Use a plan instead</button>
     <button data-act="recheck">New check-in</button>
+    <button data-act="pause">Pause for later</button>
     <button class="primary" data-act="finish">Finish</button></div>`;
   return h;
 }
 
-function viewBlock(s, b, credit) {
+// One superset idea per main block that has sets left and no partner yet, each from a different family.
+function pairIdeas(s, ordered, credit) {
+  const out = new Map();
+  const used = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
+  for (const b of ordered) {
+    if (!['T1', 'T2', 'TECH'].includes(b.tier) || b.noPair || inPair(s, b) || !blockSets(b).some(x => !x.done)) continue;
+    const ex = exOf(b.exerciseId);
+    const idea = ex && L.suggestPair(state, s, ex, { excludeFamilies: used, credit });
+    if (!idea) continue;
+    out.set(b.id, idea);
+    used.push(idea.exercise.familyId);
+  }
+  return out;
+}
+
+function viewBlock(s, b, credit, idea = null) {
   const ex = exOf(b.exerciseId), sc = schOf(b.schemeId);
   if (!ex || !sc) return `<div class="card muted">Missing exercise or scheme.</div>`;
   const cfg = state.tiers[b.tier];
@@ -459,6 +517,9 @@ function viewBlock(s, b, credit) {
     dose += `<div class="dose">Not part of a weekly goal. It still builds history.</div>`;
   }
 
+  const rest = restSummary(sets);
+  if (rest) info.push(rest.text);
+
   if (ex.explosive && (b.tier === 'T1' || b.tier === 'T2')) {
     const rd = L.powerReadiness(state, s, ex, Date.now(), b.id);
     if (!rd.fresh) dose += `<div class="dose warn">Not fresh for power work: ${esc(rd.reasons.join('; '))}. <button class="link" data-act="toTech" data-b="${b.id}">Do it as technique</button></div>`;
@@ -483,7 +544,15 @@ function viewBlock(s, b, credit) {
   }).join('');
 
   const vid = videoUrl(ex);
-  return `<section class="block">
+  const main = b.pairOf && s.blocks.find(x => x.id === b.pairOf);
+  const pairHead = main ? `<div class="sslabel">↔ Superset with ${esc(exOf(main.exerciseId)?.name)}: do a set in its rest
+    <button class="link" data-act="pairUnlink" data-b="${b.id}">Unlink</button></div>` : '';
+  const ideaRow = idea ? `<div class="pairidea"><span>Superset idea: <b>${esc(idea.exercise.name)}</b> <span class="meta">T3 · ${esc(idea.why)}</span></span>
+    <span class="brow"><button class="small" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}">+ Add</button>
+    <button class="small quiet" data-act="pairOpen" data-b="${b.id}">Other</button>
+    <button class="small quiet" data-act="pairNo" data-b="${b.id}">No thanks</button></span></div>` : '';
+  return `<section class="block ${main ? 'paired' : ''} ${s.blocks.some(x => x.pairOf === b.id) ? 'haspair' : ''}">
+    ${pairHead}
     <div class="bhead"><button class="tier ${b.tier}" data-act="tierEdit" data-b="${b.id}" aria-label="Change tier">${b.tier} ▾</button>
       <button class="chip" data-act="swapEx" data-b="${b.id}">${esc(ex.name)} ▾</button>
       <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${sc.minutes}m ▾</button></div>
@@ -494,9 +563,11 @@ function viewBlock(s, b, credit) {
       <button class="small" data-act="addSet" data-b="${b.id}">+ set</button>
       <button class="small" data-act="removeSet" data-b="${b.id}">− set</button>
       <button class="small" data-act="timerStart" data-b="${b.id}">⏱ Rest</button>
+      ${inPair(s, b) ? '' : `<button class="small" data-act="pairOpen" data-b="${b.id}">↔ Superset</button>`}
       ${vid ? `<a class="small" href="${esc(vid)}" target="_blank" rel="noopener">▶ Video</a>` : ''}
       <button class="small quiet" data-act="removeBlock" data-b="${b.id}">Remove</button>
     </div>
+    ${ideaRow}
     ${ex.cues ? `<details class="cues"><summary>Cues</summary><p>${esc(ex.cues)}</p></details>` : ''}
   </section>`;
 }
@@ -924,7 +995,7 @@ function renderSheet() {
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, pasteImport: sheetPasteImport,
-    addEx: sheetAddEx, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme }[s.type](s);
+    addEx: sheetAddEx, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
   sheetEl.hidden = false;
   if (ui.sheetFocus) {
@@ -954,13 +1025,14 @@ function sheetAddEx(sh) {
     const f = famOf(e.familyId)?.name ?? '';
     groups.set(f, [...(groups.get(f) || []), e]);
   }
-  const tier = sh.mode === 'add' ? sh.tier : findBlock(sh.blockId).b.tier;
+  const tier = sh.mode === 'swap' ? findBlock(sh.blockId).b.tier : sh.tier;
+  const title = sh.mode === 'add' ? 'Add an exercise' : sh.mode === 'pair' ? `Superset with ${esc(exOf(findBlock(sh.blockId).b.exerciseId)?.name)}` : 'Swap to any exercise';
   const rows = [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([f, list]) =>
     `<div class="label">${esc(f)}</div>${list.map(e => `<button class="row" data-act="addExPick" data-id="${e.id}"><span>${esc(e.name)}</span>
       <span class="meta">${(tier === 'T1' || tier === 'T2') && e.metric !== 'load_reps' && !e.explosive ? 'reps only' : ''}</span></button>`).join('')}`).join('');
   const raw = (sh.q || '').trim();
-  return `<h3>${sh.mode === 'add' ? 'Add an exercise' : 'Swap to any exercise'}</h3>
-    ${sh.mode === 'add' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>
+  return `<h3>${title}</h3>
+    ${sh.mode !== 'swap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>
       <p class="meta">${TIER_DESC[sh.tier]}</p>` : ''}
     <input class="search" id="sheetq" data-sheetq value="${esc(sh.q || '')}" placeholder="Search, or type a new name" autocomplete="off">
     <div class="list">${rows || '<p class="muted">No matches here.</p>'}
@@ -1067,6 +1139,32 @@ function sheetSwapScheme(sh) {
       return `<button class="row ${sc.id === b.schemeId ? 'on' : ''} ${dim ? 'dim' : ''}" data-act="pickScheme" data-id="${sc.id}">
         <span>${esc(sc.name)}</span><span class="meta">${esc(bits.join(' · '))}</span></button>`;
     }).join('')}</div>`;
+}
+
+function sheetPair(sh) {
+  const { s, b } = findBlock(sh.blockId);
+  const ex = exOf(b.exerciseId);
+  const idea = L.suggestPair(state, s, ex, { excludeFamilies: s.blocks.map(x => exOf(x.exerciseId)?.familyId) });
+  const others = s.blocks.filter(x => x !== b && !inPair(s, x));
+  return `<h3>Superset with ${esc(ex.name)}</h3>
+    <p class="meta">Do a set of the partner in ${esc(ex.name)}'s rest. The rest timer keeps counting for ${esc(ex.name)}, and the next set alternates between the two.</p>
+    <div class="list">
+      ${idea ? `<button class="row" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}"><span>+ ${esc(idea.exercise.name)} <span class="tier T3">T3</span></span><span class="meta">${esc(idea.why)}</span></button>` : ''}
+      ${others.length ? `<div class="label">Already in this workout</div>${others.map(o => `<button class="row" data-act="pairLink" data-b="${b.id}" data-o="${o.id}">
+        <span>${esc(exOf(o.exerciseId)?.name)} <span class="tier ${o.tier}">${o.tier}</span></span><span class="meta">pair them</span></button>`).join('')}` : ''}
+      <button class="row add" data-act="pairAny" data-b="${b.id}">Choose any exercise ›</button></div>`;
+}
+
+function sheetFinishAsk(sh) {
+  return `<h3>${sh.left} set${sh.left === 1 ? '' : 's'} not logged yet</h3>
+    <p class="meta">Pause to pick this workout up later today: what you haven't done stays waiting on the Today tab. Finishing drops the unlogged sets.</p>
+    <div class="actions"><button data-act="finishNow">Finish now</button><button class="primary" data-act="pause">Pause for later</button></div>`;
+}
+
+function sheetMoreTime() {
+  return `<h3>More time?</h3>
+    <p class="meta">Adds exercises from your weekly goals that fit the extra minutes, after what's left in this workout.</p>
+    <div class="seg">${[10, 15, 20, 30, 45].map(m => `<button data-act="addTime" data-v="${m}">+${m} min</button>`).join('')}</div>`;
 }
 
 // In-app confirmation; native confirm() is unavailable in some hosts.
@@ -1282,6 +1380,7 @@ const actions = {
   },
 
   ci: d => {
+    if (d.k === 'energy') { ui.ci.fatigue = 6 - Number(d.v); return render(); }
     const num = ['minutes', 'fatigue', 'sleep'].includes(d.k);
     const v = num ? Number(d.v) : d.v;
     ui.ci[d.k] = d.k === 'sleep' && ui.ci.sleep === v ? null : v;
@@ -1305,6 +1404,7 @@ const actions = {
     const st = L.byId(state.sets, d.id);
     const s = L.byId(state.sessions, st.sessionId);
     if (!st.done) {
+      const prev = blockSets({ id: st.blockId }).filter(x => x.done).sort((x, y) => y.loggedAt - x.loggedAt)[0];
       st.done = true;
       st.loggedAt = Date.now();
       st.bw = state.settings.bodyweight;
@@ -1316,12 +1416,20 @@ const actions = {
       }
       unlockAudio();
       const b = s.blocks.find(x => x.id === st.blockId);
+      // Real rest: time since this block's previous set, minus roughly how long the set took. Long gaps are breaks, not rest.
+      const gap = prev && (st.loggedAt - prev.loggedAt) / 1000;
+      if (b && gap && gap < 15 * 60) { st.restSec = Math.max(0, Math.round(gap - workSec(st))); st.restPlan = effectiveRest(b); }
       const more = state.sets.some(x => x.sessionId === s.id && !x.done);
-      if (timerCfg().autoStart && b && more) startTimer(s, b, st.id);
+      const main = b?.pairOf && s.blocks.find(x => x.id === b.pairOf);
+      // A superset partner's set happens in the main lift's rest: keep that countdown, just point it at what's next.
+      if (main && state.timer?.blockId === main.id && state.timer.endsAt > Date.now()) state.timer.next = nextLabelAfter(s, b);
+      else if (timerCfg().autoStart && b && more) startTimer(s, b, st.id);
       else if (!more) state.timer = null; // session's last set: nothing to rest for
     } else {
       st.done = false;
       delete st.loggedAt;
+      delete st.restSec;
+      delete st.restPlan;
       if (state.timer?.setId === st.id) state.timer = null; // un-logging a set cancels its rest
     }
     save(); render();
@@ -1380,10 +1488,78 @@ const actions = {
   },
 
   finish: () => {
-    endSession(currentSession());
+    const s = currentSession();
+    const left = state.sets.filter(x => x.sessionId === s.id && !x.done).length;
+    if (left && state.sets.some(x => x.sessionId === s.id && x.done)) return openSheet({ type: 'finishAsk', left });
+    actions.finishNow();
+  },
+  finishNow: () => {
+    const s = currentSession();
+    const rest = restSummary(state.sets.filter(x => x.sessionId === s.id));
+    endSession(s);
     state.timer = null;
+    ui.sheet = null; renderSheet();
     setWakeLock(false);
-    save(); render(); toast('Session saved');
+    save(); render(); toast(rest ? `Session saved · ${rest.text}` : 'Session saved');
+  },
+  pause: () => {
+    const s = currentSession();
+    s.status = 'paused';
+    s.pausedAt = Date.now();
+    state.timer = null;
+    ui.sheet = null; renderSheet();
+    setWakeLock(false);
+    save(); render(); window.scrollTo(0, 0);
+    toast('Paused. Resume it from Today when you have time.');
+  },
+  resume: d => {
+    const cur = currentSession();
+    if (cur) { cur.status = 'paused'; cur.pausedAt = Date.now(); }
+    const s = L.byId(state.sessions, d.id);
+    s.status = 'open';
+    delete s.pausedAt;
+    save(); render(); window.scrollTo(0, 0);
+    toast('Picked up where you left off. Tap + Time if you have more than planned.');
+  },
+  moreTime: () => openSheet({ type: 'moreTime' }),
+  addTime: d => {
+    const s = currentSession();
+    const extra = Number(d.v);
+    const res = L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies: s.blocks.map(b => exOf(b.exerciseId)?.familyId) });
+    s.minutes += extra;
+    for (const b of res.blocks) { s.blocks.push(b); genSets(s, b); }
+    ui.sheet = null;
+    save(); render();
+    toast(res.blocks.length ? `Added ${res.blocks.map(b => exOf(b.exerciseId)?.name).join(', ')}` : 'Nothing else from your goals fits. Add an exercise below.');
+  },
+
+  pairAdd: d => {
+    const { s, b } = findBlock(d.b);
+    const nb = addBlock(s, exOf(d.ex), 'T3');
+    nb.pairOf = b.id;
+    nb.schemeId = schemeForBlock(s, exOf(d.ex), 'T3', nb).id; // now it only costs half its time
+    genSets(s, nb);
+    ui.sheet = null; renderSheet();
+    save(); render();
+    toast(`Superset: ${exOf(d.ex).name} in ${exOf(b.exerciseId).name}'s rest`);
+  },
+  pairOpen: d => openSheet({ type: 'pair', blockId: d.b }),
+  pairAny: d => openSheet({ type: 'addEx', mode: 'pair', tier: 'T3', blockId: d.b, q: '' }),
+  pairLink: d => {
+    const { s } = findBlock(d.b);
+    const o = s.blocks.find(x => x.id === d.o);
+    o.pairOf = d.b;
+    ui.sheet = null; renderSheet();
+    save(); render();
+  },
+  pairUnlink: d => {
+    const { b } = findBlock(d.b);
+    delete b.pairOf;
+    save(); render();
+  },
+  pairNo: d => {
+    findBlock(d.b).b.noPair = true;
+    save(); render();
   },
 
   recheck: () => {
@@ -1490,8 +1666,12 @@ const actions = {
     if (sh.from === 'swap' && sh.blockId) {
       if (here) return swapTo(e.id);
       toast('Added, but its equipment isn’t here');
-    } else if (sh.from === 'add' && s) {
-      if (here) { addBlock(s, e, sh.tier); toast(`Added ${e.name}`); }
+    } else if ((sh.from === 'add' || sh.from === 'pair') && s) {
+      if (here) {
+        const nb = addBlock(s, e, sh.tier);
+        if (sh.from === 'pair') nb.pairOf = sh.blockId;
+        toast(`Added ${e.name}`);
+      }
       else toast('Added, but its equipment isn’t here');
     } else {
       toast(`Added ${e.name}`);
@@ -1520,7 +1700,8 @@ const actions = {
     const sh = ui.sheet;
     if (sh.mode === 'swap') return swapTo(d.id);
     const s = currentSession();
-    addBlock(s, exOf(d.id), sh.tier);
+    const nb = addBlock(s, exOf(d.id), sh.tier);
+    if (sh.mode === 'pair') nb.pairOf = sh.blockId;
     ui.sheet = null;
     save(); render();
     toast(`Added ${exOf(d.id).name} as ${sh.tier}`);
@@ -1551,7 +1732,10 @@ const actions = {
     const logged = blockSets(b).some(x => x.done);
     state.sets = state.sets.filter(x => x.blockId !== b.id || x.done);
     if (logged) toast('Logged sets kept; the rest removed');
-    else s.blocks = s.blocks.filter(x => x !== b);
+    else {
+      s.blocks = s.blocks.filter(x => x !== b);
+      for (const x of s.blocks) if (x.pairOf === b.id) delete x.pairOf;
+    }
     if (s.source === 'suggested') s.source = 'swapped';
     save(); render();
   },

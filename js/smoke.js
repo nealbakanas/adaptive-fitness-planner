@@ -19,6 +19,7 @@ const KEY = globalThis.AFP_STORAGE_KEY;
 const wipe = () => Object.keys(localStorage).filter(k => k === KEY || k.startsWith(`${KEY}.`)).forEach(k => localStorage.removeItem(k));
 wipe();
 await import('./app.js');
+const { state } = await import('./store.js');
 await new Promise(r => setTimeout(r, 200));
 
 step('check-in renders', () => check('check-in renders', text().includes('Check in') && !!q('[data-act=suggest]')));
@@ -34,7 +35,7 @@ step('fresh suggestion', () => {
 
 step('tired check-in gives technique', () => {
   click('[data-k=locationId][data-v=loc-basement]');
-  click('[data-k=fatigue][data-v="5"]');
+  click('[data-k=energy][data-v="1"]');
   click('[data-act=suggest]');
   check('technique block present', qa('.bhead').some(h => /TECH/.test(h.innerText)), qa('.bhead').map(h => h.innerText.replace(/\n/g, ' ')).join(' | '));
   check('tired readiness shown', /Tired/.test(text()));
@@ -51,6 +52,43 @@ step('power block while tired offers one-tap technique', () => {
   check('block is now technique', !!jump && /TECH/.test(jump.innerText), jump?.innerText.slice(0, 80));
   check('technique scheme chosen', !!jump && /[2-3]/.test(jump.querySelector('[data-act=swapScheme]').innerText));
   click('[data-act=recheck]');
+});
+
+step('supersets, real rest, pause and resume, more time', () => {
+  check('energy scale: 5 is fresh', /Energy\s*1 wrecked · 5 fresh/i.test(text()), text().slice(0, 300));
+  click('[data-k=locationId][data-v=loc-basement]');
+  click('[data-k=energy][data-v="5"]');
+  click('[data-act=suggest]');
+  const idea = q('[data-act=pairAdd]');
+  check('superset idea offered under a main lift', !!idea);
+  click(idea);
+  const main = () => q('section.block.haspair'), pair = () => q('section.block.paired');
+  const nameOf = el => el.querySelector('[data-act=swapEx]').innerText.replace(' ▾', '');
+  check('partner shown right under its main lift', !!main() && !!pair() && main().nextElementSibling === pair() && /Superset with/.test(pair().innerText));
+  const mainName = nameOf(main()), pairName = nameOf(pair());
+  click(main().querySelector('[data-act=check]'));
+  const timer = () => q('#timer').innerText;
+  check('main lift rest runs, next up is the partner', !q('#timer').hidden && timer().includes(`next: ${pairName} · set 1`), timer());
+  const endsAt = state.timer.endsAt;
+  click(pair().querySelector('[data-act=check]'));
+  check('partner set keeps the main lift countdown', state.timer?.endsAt === endsAt && timer().includes(`next: ${mainName} · set 2`), timer());
+  const first = state.sets.find(x => x.blockId === state.timer.blockId && x.done);
+  first.loggedAt -= 150000; // as if the set was 2.5 minutes ago
+  click(main().querySelectorAll('[data-act=check]')[1]);
+  check('real rest shown for the block and the session', /real rest 2:\d\d avg/.test(main().innerText) && /real rest/.test(q('header.top').innerText), main().innerText.slice(0, 200));
+  const blocksBefore = qa('section.block').length;
+  click('[data-act=finish]');
+  check('finishing with sets left offers pause', /not logged yet/.test(sheet()));
+  click('#sheet [data-act=pause]');
+  check('paused workout waits on the check-in screen', /Paused at/.test(text()) && !!q('[data-act=resume]'));
+  click('[data-act=resume]');
+  check('resume brings the same workout back', qa('section.block').length === blocksBefore && !!q('section.block.paired'));
+  click('[data-act=moreTime]');
+  click('[data-act=addTime][data-v="30"]');
+  check('more time adds exercises', qa('section.block').length > blocksBefore, `${blocksBefore} -> ${qa('section.block').length}`);
+  click('[data-act=finish]');
+  click('#sheet [data-act=finishNow]');
+  check('done today shows real rest', /Done today: .*real rest/.test(text()), text().slice(0, 300));
 });
 
 step('library shows region + explosive, edit sheet has the controls', () => {

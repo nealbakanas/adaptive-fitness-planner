@@ -271,7 +271,7 @@ export const INTENT = {
   easy: { T1: 0.2, T2: 0.5, T3: 1.8, TECH: 1.5 },
 };
 
-// 1 (flat) .. 5 (great). Fatigue is 1 fresh .. 5 wrecked; sleep 1..5 is optional.
+// 1 (flat) .. 5 (great). Stored as fatigue (1 fresh .. 5 wrecked) = 6 - the energy picked at check-in; sleep 1..5 is optional.
 export function energy(ci) {
   let e = 6 - (ci.fatigue || 3);
   if (ci.sleep) e = (2 * e + ci.sleep) / 3;
@@ -303,7 +303,7 @@ export const regionConflict = (region, heavy) => heavy.size > 0 && (region === '
 // Explosive work is power work when you're fresh, and technique work when tired or after heavy work in the same region.
 export function powerReadiness(state, ci, ex, t = Date.now(), excludeBlockId = null) {
   const reasons = [];
-  if (energy(ci) <= 2.5) reasons.push(`tired (fatigue ${ci.fatigue}${ci.sleep ? `, sleep ${ci.sleep}` : ''})`);
+  if (energy(ci) <= 2.5) reasons.push(`tired (energy ${6 - (ci.fatigue || 3)}${ci.sleep ? `, sleep ${ci.sleep}` : ''})`);
   const heavy = recentHeavyRegions(state, t, excludeBlockId);
   if (regionConflict(ex.region || 'full', heavy)) reasons.push(`heavy ${[...heavy].join('/')} work since yesterday`);
   return { fresh: reasons.length === 0, reasons };
@@ -339,12 +339,12 @@ export function scoreSlots(state, ci, t = Date.now()) {
       if (ready.fresh) { score *= 1.2; why.push('fresh for power work ×1.2'); }
       else { waits = true; why.push(`not fresh for power work (${ready.reasons.join('; ')})`); }
     } else if (sl.tier === 'T1') {
-      if (ci.fatigue >= 4) { score *= 0.4; why.push('high fatigue ×0.4'); }
-      else if (ci.fatigue === 3) { score *= 0.8; why.push('fatigue ×0.8'); }
+      if (ci.fatigue >= 4) { score *= 0.4; why.push('low energy ×0.4'); }
+      else if (ci.fatigue === 3) { score *= 0.8; why.push('middling energy ×0.8'); }
       if (ci.sleep && ci.sleep <= 2) { score *= 0.7; why.push('poor sleep ×0.7'); }
       if (recentT1) { score *= 0.5; why.push('T1 in last day ×0.5'); }
     }
-    if (sl.tier === 'T3' && ci.fatigue >= 4) { score *= 1.3; why.push('high fatigue ×1.3'); }
+    if (sl.tier === 'T3' && ci.fatigue >= 4) { score *= 1.3; why.push('low energy ×1.3'); }
     if (sl.tier === 'TECH' && ready) {
       if (ready.fresh) { score *= 0.4; why.push('fresh: power work comes first ×0.4'); }
       else { score *= 1.6; why.push(`${ready.reasons.join('; ')}: technique day ×1.6`); }
@@ -405,13 +405,13 @@ const blockRank = (state, b) => {
 };
 
 // Build one session: T1, then T2, technique and T3 until the time budget runs out.
-export function buildSuggestion(state, ci, t = Date.now()) {
+export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [] } = {}) {
   const scored = scoreSlots(state, ci, t);
   const top = scored[0]?.score || 0;
   let budget = ci.minutes;
   const blocks = [];
   const count = { T1: 0, T2: 0, T3: 0, TECH: 0 };
-  const famUsed = new Set(); // e.g. T1 weighted dips and T3 dips both open: do them on different days
+  const famUsed = new Set(excludeFamilies); // e.g. T1 weighted dips and T3 dips both open: do them on different days
   for (const tier of BUILD_ORDER) {
     for (const c of scored.filter(x => x.slot.tier === tier)) {
       if (c.waits) { c.note = 'power work waits for a fresh day'; continue; }
@@ -432,6 +432,45 @@ export function buildSuggestion(state, ci, t = Date.now()) {
   }
   blocks.sort((a, b) => blockRank(state, a) - blockRank(state, b)); // stable, so tier order holds within a rank
   return { blocks, scored, minutesUsed: ci.minutes - budget, ready: readinessSummary(state, ci, t) };
+}
+
+// ---------- supersets ----------
+
+const isCore = (state, e) => e.familyId === 'fam-core' || /\bcore\b|\babs?\b/i.test(byId(state.families, e.familyId)?.name || '');
+
+// A T3 to do in a main lift's rest. It works a different region (or core) so it doesn't tire the main lift,
+// needs no barbell setup, and prefers a T3 goal that's still open this week.
+export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = creditWeek(state) } = {}) {
+  const loc = byId(state.locations, ci.locationId);
+  const region = mainEx.region || 'full';
+  const fits = e => {
+    if (e.explosive || (e.equipment || []).some(x => x === 'barbell' || x === 'rack')) return false;
+    if (isCore(state, e)) return true;
+    const r = e.region || 'full';
+    if (r === 'full') return false;
+    return region === 'full' ? r === 'upper' : r !== region;
+  };
+  // Families with a heavy or moderate goal are main lifts in their own right, not something to squeeze into a rest.
+  const skip = new Set([...excludeFamilies, ...state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId)]);
+  const since = Date.now() - 84 * DAY;
+  const recent = new Set(state.sets.filter(x => x.done && x.loggedAt >= since).map(x => x.exerciseId));
+  let best = null;
+  for (const fam of state.families) {
+    if (skip.has(fam.id)) continue;
+    const e = pickExercise(state, fam.id, loc, 'T3');
+    if (!e || !fits(e)) continue;
+    const slot = slotFor(state, e, 'T3');
+    const r = slot && credit.slots.get(slot.id);
+    const open = r && r.filled < slot.quota && !r.todayMet;
+    let score = open ? 3 + (slot.priority || 1) : 0;
+    if (recent.has(e.id)) score += 1.5; // something you actually do beats filler
+    if (e.anytime) score += 1;
+    if (isCore(state, e)) score += 0.5;
+    const why = open ? `open T3 goal: ${fam.name}` : region === 'full' || isCore(state, e) ? 'core or upper work, so the main lift stays fresh'
+      : `${e.region || 'other'}-body work while your ${region} body rests`;
+    if (!best || score > best.score) best = { exercise: e, score, why };
+  }
+  return best;
 }
 
 // ---------- analytics ----------

@@ -473,6 +473,44 @@ test('timed and distance sets count toward a goal, one per set', () => {
   eq(L.creditWeek(s).slots.get('sl-t2-jumps').filled, 1);
 });
 
+// ---------- supersets, extra time, energy ----------
+test('superset idea for heavy squats: not lower body, no barbell, an open T3 goal first', () => {
+  const s = seed();
+  const p = L.suggestPair(s, ci(), s.exercises.find(e => e.id === 'ex-back-squat'), { excludeFamilies: ['fam-squat'] });
+  ok(p, 'an idea');
+  ok(p.exercise.region !== 'lower' && !p.exercise.explosive && !p.exercise.equipment.includes('barbell'), p.exercise.name);
+  ok(/open T3 goal/.test(p.why), p.why);
+});
+test('superset idea for pull-ups is core or not upper body', () => {
+  const s = seed();
+  const p = L.suggestPair(s, ci(), s.exercises.find(e => e.id === 'ex-wpullup'), { excludeFamilies: ['fam-vpull'] });
+  ok(p && (p.exercise.familyId === 'fam-core' || p.exercise.region !== 'upper'), p?.exercise.name);
+});
+test('superset idea for cleans is core or upper body', () => {
+  const s = seed();
+  const p = L.suggestPair(s, ci(), s.exercises.find(e => e.id === 'ex-power-clean'), { excludeFamilies: ['fam-clean'] });
+  ok(p && (p.exercise.familyId === 'fam-core' || p.exercise.region === 'upper'), p?.exercise.name);
+});
+test('a T3 goal already met today is not the superset pick', () => {
+  const s = seed();
+  done(s, 'ex-hanging-knee', 'T3', 12, 3, 0);
+  const p = L.suggestPair(s, ci(), s.exercises.find(e => e.id === 'ex-back-squat'), { excludeFamilies: ['fam-squat'] });
+  ok(p && p.exercise.familyId !== 'fam-core', p?.exercise.name);
+});
+test('extra time adds goal work from families not already in the workout', () => {
+  const s = seed();
+  const famOfB = b => s.exercises.find(e => e.id === b.exerciseId).familyId;
+  const fams = L.buildSuggestion(s, ci({ minutes: 20 })).blocks.map(famOfB);
+  const more = L.buildSuggestion(s, ci({ minutes: 20 }), Date.now(), { excludeFamilies: fams });
+  ok(more.blocks.length > 0, 'something added');
+  ok(more.blocks.every(b => !fams.includes(famOfB(b))), 'no repeats');
+});
+test('tired reasons talk about energy (5 fresh), not fatigue', () => {
+  const s = seed();
+  const r = L.powerReadiness(s, ci({ fatigue: 5 }), s.exercises.find(e => e.id === 'ex-broad-jump'));
+  ok(r.reasons.some(x => /energy 1/.test(x)), r.reasons.join());
+});
+
 // ---------- render ----------
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;
