@@ -474,17 +474,46 @@ test('timed and distance sets count toward a goal, one per set', () => {
 });
 
 // ---------- supersets, extra time, energy ----------
-test('superset idea for heavy squats: not lower body, no barbell, an open T3 goal first', () => {
+test('movement patterns from names', () => {
+  const s = seed();
+  const pat = name => L.movementPattern(s, { name, familyId: null });
+  const expect = { 'Back squat': 'knee', 'Nordic curl': 'hinge', 'Leg curl': 'hinge', 'Block Rdl': 'hinge', 'Calf raise': 'calf',
+    'Hanging leg raise': 'core', 'Weighted pull-up': 'pull', 'Barbell row': 'pull', 'DB curl': 'pull', 'Ring face pull': 'pull',
+    'Weighted ring dip': 'push', 'Telle extension': 'push', 'Push-up': 'push', 'Leg extension': 'knee', 'Back extension': 'hinge',
+    'Power clean': 'full', 'Seated broad jump': 'knee', 'Lateral raise': 'push' };
+  for (const [n, p] of Object.entries(expect)) eq(pat(n), p, n);
+});
+test('upper body pairs with its antagonist, lower body with its complement', () => {
+  const s = seed();
+  const e = (name, extra = {}) => ({ name, familyId: null, ...extra });
+  const score = (m, p) => L.pairScore(s, e(m), e(p));
+  ok(score('Weighted pull-up', 'Telle extension') === 3 && score('Weighted ring dip', 'DB curl') === 3, 'push with pull');
+  eq(score('Weighted pull-up', 'Barbell row'), 0, 'not pull with pull');
+  ok(score('Back squat', 'Nordic curl') === 3 && score('Block Rdl', 'Leg extension') === 3, 'squat with hamstrings, hinge with quads');
+  eq(score('Back squat', 'Goblet squat'), 0, 'not squat with squat');
+  ok(score('Back squat', 'Calf raise') === 2 && score('Back squat', 'Hanging leg raise') === 2, 'calves and core fit');
+  ok(score('Back squat', 'Nordic curl') > score('Back squat', 'DB curl'), 'a complement beats a different region');
+  eq(L.pairScore(s, e('Seated broad jump', { explosive: true }), e('Nordic curl')), 0, 'jumps keep the legs fresh');
+  ok(L.pairScore(s, e('Power clean', { explosive: true }), e('Hanging leg raise')) === 3, 'core with cleans');
+});
+test('superset idea for heavy squats is core or leg work that balances the squat, no barbell', () => {
   const s = seed();
   const p = L.suggestPair(s, ci(), s.exercises.find(e => e.id === 'ex-back-squat'), { excludeFamilies: ['fam-squat'] });
   ok(p, 'an idea');
-  ok(p.exercise.region !== 'lower' && !p.exercise.explosive && !p.exercise.equipment.includes('barbell'), p.exercise.name);
-  ok(/open T3 goal/.test(p.why), p.why);
+  ok(['core', 'hinge', 'calf'].includes(L.movementPattern(s, p.exercise)) && !p.exercise.equipment.includes('barbell'), p.exercise.name);
 });
-test('superset idea for pull-ups is core or not upper body', () => {
+test('a goal\'s main lift is never a superset idea, but its easier variations can be', () => {
+  const s = seed();
+  const rdl = { name: 'Romanian deadlift', familyId: null, region: 'lower' };
+  const p = L.suggestPair(s, ci(), rdl);
+  ok(p && p.exercise.id !== 'ex-back-squat', p?.exercise.name);
+  ok(['knee', 'core'].includes(L.movementPattern(s, p.exercise)), `quad work or core balances the hinge: ${p?.exercise.name}`);
+  ok(L.pairScore(s, rdl, s.exercises.find(e => e.id === 'ex-pistol')) === 3, 'pistols are a top match for a hinge');
+});
+test('superset idea for pull-ups is pushing work or core', () => {
   const s = seed();
   const p = L.suggestPair(s, ci(), s.exercises.find(e => e.id === 'ex-wpullup'), { excludeFamilies: ['fam-vpull'] });
-  ok(p && (p.exercise.familyId === 'fam-core' || p.exercise.region !== 'upper'), p?.exercise.name);
+  ok(p && ['push', 'core'].includes(L.movementPattern(s, p.exercise)), p?.exercise.name);
 });
 test('superset idea for cleans is core or upper body', () => {
   const s = seed();
@@ -493,9 +522,11 @@ test('superset idea for cleans is core or upper body', () => {
 });
 test('a T3 goal already met today is not the superset pick', () => {
   const s = seed();
+  const sq = s.exercises.find(e => e.id === 'ex-back-squat');
+  ok(/open T3 goal/.test(L.suggestPair(s, ci(), sq, { excludeFamilies: ['fam-squat'] }).why), 'open core goal mentioned');
   done(s, 'ex-hanging-knee', 'T3', 12, 3, 0);
-  const p = L.suggestPair(s, ci(), s.exercises.find(e => e.id === 'ex-back-squat'), { excludeFamilies: ['fam-squat'] });
-  ok(p && p.exercise.familyId !== 'fam-core', p?.exercise.name);
+  const p = L.suggestPair(s, ci(), sq, { excludeFamilies: ['fam-squat'] });
+  ok(p && !/open T3 goal/.test(p.why), `${p?.exercise.name}: ${p?.why}`);
 });
 test('extra time adds goal work from families not already in the workout', () => {
   const s = seed();
@@ -524,6 +555,9 @@ test('T3s superset with each other; main lifts stay free; an odd T3 makes a gian
   const lone = [blk('m', 'T1', 'ex-back-squat'), blk('p', 'T2', 'ex-wpullup'), blk('u', 'T3', 'ex-air-squat')];
   L.pairT3s(s, lone);
   eq(lone[2].pairOf, 'p', 'a single T3 joins a main lift it does not compete with');
+  const four = [blk('a', 'T3', 'ex-db-curl'), blk('f', 'T3', 'ex-ring-facepull'), blk('t', 'T3', 'ex-db-oh-tri'), blk('k', 'T3', 'ex-hanging-knee')];
+  L.pairT3s(s, four);
+  eq(four.map(b => b.pairOf ?? null), [null, null, 'a', 'f'], 'curls pair with triceps (antagonists), face pulls with core');
   const added = [...two, blk('d', 'T3', 'ex-dead-bug')];
   L.pairT3s(s, added);
   eq(added.at(-1).pairOf, 'a', 'a T3 added later joins the T3 superset as a giant set');

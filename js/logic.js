@@ -437,59 +437,101 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
 
 // ---------- supersets ----------
 
-const isCore = (state, e) => e.familyId === 'fam-core' || /\bcore\b|\babs?\b/i.test(byId(state.families, e.familyId)?.name || '');
+// Movement pattern from the exercise and family names. First match wins, so specific patterns come first
+// ("leg curl" is hamstrings, not arms; "leg raise" is core, not shoulders).
+const PATTERNS = [
+  ['core', /\bcore\b|\babs?\b|plank|crunch|sit[- ]?up|leg raise|knee raise|rollout|ab[- ]?wheel|dead ?bug|hollow|pallof|l[- ]?sit|toes to bar|v[- ]?up/i],
+  ['calf', /\bcalf|calves/i],
+  ['hinge', /deadlift|\brdls?\b|romanian|good ?morning|back extension|hyperextension|hip thrust|glute|nordic|hamstring|\bghr\b|leg curl|swing|hinge|(block|rack|deficit) pulls?\b/i],
+  ['full', /clean|snatch|jerk|thruster|burpee/i],
+  ['knee', /squat|lunge|split|step[- ]?up|leg press|leg extension|pistol|jump|bound|\bhops?\b|skater/i],
+  ['pull', /pull[- ]?ups?|chin[- ]?ups?|\brows?\b|pulldown|face pull|pull[- ]?apart|rear[- ]?delt|curl|shrug|vertical pull|upper back|\blats?\b/i],
+  ['push', /\bdips?\b|press|push[- ]?ups?|bench|incline|tricep|telle|extension|skull|push ?down|raise|\bfly\b|chest|shoulder/i],
+];
+export function movementPattern(state, e) {
+  const text = `${e?.name ?? ''} ${byId(state.families, e?.familyId)?.name ?? ''}`;
+  return PATTERNS.find(([, re]) => re.test(text))?.[0] ?? null;
+}
+const PATTERN_REGION = { push: 'upper', pull: 'upper', knee: 'lower', hinge: 'lower', calf: 'lower', core: 'core', full: 'full' };
+const OPPOSITE = { push: 'pull', pull: 'push', knee: 'hinge', hinge: 'knee' };
 
-// A T3 to do in a main lift's rest. It works a different region (or core) so it doesn't tire the main lift,
-// needs no barbell setup, and prefers a T3 goal that's still open this week.
-// Whether e can be done in mainEx's rest without tiring it: core, or a different region (upper after whole-body work).
-export function restCompatible(state, mainEx, e) {
-  if (isCore(state, e)) return true;
-  const r = e.region || 'full', region = mainEx?.region || 'full';
-  if (r === 'full') return false;
-  return region === 'full' ? r === 'upper' : r !== region;
+// How well e fits in mainEx's rest, 0 (don't) .. 3 (best). Upper body: antagonists (push with pull).
+// Lower body: complements (hamstrings and hips with squats, quads with hinges; calves with either).
+// Explosive main lifts keep their partner away from the legs, so jumps and cleans stay fast.
+export function pairScore(state, mainEx, e) {
+  const m = movementPattern(state, mainEx), p = movementPattern(state, e);
+  if (!p || p === 'full') return 0;
+  if (p === 'core') return mainEx?.explosive ? 3 : 2;
+  const mr = PATTERN_REGION[m] ?? mainEx?.region ?? 'full', pr = PATTERN_REGION[p];
+  if (mainEx?.explosive || m === 'full') return pr === 'upper' && mr !== 'upper' ? 2 : pr === 'upper' && OPPOSITE[m] === p ? 2 : 0;
+  if (OPPOSITE[m] === p) return 3;
+  if (p === 'calf' && mr === 'lower') return 2;
+  if (p === m) return 0;
+  return pr !== mr ? 1 : 0;
+}
+export const restCompatible = (state, mainEx, e) => pairScore(state, mainEx, e) > 0;
+
+function pairWhy(state, mainEx, e) {
+  const m = movementPattern(state, mainEx), p = movementPattern(state, e);
+  if (p === 'core') return 'core work, so the main lift stays fresh';
+  if (mainEx?.explosive || m === 'full') return 'upper-body work, so your legs stay fresh for power';
+  if (OPPOSITE[m] === p) return { push: 'pushing work to balance the pull', pull: 'pulling work to balance the push', hinge: 'hamstring and hip work to balance the squat', knee: 'quad work to balance the hinge' }[p];
+  if (p === 'calf') return 'calves, which the main lift barely tires';
+  return `${PATTERN_REGION[p]}-body work while the main lift's muscles rest`;
 }
 
 // T3 work always comes grouped. A group is a leader block plus the blocks whose pairOf points at it.
-// Free T3s superset with each other in twos; an odd one out joins a T3 pair as a giant set, else a free
-// T1/T2/technique block it doesn't compete with, else any free one. Supersets on main lifts stay optional.
+// Free T3s superset with each other in twos, best-matched pairs first; an odd one out joins a T3 pair as a
+// giant set, else the free T1/T2/technique block it suits best. Supersets on main lifts stay optional.
 // Mutates and returns the blocks.
 export function pairT3s(state, blocks) {
   const ex = b => byId(state.exercises, b.exerciseId);
   const grouped = b => !!b.pairOf || blocks.some(x => x.pairOf === b.id);
+  const fit = (a, b) => Math.max(pairScore(state, ex(a), ex(b)), pairScore(state, ex(b), ex(a)));
   const free = blocks.filter(b => b.tier === 'T3' && !grouped(b));
-  for (let i = 0; i + 1 < free.length; i += 2) free[i + 1].pairOf = free[i].id;
-  if (free.length % 2 === 0) return blocks;
-  const lone = free.at(-1);
+  while (free.length >= 2) {
+    const lead = free.shift();
+    const i = free.reduce((best, x, j) => fit(lead, x) > fit(lead, free[best]) ? j : best, 0);
+    free.splice(i, 1)[0].pairOf = lead.id;
+  }
+  if (!free.length) return blocks;
+  const lone = free[0];
   const t3Group = blocks.find(b => b.tier === 'T3' && !b.pairOf && b !== lone && blocks.filter(x => x.pairOf === b.id).length === 1);
   if (t3Group) { lone.pairOf = t3Group.id; return blocks; }
-  const mains = blocks.filter(b => b.tier !== 'T3' && !grouped(b));
-  const best = mains.sort((a, b) => restCompatible(state, ex(b), ex(lone)) - restCompatible(state, ex(a), ex(lone)))[0];
+  const best = blocks.filter(b => b.tier !== 'T3' && !grouped(b))
+    .sort((a, b) => pairScore(state, ex(b), ex(lone)) - pairScore(state, ex(a), ex(lone)))[0];
   if (best) lone.pairOf = best.id;
   return blocks;
 }
 
+// A T3 to do in a main lift's rest: the best-matched movement (see pairScore), no barbell setup, not explosive.
+// Prefers an open T3 goal, then exercises you've done lately.
 export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = creditWeek(state) } = {}) {
   const loc = byId(state.locations, ci.locationId);
-  const region = mainEx.region || 'full';
-  const fits = e => !e.explosive && !(e.equipment || []).some(x => x === 'barbell' || x === 'rack') && restCompatible(state, mainEx, e);
-  // Families with a heavy or moderate goal are main lifts in their own right, not something to squeeze into a rest.
-  const skip = new Set([...excludeFamilies, ...state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId)]);
+  // A T1/T2 goal's own lift is a main lift, not something to squeeze into a rest; its easier variations are fair game.
+  const skip = new Set(excludeFamilies);
+  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2')
+    .map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
   const since = Date.now() - 84 * DAY;
-  const recent = new Set(state.sets.filter(x => x.done && x.loggedAt >= since).map(x => x.exerciseId));
+  const lately = state.sets.filter(x => x.done && x.loggedAt >= since);
+  const recent = new Set(lately.map(x => x.exerciseId));
+  const heavyLately = new Set(lately.filter(x => x.tier === 'T1' || x.tier === 'T2').map(x => x.exerciseId));
   let best = null;
-  for (const fam of state.families) {
-    if (skip.has(fam.id)) continue;
-    const e = pickExercise(state, fam.id, loc, 'T3');
-    if (!e || !fits(e)) continue;
+  for (const e of state.exercises) {
+    if (e.archived || skip.has(e.familyId) || mainLifts.has(e.id) || e.explosive || !isAvailable(e, loc)) continue;
+    if ((e.equipment || []).some(x => x === 'barbell' || x === 'rack')) continue;
+    const fit = pairScore(state, mainEx, e);
+    if (!fit) continue;
     const slot = slotFor(state, e, 'T3');
     const r = slot && credit.slots.get(slot.id);
     const open = r && r.filled < slot.quota && !r.todayMet;
-    let score = open ? 3 + (slot.priority || 1) : 0;
+    let score = fit * 2;
+    if (open) score += 2 + (slot.priority || 1);
     if (recent.has(e.id)) score += 1.5; // something you actually do beats filler
-    if (e.anytime) score += 1;
-    if (isCore(state, e)) score += 0.5;
-    const why = open ? `open T3 goal: ${fam.name}` : region === 'full' || isCore(state, e) ? 'core or upper work, so the main lift stays fresh'
-      : `${e.region || 'other'}-body work while your ${region} body rests`;
+    if (heavyLately.has(e.id)) score -= 2; // trained heavy lately: a main lift, not rest-period filler
+    if (byId(state.families, e.familyId)?.defaultExerciseId === e.id) score += 0.5;
+    if (e.anytime) score += 0.5;
+    const why = `${open ? 'open T3 goal · ' : ''}${pairWhy(state, mainEx, e)}`;
     if (!best || score > best.score) best = { exercise: e, score, why };
   }
   return best;
