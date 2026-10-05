@@ -1,6 +1,6 @@
 // Offline support and rest-timer notifications.
 
-const CACHE = 'afp-v1';
+const CACHE = 'afp-v2';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json',
   'js/app.js', 'js/logic.js', 'js/store.js', 'js/seed.js', 'js/fitnotes.js', 'js/goals.js',
@@ -28,7 +28,8 @@ self.addEventListener('fetch', e => {
 
 async function networkFirst(e, req) {
   const cache = await caches.open(CACHE);
-  const net = fetch(req).then(res => {
+  // no-cache: always ask the server (a cheap 304 when nothing changed), never the browser's 10-minute HTTP cache.
+  const net = fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' })).then(res => {
     if (res.ok) cache.put(req, res.clone());
     return res;
   });

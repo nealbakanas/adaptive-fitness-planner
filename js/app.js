@@ -2203,8 +2203,24 @@ function importText(text) {
 }
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker not registered', err));
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(err => console.warn('Service worker not registered', err));
+  // A new version took over: reload once so every file comes from the same version.
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
 }
+
+// A home-screen app can sit open for days without reloading. Coming back after a while, reload to pick up
+// updates; everything is saved as you go, including an open workout and its rest timer.
+let hiddenAt = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+  else if (hiddenAt && Date.now() - hiddenAt > 30 * 60 * 1000 && !ui.sheet) location.reload();
+});
 
 onSaveFail(() => { toast('Couldn’t save your last change. See the message at the top.'); });
 
