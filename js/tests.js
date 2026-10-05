@@ -511,6 +511,27 @@ test('tired reasons talk about energy (5 fresh), not fatigue', () => {
   ok(r.reasons.some(x => /energy 1/.test(x)), r.reasons.join());
 });
 
+test('T3s superset with each other; main lifts stay free; an odd T3 makes a giant set', () => {
+  const s = seed();
+  const ex = id => s.exercises.find(e => e.id === id);
+  const blk = (id, tier, exerciseId) => ({ id, tier, exerciseId });
+  const two = [blk('m', 'T1', 'ex-back-squat'), blk('p', 'T2', 'ex-wpullup'), blk('a', 'T3', 'ex-db-curl'), blk('c', 'T3', 'ex-hanging-knee')];
+  L.pairT3s(s, two);
+  eq(two.map(b => b.pairOf ?? null), [null, null, null, 'a'], 'T1 and T2 free, the two T3s together');
+  const three = [blk('m', 'T1', 'ex-back-squat'), blk('a', 'T3', 'ex-db-curl'), blk('c', 'T3', 'ex-hanging-knee'), blk('f', 'T3', 'ex-ring-facepull')];
+  L.pairT3s(s, three);
+  eq(three.map(b => b.pairOf ?? null), [null, null, 'a', 'a'], 'three T3s: one giant set');
+  const lone = [blk('m', 'T1', 'ex-back-squat'), blk('p', 'T2', 'ex-wpullup'), blk('u', 'T3', 'ex-air-squat')];
+  L.pairT3s(s, lone);
+  eq(lone[2].pairOf, 'p', 'a single T3 joins a main lift it does not compete with');
+  const added = [...two, blk('d', 'T3', 'ex-dead-bug')];
+  L.pairT3s(s, added);
+  eq(added.at(-1).pairOf, 'a', 'a T3 added later joins the T3 superset as a giant set');
+  const r = L.buildSuggestion(s, ci({ minutes: 90 }));
+  ok(r.blocks.filter(b => b.tier === 'T3').every(b => b.pairOf || r.blocks.some(x => x.pairOf === b.id)), 'every suggested T3 is grouped');
+  ok(L.restCompatible(s, ex('ex-power-clean'), ex('ex-ring-facepull')) && !L.restCompatible(s, ex('ex-power-clean'), ex('ex-air-squat')));
+});
+
 // ---------- render ----------
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

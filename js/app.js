@@ -74,9 +74,14 @@ function endSession(s) {
 
 const blockSets = b => state.sets.filter(s => s.blockId === b.id);
 
-// Supersets: a block with pairOf is done in the rest of the block it points to.
-const partnerOf = (s, b) => b.pairOf ? s.blocks.find(x => x.id === b.pairOf) : s.blocks.find(x => x.pairOf === b.id);
-const inPair = (s, b) => !!partnerOf(s, b);
+// Supersets and giant sets: a group is a leader block plus the blocks whose pairOf points at it.
+// Led by a main lift, the others are done in its rest. Led by a T3, it's a circuit: one set of each, then rest.
+function groupOf(s, b) {
+  const leader = (b.pairOf && s.blocks.find(x => x.id === b.pairOf)) || b;
+  const members = [leader, ...s.blocks.filter(x => x.pairOf === leader.id)];
+  return members.length > 1 ? members : [b];
+}
+const inPair = (s, b) => groupOf(s, b).length > 1;
 
 // Rough time a set takes, so "real rest" is the gap between sets minus the work.
 const workSec = st => st.time > 0 ? Number(st.time) : Math.max(5, (Number(st.reps) || 1) * 3);
@@ -151,6 +156,7 @@ function setBlockTier(s, b, tier, reason = null) {
   b.swaps.push({ type: 'tier', from: b.tier, to: tier, reason, at: Date.now() });
   b.tier = tier;
   b.slotId = slotIdFor(ex.id, tier);
+  if (tier === 'T3') L.pairT3s(state, s.blocks);
   b.schemeId = schemeForBlock(s, ex, tier, b).id;
   if (s.source === 'suggested') s.source = 'swapped';
   genSets(s, b);
@@ -165,6 +171,10 @@ function addBlock(s, ex, tier) {
   b.schemeId = schemeForBlock(s, ex, tier, b).id;
   s.blocks.push(b);
   if (s.source === 'suggested') s.source = 'swapped';
+  if (tier === 'T3') {
+    L.pairT3s(state, s.blocks);
+    if (b.pairOf) b.schemeId = schemeForBlock(s, ex, tier, b).id; // a partner only costs half its time
+  }
   genSets(s, b);
   return b;
 }
@@ -175,6 +185,7 @@ function createSession(blocks, source, extra = {}) {
     ...ui.ci, source, blocks, ...extra,
   };
   state.sessions.push(s);
+  L.pairT3s(state, blocks);
   for (const b of blocks) genSets(s, b);
   save();
   return s;
@@ -265,13 +276,20 @@ function nextSetLabel(s) {
   return null;
 }
 
-// In a superset the partner's next set comes next while it's behind; otherwise this block's next set.
+const doneIn = b => blockSets(b).filter(st => st.done).length;
+const setLabel = b => { const i = blockSets(b).findIndex(st => !st.done); return i >= 0 ? `${exOf(b.exerciseId)?.name ?? ''} · set ${i + 1}` : null; };
+
+// Next in the group after a set of b: whoever is furthest behind, the next one round from b on a tie.
+function nextInGroup(s, b) {
+  const g = groupOf(s, b);
+  const at = g.indexOf(b);
+  const order = [...g.slice(at + 1), ...g.slice(0, at + 1)].filter(setLabel);
+  return order.sort((x, y) => doneIn(x) - doneIn(y))[0] ?? null;
+}
+
 function nextLabelAfter(s, b) {
-  const p = partnerOf(s, b);
-  const doneIn = x => blockSets(x).filter(st => st.done).length;
-  const label = x => { const i = blockSets(x).findIndex(st => !st.done); return i >= 0 ? `${exOf(x.exerciseId)?.name ?? ''} · set ${i + 1}` : null; };
-  if (p && doneIn(p) <= doneIn(b) && label(p)) return label(p);
-  return label(b) ?? (p && label(p)) ?? nextSetLabel(s);
+  const n = nextInGroup(s, b);
+  return (n && setLabel(n)) ?? nextSetLabel(s);
 }
 
 function startTimer(s, b, setId = null) {
@@ -544,8 +562,12 @@ function viewBlock(s, b, credit, idea = null) {
   }).join('');
 
   const vid = videoUrl(ex);
-  const main = b.pairOf && s.blocks.find(x => x.id === b.pairOf);
-  const pairHead = main ? `<div class="sslabel">↔ Superset with ${esc(exOf(main.exerciseId)?.name)}: do a set in its rest
+  const group = groupOf(s, b);
+  const main = b.pairOf && group[0] !== b ? group[0] : null;
+  const others = group.filter(x => x !== b).map(x => esc(exOf(x.exerciseId)?.name)).join(' and ');
+  const what = main?.tier !== 'T3' ? `Superset with ${others}: do a set in its rest`
+    : group.length > 2 ? `Giant set with ${others}: one set of each, then rest` : `Superset with ${others}: alternate sets, rest after each round`;
+  const pairHead = main ? `<div class="sslabel">↔ ${what}
     <button class="link" data-act="pairUnlink" data-b="${b.id}">Unlink</button></div>` : '';
   const ideaRow = idea ? `<div class="pairidea"><span>Superset idea: <b>${esc(idea.exercise.name)}</b> <span class="meta">T3 · ${esc(idea.why)}</span></span>
     <span class="brow"><button class="small" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}">+ Add</button>
@@ -1145,13 +1167,15 @@ function sheetPair(sh) {
   const { s, b } = findBlock(sh.blockId);
   const ex = exOf(b.exerciseId);
   const idea = L.suggestPair(state, s, ex, { excludeFamilies: s.blocks.map(x => exOf(x.exerciseId)?.familyId) });
-  const others = s.blocks.filter(x => x !== b && !inPair(s, x));
+  // Free blocks to pair with, or existing groups (by their leader) to join as a giant set.
+  const others = s.blocks.filter(x => x !== b && !x.pairOf);
+  const names = o => groupOf(s, o).map(x => esc(exOf(x.exerciseId)?.name)).join(' + ');
   return `<h3>Superset with ${esc(ex.name)}</h3>
-    <p class="meta">Do a set of the partner in ${esc(ex.name)}'s rest. The rest timer keeps counting for ${esc(ex.name)}, and the next set alternates between the two.</p>
+    <p class="meta">${b.tier === 'T3' ? 'Alternate sets and rest after each round.' : `Do a set of the partner in ${esc(ex.name)}'s rest. The rest timer keeps counting for ${esc(ex.name)}.`}</p>
     <div class="list">
-      ${idea ? `<button class="row" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}"><span>+ ${esc(idea.exercise.name)} <span class="tier T3">T3</span></span><span class="meta">${esc(idea.why)}</span></button>` : ''}
+      ${idea && b.tier !== 'T3' ? `<button class="row" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}"><span>+ ${esc(idea.exercise.name)} <span class="tier T3">T3</span></span><span class="meta">${esc(idea.why)}</span></button>` : ''}
       ${others.length ? `<div class="label">Already in this workout</div>${others.map(o => `<button class="row" data-act="pairLink" data-b="${b.id}" data-o="${o.id}">
-        <span>${esc(exOf(o.exerciseId)?.name)} <span class="tier ${o.tier}">${o.tier}</span></span><span class="meta">pair them</span></button>`).join('')}` : ''}
+        <span>${names(o)} <span class="tier ${o.tier}">${o.tier}</span></span><span class="meta">${inPair(s, o) ? 'make it a giant set' : 'pair them'}</span></button>`).join('')}` : ''}
       <button class="row add" data-act="pairAny" data-b="${b.id}">Choose any exercise ›</button></div>`;
 }
 
@@ -1420,11 +1444,17 @@ const actions = {
       const gap = prev && (st.loggedAt - prev.loggedAt) / 1000;
       if (b && gap && gap < 15 * 60) { st.restSec = Math.max(0, Math.round(gap - workSec(st))); st.restPlan = effectiveRest(b); }
       const more = state.sets.some(x => x.sessionId === s.id && !x.done);
-      const main = b?.pairOf && s.blocks.find(x => x.id === b.pairOf);
-      // A superset partner's set happens in the main lift's rest: keep that countdown, just point it at what's next.
-      if (main && state.timer?.blockId === main.id && state.timer.endsAt > Date.now()) state.timer.next = nextLabelAfter(s, b);
-      else if (timerCfg().autoStart && b && more) startTimer(s, b, st.id);
-      else if (!more) state.timer = null; // session's last set: nothing to rest for
+      const group = b ? groupOf(s, b) : [];
+      const lead = group[0];
+      const next = b && nextInGroup(s, b);
+      if (!more) state.timer = null; // session's last set: nothing to rest for
+      // Done in a main lift's rest: keep that countdown, just point it at what's next.
+      else if (lead && lead !== b && lead.tier !== 'T3' && state.timer?.blockId === lead.id && state.timer.endsAt > Date.now()) state.timer.next = nextLabelAfter(s, b);
+      // Mid-round in a T3 superset or giant set: straight on to the next exercise, rest comes after the round.
+      else if (lead?.tier === 'T3' && group.length > 1 && next && next !== b && doneIn(next) < doneIn(b)) {
+        state.timer = null;
+        toast(`Next: ${setLabel(next)}`);
+      } else if (timerCfg().autoStart && b) startTimer(s, b, st.id);
     } else {
       st.done = false;
       delete st.loggedAt;
@@ -1527,7 +1557,9 @@ const actions = {
     const extra = Number(d.v);
     const res = L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies: s.blocks.map(b => exOf(b.exerciseId)?.familyId) });
     s.minutes += extra;
-    for (const b of res.blocks) { s.blocks.push(b); genSets(s, b); }
+    s.blocks.push(...res.blocks);
+    L.pairT3s(state, s.blocks);
+    for (const b of res.blocks) genSets(s, b);
     ui.sheet = null;
     save(); render();
     toast(res.blocks.length ? `Added ${res.blocks.map(b => exOf(b.exerciseId)?.name).join(', ')}` : 'Nothing else from your goals fits. Add an exercise below.');
@@ -1547,8 +1579,10 @@ const actions = {
   pairAny: d => openSheet({ type: 'addEx', mode: 'pair', tier: 'T3', blockId: d.b, q: '' }),
   pairLink: d => {
     const { s } = findBlock(d.b);
+    const { b } = findBlock(d.b);
     const o = s.blocks.find(x => x.id === d.o);
-    o.pairOf = d.b;
+    if (inPair(s, o)) b.pairOf = o.id; // join its group: a giant set
+    else o.pairOf = b.id;
     ui.sheet = null; renderSheet();
     save(); render();
   },
@@ -1734,7 +1768,8 @@ const actions = {
     if (logged) toast('Logged sets kept; the rest removed');
     else {
       s.blocks = s.blocks.filter(x => x !== b);
-      for (const x of s.blocks) if (x.pairOf === b.id) delete x.pairOf;
+      const rest = s.blocks.filter(x => x.pairOf === b.id);
+      if (rest.length) { delete rest[0].pairOf; for (const x of rest.slice(1)) x.pairOf = rest[0].id; }
     }
     if (s.source === 'suggested') s.source = 'swapped';
     save(); render();

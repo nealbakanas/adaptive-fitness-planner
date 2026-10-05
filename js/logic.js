@@ -431,6 +431,7 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
     }
   }
   blocks.sort((a, b) => blockRank(state, a) - blockRank(state, b)); // stable, so tier order holds within a rank
+  pairT3s(state, blocks);
   return { blocks, scored, minutesUsed: ci.minutes - budget, ready: readinessSummary(state, ci, t) };
 }
 
@@ -440,16 +441,37 @@ const isCore = (state, e) => e.familyId === 'fam-core' || /\bcore\b|\babs?\b/i.t
 
 // A T3 to do in a main lift's rest. It works a different region (or core) so it doesn't tire the main lift,
 // needs no barbell setup, and prefers a T3 goal that's still open this week.
+// Whether e can be done in mainEx's rest without tiring it: core, or a different region (upper after whole-body work).
+export function restCompatible(state, mainEx, e) {
+  if (isCore(state, e)) return true;
+  const r = e.region || 'full', region = mainEx?.region || 'full';
+  if (r === 'full') return false;
+  return region === 'full' ? r === 'upper' : r !== region;
+}
+
+// T3 work always comes grouped. A group is a leader block plus the blocks whose pairOf points at it.
+// Free T3s superset with each other in twos; an odd one out joins a T3 pair as a giant set, else a free
+// T1/T2/technique block it doesn't compete with, else any free one. Supersets on main lifts stay optional.
+// Mutates and returns the blocks.
+export function pairT3s(state, blocks) {
+  const ex = b => byId(state.exercises, b.exerciseId);
+  const grouped = b => !!b.pairOf || blocks.some(x => x.pairOf === b.id);
+  const free = blocks.filter(b => b.tier === 'T3' && !grouped(b));
+  for (let i = 0; i + 1 < free.length; i += 2) free[i + 1].pairOf = free[i].id;
+  if (free.length % 2 === 0) return blocks;
+  const lone = free.at(-1);
+  const t3Group = blocks.find(b => b.tier === 'T3' && !b.pairOf && b !== lone && blocks.filter(x => x.pairOf === b.id).length === 1);
+  if (t3Group) { lone.pairOf = t3Group.id; return blocks; }
+  const mains = blocks.filter(b => b.tier !== 'T3' && !grouped(b));
+  const best = mains.sort((a, b) => restCompatible(state, ex(b), ex(lone)) - restCompatible(state, ex(a), ex(lone)))[0];
+  if (best) lone.pairOf = best.id;
+  return blocks;
+}
+
 export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = creditWeek(state) } = {}) {
   const loc = byId(state.locations, ci.locationId);
   const region = mainEx.region || 'full';
-  const fits = e => {
-    if (e.explosive || (e.equipment || []).some(x => x === 'barbell' || x === 'rack')) return false;
-    if (isCore(state, e)) return true;
-    const r = e.region || 'full';
-    if (r === 'full') return false;
-    return region === 'full' ? r === 'upper' : r !== region;
-  };
+  const fits = e => !e.explosive && !(e.equipment || []).some(x => x === 'barbell' || x === 'rack') && restCompatible(state, mainEx, e);
   // Families with a heavy or moderate goal are main lifts in their own right, not something to squeeze into a rest.
   const skip = new Set([...excludeFamilies, ...state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId)]);
   const since = Date.now() - 84 * DAY;

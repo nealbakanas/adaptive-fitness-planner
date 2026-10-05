@@ -59,6 +59,8 @@ step('supersets, real rest, pause and resume, more time', () => {
   click('[data-k=locationId][data-v=loc-basement]');
   click('[data-k=energy][data-v="5"]');
   click('[data-act=suggest]');
+  check('suggested T3s are all grouped', qa('section.block').filter(b => /^T3/.test(b.querySelector('.tier').innerText)).every(b => b.classList.contains('paired') || b.classList.contains('haspair')));
+  for (const b of qa('[data-act=pairUnlink]')) click(b); // start from no supersets to test the idea row
   const idea = q('[data-act=pairAdd]');
   check('superset idea offered under a main lift', !!idea);
   click(idea);
@@ -83,6 +85,29 @@ step('supersets, real rest, pause and resume, more time', () => {
   check('paused workout waits on the check-in screen', /Paused at/.test(text()) && !!q('[data-act=resume]'));
   click('[data-act=resume]');
   check('resume brings the same workout back', qa('section.block').length === blocksBefore && !!q('section.block.paired'));
+  click('[data-act=addEx]');
+  click('[data-act=addExTier][data-t=T3]');
+  click('[data-act=addExPick][data-id=ex-dead-bug]');
+  check('a T3 added by hand joins a superset', qa('section.block.paired').some(b => /Dead bug/.test(b.innerText)));
+  click('[data-act=addEx]');
+  click('[data-act=addExTier][data-t=T3]');
+  click('[data-act=addExPick][data-id=ex-ring-curl]');
+  check('two T3s added by hand superset each other', /alternate sets|Giant set/.test(qa('.sslabel').map(x => x.innerText).join(' ')), qa('.sslabel').map(x => x.innerText).join(' | '));
+  const lead = qa('section.block.haspair').find(b => /^T3/.test(b.querySelector('.tier').innerText));
+check('a T3-led group exists', !!lead);
+  if (lead) {
+    state.timer = null;
+    click(lead.querySelector('[data-act=check]'));
+    check('mid-round in a T3 superset: no rest yet', !state.timer);
+    // One set of every other exercise in the group finishes the round.
+    const size = () => { let n = 1, el = qa('section.block.haspair').find(b => /^T3/.test(b.querySelector('.tier').innerText)); while ((el = el.nextElementSibling)?.classList.contains('paired')) n++; return n; };
+    for (let i = 1; i < size(); i++) {
+      let el = qa('section.block.haspair').find(b => /^T3/.test(b.querySelector('.tier').innerText));
+      for (let j = 0; j < i; j++) el = el.nextElementSibling;
+      click(el.querySelector('.set:not(.done) [data-act=check]'));
+    }
+    check('after the round: rest starts', !!state.timer);
+  }
   click('[data-act=moreTime]');
   click('[data-act=addTime][data-v="30"]');
   check('more time adds exercises', qa('section.block').length > blocksBefore, `${blocksBefore} -> ${qa('section.block').length}`);
