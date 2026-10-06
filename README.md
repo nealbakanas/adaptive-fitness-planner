@@ -60,6 +60,16 @@ After the first visit it works offline: `sw.js` fetches from the network first (
 - If a save fails (storage full or blocked), a message stays at the top of every tab until a save succeeds.
 - The FitNotes import takes a snapshot first; **Backup and data → Undo last import** puts it back.
 
+## Mobility
+
+Mobility lives outside the strength framework: its own exercises, routines and sessions (`js/mobility.js`), with no tiers, weekly goals or estimated maxes, and it never counts toward strength goals.
+
+- **Exercises** have body parts (Hamstrings, Hip flexors, Adductors, Glutes, Quads & knees, Calves & ankles, Spine, Thoracic, Shoulders, Lats), a dose (sets × reps or hold, ranges, each side, tempo), rest, what to log per set (reps, hold time, load, and one custom field such as "Deficit (cm)" or "Knee-to-floor (cm)"), cues, a YouTube search phrase and history notes. Add and edit them in Library → Mobility.
+- **Routines** (Plans tab) are ordered lists of mobility exercises. The four you've been running (Long & Strong, All the Width, Bend Don't Break, Primal Roots) are included, with your week 1–2 notes as each exercise's history.
+- **Mobility sessions** start from the check-in screen: a routine, or *Pick body parts*. **+ Mobility** adds moves to a strength workout the same way.
+- **Picking by body part**: choose up to 3; for each part the move you've done least recently is ticked (moves covering more of the picked parts rank first). Each set shows last time's numbers and note; loads and the custom field prefill from last time.
+- Logging a set starts that exercise's rest. Finishing keeps only what you logged. The Week tab shows mobility sessions and which body parts you've covered.
+
 ## Suggested weekly goals
 
 Week → **Suggest from history** (also offered after a FitNotes import). It looks at the last 12 weeks (26 if that's thin) and proposes goals for review: untick or change any of them, then **Replace my goals** or **Add to my goals**, with Undo.

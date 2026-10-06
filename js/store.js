@@ -139,6 +139,11 @@ export function migrate(s) {
     }
     s.version = 8;
   }
+  if (s.version < 9) {
+    // v9: the mobility suite, with its own exercises, routines and sessions.
+    s.mobility ??= base.mobility;
+    s.version = 9;
+  }
   return s;
 }
 

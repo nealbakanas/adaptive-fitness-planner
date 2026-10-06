@@ -2,6 +2,7 @@ import { state, save, replaceState, resetState, loadProblem, lastSaveError, reso
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
 import * as G from './goals.js';
+import * as M from './mobility.js';
 
 const appEl = document.getElementById('app');
 const navEl = document.getElementById('nav');
@@ -61,18 +62,67 @@ function closeStale() {
     if ((s.status !== 'open' && s.status !== 'paused') || s.day === today) continue;
     endSession(s);
   }
+  for (const m of [...state.mobility.sessions]) if (m.status === 'open' && m.day !== today) endMobility(m);
 }
 
 function endSession(s) {
-  if (state.sets.some(x => x.sessionId === s.id && x.done)) {
+  const mobDone = (s.mobility || []).some(it => it.sets.some(x => x.done));
+  if (state.sets.some(x => x.sessionId === s.id && x.done) || mobDone) {
     s.status = 'done';
     state.sets = state.sets.filter(x => x.sessionId !== s.id || x.done);
+    if (s.mobility) s.mobility = trimMobility(s.mobility);
   } else {
     removeSession(s);
   }
 }
 
 const blockSets = b => state.sets.filter(s => s.blockId === b.id);
+
+// ---------- mobility (its own exercises and sessions; no tiers, goals or maxes) ----------
+
+const mobEx = id => L.byId(state.mobility.exercises, id);
+const fmtAgo = t => { const d = Math.floor((L.startOfDay() - L.startOfDay(t)) / 864e5); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
+
+function currentMobility() {
+  const today = L.dayKey();
+  return state.mobility.sessions.filter(m => m.day === today && m.status === 'open').sort((a, b) => b.startedAt - a.startedAt)[0];
+}
+
+// Mobility items open right now: in the mobility session or the workout.
+function findMobItem(id) {
+  for (const list of [currentMobility()?.items, currentSession()?.mobility]) {
+    const item = list?.find(x => x.id === id);
+    if (item) return { item, list };
+  }
+  return {};
+}
+
+// Keep what was logged; drop unlogged rows and exercises with nothing logged.
+function trimMobility(items) {
+  for (const it of items) it.sets = it.sets.filter(s => s.done);
+  return items.filter(it => it.sets.length);
+}
+
+function endMobility(m) {
+  m.items = trimMobility(m.items);
+  if (m.items.length) { m.status = 'done'; m.endedAt = Date.now(); }
+  else state.mobility.sessions = state.mobility.sessions.filter(x => x !== m);
+}
+
+function startMobility(items, extra = {}) {
+  const m = { id: L.uid(), day: L.dayKey(), startedAt: Date.now(), status: 'open', items, ...extra };
+  state.mobility.sessions.push(m);
+  ui.showWorkout = false;
+  return m;
+}
+
+function nextMobLabel(list, item) {
+  for (const it of [item, ...list.filter(x => x !== item)]) {
+    const i = it.sets.findIndex(s => !s.done);
+    if (i >= 0) return `${mobEx(it.exerciseId)?.name ?? ''} · set ${i + 1}`;
+  }
+  return null;
+}
 
 // Supersets and giant sets: a group is a leader block plus the blocks whose pairOf points at it.
 // Led by a main lift, the others are done in its rest. Led by a T3, it's a circuit: one set of each, then rest.
@@ -300,6 +350,13 @@ function startTimer(s, b, setId = null) {
   setWakeLock(true);
 }
 
+function startMobTimer(list, item, set) {
+  const secs = mobEx(item.exerciseId)?.restSec || 0;
+  if (!secs) return;
+  state.timer = { endsAt: Date.now() + secs * 1000, total: secs, blockId: null, setId: set.id, next: nextMobLabel(list, item), warned: false, alerted: false };
+  setWakeLock(true);
+}
+
 function stopTimer() {
   state.timer = null;
   renderTimer();
@@ -418,8 +475,10 @@ function banners() {
 }
 
 function viewToday() {
-  const s = currentSession();
-  return banners() + (s ? viewSession(s) : viewCheckin());
+  const s = currentSession(), m = currentMobility();
+  if (m && !(s && ui.showWorkout)) return banners() + viewMobSession(m, !!s);
+  const back = m ? `<div class="banner">Your mobility session is still open. <button class="link" data-act="showMobility">Switch to it</button></div>` : '';
+  return banners() + back + (s ? viewSession(s) : viewCheckin());
 }
 
 function seg(key, items, cur) {
@@ -451,6 +510,10 @@ function viewCheckin() {
     <div class="field"><label>Intent</label>${seg('intent', INTENTS, ci.intent)}</div>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>`;
+  const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
+  h += `<div class="field"><label>Mobility <span class="hint">its own session, outside your weekly goals</span></label><div class="list">${state.mobility.routines.map(r =>
+    `<button class="row" data-act="mobStart" data-id="${r.id}"><span>${esc(r.name)}</span><span class="meta">${r.items.length} exercises${lastRoutine(r.id)}</span></button>`).join('')}
+    <button class="row add" data-act="mobPick" data-mode="new">Pick body parts ›</button></div></div>`;
   if (state.plans.length) {
     h += `<div class="field"><label>Or start a saved plan</label><div class="list">${state.plans.map(p =>
       `<button class="row" data-act="startPlan" data-id="${p.id}"><span>${esc(p.name)}</span><span class="meta">${p.items.length} items</span></button>`).join('')}</div></div>`;
@@ -479,7 +542,8 @@ function viewSession(s) {
   }
   const ideas = pairIdeas(s, ordered, credit);
   h += ordered.map(b => viewBlock(s, b, credit, ideas.get(b.id))).join('');
-  h += `<button class="addblock" data-act="addEx">+ Add exercise</button>`;
+  if (s.mobility?.length) h += `<div class="sectionhead"><h3>Mobility</h3></div>${s.mobility.map(viewMobItem).join('')}`;
+  h += `<div class="addrow"><button class="addblock" data-act="addEx">+ Add exercise</button><button class="addblock" data-act="mobPick" data-mode="workout">+ Mobility</button></div>`;
   if (s.why?.length) {
     h += `<details class="why" ${ui.whyOpen ? 'open' : ''} data-why><summary>Why this session</summary><ul>${s.why.map(w =>
       `<li class="${w.picked ? 'picked' : ''}"><b>${esc(w.label)}</b> ${w.score.toFixed(2)}${w.picked ? ' ✓' : ''} <span class="meta">${esc(w.why.join(' · '))}${w.note ? ' · ' + esc(w.note) : ''}</span></li>`).join('')}</ul></details>`;
@@ -595,6 +659,79 @@ function viewBlock(s, b, credit, idea = null) {
   </section>`;
 }
 
+function viewMobItem(item) {
+  const ex = mobEx(item.exerciseId);
+  if (!ex) return '';
+  const t = ex.track, last = M.lastFor(state, ex.id, item.id);
+  const input = (st, f, mode, ph = '—') => `<input class="num${f === 'extra' ? ' wide' : ''}" inputmode="${mode}" data-mset="${item.id}|${st.id}" data-f="${f}" value="${esc(st[f])}" placeholder="${esc(ph)}">`;
+  const rows = item.sets.map((st, i) => {
+    let h = '';
+    if (t.load) h += `${input(st, 'load', 'decimal')}<span class="u">${unit()}</span>`;
+    if (t.reps) h += `${input(st, 'reps', 'numeric')}<span class="u">reps</span>`;
+    if (t.hold) h += `${input(st, 'hold', 'numeric')}<span class="u">s</span>`;
+    if (t.extra) h += input(st, 'extra', 'text', t.extra);
+    return `<div class="set ${st.done ? 'done' : ''}"><span class="n">${i + 1}</span>${h}
+      <button class="check" data-act="mcheck" data-i="${item.id}" data-s="${st.id}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
+  }).join('');
+  const vid = M.videoSearch(ex.video);
+  const day = x => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `<section class="block mob">
+    <div class="bhead"><span class="tier MOB">MOB</span><span class="mobname">${esc(ex.name)}</span></div>
+    <div class="meta">${esc(M.doseText(ex))} · rest ${clock(ex.restSec || 0)} · ${esc(ex.parts.join(', '))}</div>
+    ${last ? `<div class="dose">Last time (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
+    <div class="sets">${rows}</div>
+    <input class="mobnote" data-mnote="${item.id}" value="${esc(item.note)}" placeholder="Notes for today: depth, pain, how it felt">
+    <div class="brow">
+      <button class="small" data-act="mAddSet" data-i="${item.id}">+ set</button>
+      <button class="small" data-act="mRemoveSet" data-i="${item.id}">− set</button>
+      ${vid ? `<a class="small" href="${esc(vid)}" target="_blank" rel="noopener">▶ Video</a>` : ''}
+      <button class="small quiet" data-act="mRemove" data-i="${item.id}">Remove</button>
+    </div>
+    ${ex.cues || ex.notes ? `<details class="cues"><summary>Cues${ex.notes ? ' and history' : ''}</summary>${ex.cues ? `<p>${esc(ex.cues)}</p>` : ''}${ex.notes ? `<p class="meta">${esc(ex.notes)}</p>` : ''}</details>` : ''}
+  </section>`;
+}
+
+function viewMobSession(m, workoutOpen) {
+  const total = m.items.reduce((n, it) => n + it.sets.length, 0);
+  const done = m.items.reduce((n, it) => n + it.sets.filter(s => s.done).length, 0);
+  const title = L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Your picks');
+  let h = `<header class="top"><div><h1>Mobility</h1><div class="sub">${esc(title)} · ${done}/${total} sets</div></div><span class="badge mobility">mobility</span></header>`;
+  if (workoutOpen) h += `<div class="banner">Your workout is still open. <button class="link" data-act="showWorkout">Switch to it</button></div>`;
+  h += m.items.map(viewMobItem).join('') || '<div class="card muted">Nothing here yet. Add some mobility work below.</div>';
+  return h + `<button class="addblock" data-act="mobPick" data-mode="session">+ Add mobility</button>
+    <div class="actions"><button data-act="mobDiscard">Discard</button><button class="primary" data-act="mobFinish">Finish</button></div>`;
+}
+
+const libModeSeg = () => `<div class="seg libmode"><button class="${ui.libMode !== 'mobility' ? 'on' : ''}" data-act="libMode" data-v="strength">Strength</button>
+  <button class="${ui.libMode === 'mobility' ? 'on' : ''}" data-act="libMode" data-v="mobility">Mobility</button></div>`;
+
+function viewMobLibrary() {
+  const q = ui.libQuery.trim().toLowerCase(), pf = ui.mobPart;
+  const last = M.lastDoneAt(state);
+  const list = state.mobility.exercises.filter(e => (ui.showArchived || !e.archived) && (!q || e.name.toLowerCase().includes(q)) && (!pf || e.parts.includes(pf)))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return `<header class="top"><h1>Library</h1><button class="primary" data-act="mobExNew">+ Mobility</button></header>${libModeSeg()}
+    <input class="search" id="libq" placeholder="Search mobility" value="${esc(ui.libQuery)}" data-libq>
+    <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${pf === p ? 'on' : ''}" data-act="mobPartFilter" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+    <div class="card">${list.map(e => `<div class="exrow"><button class="name" data-act="mobExEdit" data-id="${e.id}">${esc(e.name)}<span class="meta">${esc([M.doseText(e), e.parts.join(', '),
+      last.has(e.id) ? `last ${fmtAgo(last.get(e.id))}` : 'not logged yet', e.archived ? 'archived' : ''].filter(Boolean).join(' · '))}</span></button></div>`).join('') || '<p class="muted">No matches.</p>'}</div>`;
+}
+
+function viewMobRoutine(r) {
+  return `<header class="top"><h1>${r.id ? 'Edit routine' : 'New mobility routine'}</h1></header>
+    <div class="field"><label>Name</label><input id="mr-name" data-mrname value="${esc(r.name)}" placeholder="e.g. Hips before volleyball"></div>
+    <div class="card">${r.items.map((id, i) => {
+      const e = mobEx(id);
+      return `<div class="exrow"><span class="name">${esc(e?.name ?? '?')}<span class="meta">${e ? esc(`${M.doseText(e)} · ${e.parts.join(', ')}`) : ''}</span></span>
+        <button class="icon" data-act="mobRoutineMove" data-i="${i}" data-dir="-1" aria-label="Move up">↑</button>
+        <button class="icon" data-act="mobRoutineMove" data-i="${i}" data-dir="1" aria-label="Move down">↓</button>
+        <button class="icon" data-act="mobRoutineDel" data-i="${i}" aria-label="Remove">✕</button></div>`;
+    }).join('') || '<p class="muted">No exercises yet.</p>'}</div>
+    <button data-act="mobPick" data-mode="routine">+ Add exercises</button>
+    <div class="actions">${r.id ? '<button class="danger" data-act="mobRoutineDelete">Delete</button>' : ''}
+      <button data-act="mobRoutineCancel">Cancel</button><button class="primary" data-act="mobRoutineSave">Save routine</button></div>`;
+}
+
 function viewWeek() {
   if (ui.goalSuggest) return viewGoalSuggest(ui.goalSuggest);
   const c = L.creditWeek(state);
@@ -643,13 +780,19 @@ function viewWeek() {
   } else {
     h += `<p class="muted">No sets logged this week yet.</p>`;
   }
+  const mw = M.weekSummary(state, c.start, c.end);
+  h += `<div class="sectionhead"><h3>Mobility this week</h3></div><div class="card">${mw.sessions
+    ? `<p>${mw.sessions} session${mw.sessions === 1 ? '' : 's'} on ${mw.days} day${mw.days === 1 ? '' : 's'}. Highlighted: body parts you've worked.</p>
+      <div class="chips">${M.BODY_PARTS.map(p => `<span class="chip ${mw.parts.includes(p) ? 'on' : ''}">${esc(p)}</span>`).join('')}</div>`
+    : '<p class="muted">None yet. Start one from Today, or add mobility to a workout.</p>'}</div>`;
   return h;
 }
 
 function viewLibrary() {
+  if (ui.libMode === 'mobility') return viewMobLibrary();
   const q = ui.libQuery.trim().toLowerCase();
   const archivedCount = state.exercises.filter(e => e.archived).length;
-  let h = `<header class="top"><h1>Library</h1><button class="primary" data-act="quickAdd">+ Exercise</button></header>
+  let h = `<header class="top"><h1>Library</h1><button class="primary" data-act="quickAdd">+ Exercise</button></header>${libModeSeg()}
     <input class="search" id="libq" placeholder="Search exercises or families" value="${esc(ui.libQuery)}" data-libq>
     ${archivedCount ? `<button class="small quiet libarch" data-act="libArchived">${ui.showArchived ? 'Hide' : 'Show'} archived (${archivedCount})</button>` : ''}`;
   const fams = [...state.families].sort((a, b) => a.name.localeCompare(b.name));
@@ -677,6 +820,7 @@ function exerciseOptions(sel) {
 }
 
 function viewPlans() {
+  if (ui.mobRoutine) return viewMobRoutine(ui.mobRoutine);
   const p = ui.plan;
   if (p) {
     return `<header class="top"><h1>${p.id ? 'Edit plan' : 'New plan'}</h1></header>
@@ -695,6 +839,10 @@ function viewPlans() {
   if (!state.plans.length) h += `<p class="muted">Hand-built sessions you can pick instead of the suggestion. Choosing one is logged as an override.</p>`;
   h += state.plans.map(p => `<button class="card row" data-act="planEdit" data-id="${p.id}"><span><b>${esc(p.name)}</b>
     <span class="meta">${esc(p.items.map(it => `${it.tier} ${exOf(it.exerciseId)?.name ?? '?'} ${schOf(it.schemeId)?.name ?? ''}`).join(' · '))}</span></span><span>›</span></button>`).join('');
+  h += `<div class="sectionhead"><h3>Mobility routines</h3><button class="small" data-act="mobRoutineNew">+ New routine</button></div>`;
+  h += state.mobility.routines.map(r => `<button class="card row" data-act="mobRoutineEdit" data-id="${r.id}"><span><b>${esc(r.name)}</b>
+    <span class="meta">${esc(r.items.map(id => mobEx(id)?.name ?? '?').join(' · '))}</span></span><span>›</span></button>`).join('')
+    || '<p class="muted">No mobility routines yet.</p>';
   return h;
 }
 
@@ -1018,7 +1166,7 @@ function renderSheet() {
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, pasteImport: sheetPasteImport,
-    addEx: sheetAddEx, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime }[s.type](s);
+    addEx: sheetAddEx, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
   sheetEl.hidden = false;
   if (ui.sheetFocus) {
@@ -1178,6 +1326,62 @@ function sheetPair(sh) {
       ${others.length ? `<div class="label">Already in this workout</div>${others.map(o => `<button class="row" data-act="pairLink" data-b="${b.id}" data-o="${o.id}">
         <span>${names(o)} <span class="tier ${o.tier}">${o.tier}</span></span><span class="meta">${inPair(s, o) ? 'make it a giant set' : 'pair them'}</span></button>`).join('')}` : ''}
       <button class="row add" data-act="pairAny" data-b="${b.id}">Choose any exercise ›</button></div>`;
+}
+
+const MOB_PICK_TITLE = { new: 'Mobility session', session: 'Add mobility', workout: 'Add mobility to this workout', routine: 'Add to routine' };
+
+function sheetMobPick(sh) {
+  const last = M.lastDoneAt(state);
+  const shown = sh.parts.length || sh.mode === 'routine' ? M.rankForParts(state, sh.parts, sh.exclude) : [];
+  return `<h3>${MOB_PICK_TITLE[sh.mode]}</h3>
+    <p class="meta">Pick up to 3 body parts. The moves you've done least recently are ticked; change the ticks as you like.</p>
+    <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${sh.parts.includes(p) ? 'on' : ''}" data-act="mobPart" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+    <div class="list">${shown.map(({ e }) => `<button class="row ${sh.picked.includes(e.id) ? 'on' : ''}" data-act="mobTick" data-id="${e.id}">
+      <span>${sh.picked.includes(e.id) ? '☑' : '☐'} ${esc(e.name)}</span>
+      <span class="meta">${esc(`${e.parts.join(', ')} · ${M.doseText(e)} · ${last.has(e.id) ? fmtAgo(last.get(e.id)) : 'not logged yet'}`)}</span></button>`).join('')
+      || `<p class="muted">${sh.parts.length ? 'Nothing for those body parts yet.' : 'Pick a body part to see moves.'}</p>`}
+      <button class="row add" data-act="mobExNew">+ New mobility exercise</button></div>
+    <div class="actions"><button class="primary" data-act="mobAddPicked">${sh.mode === 'new' ? 'Start' : 'Add'}${sh.picked.length ? ` ${sh.picked.length}` : ''}</button></div>`;
+}
+
+function sheetMobEx(sh) {
+  const d = sh.draft;
+  const num = (id, v) => `<input id="${id}" class="num" inputmode="numeric" value="${esc(v ?? '')}">`;
+  const box = (id, on, label) => `<label class="toggle"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}> ${label}</label>`;
+  const used = sh.id && M.loggedItems(state).some(x => x.item.exerciseId === sh.id);
+  return `<h3>${sh.isNew ? 'New mobility exercise' : 'Edit mobility exercise'}</h3>
+    <div class="field"><label>Name</label><input id="me-name" value="${esc(d.name)}" placeholder="e.g. 90/90 hip switch"></div>
+    <div class="field"><label>Body parts</label><div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${d.parts.includes(p) ? 'on' : ''}" data-act="mobExPart" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div></div>
+    <div class="row2 fields">
+      <div class="field"><label>Sets</label>${num('me-sets', d.sets)}</div>
+      <div class="field"><label>Reps</label>${num('me-reps', d.reps)}</div>
+      <div class="field"><label>Up to</label>${num('me-repsmax', d.repsMax)}</div></div>
+    <div class="row2 fields">
+      <div class="field"><label>Hold (s)</label>${num('me-hold', d.hold)}</div>
+      <div class="field"><label>Up to</label>${num('me-holdmax', d.holdMax)}</div>
+      <div class="field"><label>Rest</label><input id="me-rest" class="num" value="${esc(clock(d.restSec || 0))}"></div></div>
+    ${box('me-side', d.perSide, 'Each side')}
+    <div class="field"><label>Tempo or detail <span class="hint">optional</span></label><input id="me-tempo" value="${esc(d.tempo)}" placeholder="e.g. 4s down / 2s hold"></div>
+    <div class="field"><label>Log each set with</label>${box('me-t-reps', d.track.reps, 'Reps')}${box('me-t-hold', d.track.hold, 'Hold time')}${box('me-t-load', d.track.load, 'Load')}
+      <input id="me-t-extra" value="${esc(d.track.extra)}" placeholder="Anything else, e.g. Depth or Deficit (cm)"></div>
+    <div class="field"><label>Cues</label><textarea id="me-cues" rows="2">${esc(d.cues)}</textarea></div>
+    <div class="field"><label>Video search <span class="hint">opens YouTube results</span></label><input id="me-video" value="${esc(d.video)}" placeholder="e.g. kneesovertoesguy elephant walk"></div>
+    <div class="field"><label>History notes</label><textarea id="me-notes" rows="2">${esc(d.notes)}</textarea></div>
+    ${sh.isNew ? '' : box('me-arch', d.archived, 'Archived <span class="hint">kept for history, left out of pickers</span>')}
+    <div class="actions">${!sh.isNew && !used ? '<button class="danger" data-act="mobExDelete">Delete</button>' : ''}<button class="primary" data-act="mobExSave">Save</button></div>`;
+}
+
+function readMobDraft() {
+  const d = ui.sheet.draft, q = id => sheetEl.querySelector(id);
+  if (!q('#me-name')) return d;
+  const n = id => { const v = q(id).value.trim(); return v === '' ? null : Math.max(0, Number(v) || 0); };
+  Object.assign(d, {
+    name: q('#me-name').value.trim(), sets: n('#me-sets') || 1, reps: n('#me-reps'), repsMax: n('#me-repsmax'), hold: n('#me-hold'), holdMax: n('#me-holdmax'),
+    restSec: parseMSS(q('#me-rest').value) ?? 0, perSide: q('#me-side').checked, tempo: q('#me-tempo').value.trim(),
+    track: { reps: q('#me-t-reps').checked, hold: q('#me-t-hold').checked, load: q('#me-t-load').checked, extra: q('#me-t-extra').value.trim() },
+    cues: q('#me-cues').value.trim(), video: q('#me-video').value.trim(), notes: q('#me-notes').value.trim(), archived: q('#me-arch')?.checked ?? !!d.archived,
+  });
+  return d;
 }
 
 function sheetFinishAsk(sh) {
@@ -1520,8 +1724,10 @@ const actions = {
 
   finish: () => {
     const s = currentSession();
-    const left = state.sets.filter(x => x.sessionId === s.id && !x.done).length;
-    if (left && state.sets.some(x => x.sessionId === s.id && x.done)) return openSheet({ type: 'finishAsk', left });
+    const mobSets = (s.mobility || []).flatMap(it => it.sets);
+    const left = state.sets.filter(x => x.sessionId === s.id && !x.done).length + mobSets.filter(x => !x.done).length;
+    const any = state.sets.some(x => x.sessionId === s.id && x.done) || mobSets.some(x => x.done);
+    if (left && any) return openSheet({ type: 'finishAsk', left });
     actions.finishNow();
   },
   finishNow: () => {
@@ -1565,6 +1771,165 @@ const actions = {
     save(); render();
     toast(res.blocks.length ? `Added ${res.blocks.map(b => exOf(b.exerciseId)?.name).join(', ')}` : 'Nothing else from your goals fits. Add an exercise below.');
   },
+
+  showWorkout: () => { ui.showWorkout = true; render(); window.scrollTo(0, 0); },
+  showMobility: () => { ui.showWorkout = false; render(); window.scrollTo(0, 0); },
+
+  mobStart: d => {
+    if (currentMobility()) { ui.showWorkout = false; render(); return toast('A mobility session is already open'); }
+    const r = L.byId(state.mobility.routines, d.id);
+    startMobility(r.items.map(mobEx).filter(e => e && !e.archived).map(e => M.newItem(state, e)), { routineId: r.id });
+    save(); render(); window.scrollTo(0, 0);
+  },
+  mobPick: d => {
+    const ids = items => (items || []).map(i => i.exerciseId);
+    const exclude = d.mode === 'session' ? ids(currentMobility()?.items) : d.mode === 'workout' ? ids(currentSession()?.mobility)
+      : d.mode === 'routine' ? [...ui.mobRoutine.items] : [];
+    openSheet({ type: 'mobPick', mode: d.mode, parts: [], picked: [], exclude });
+  },
+  mobPart: d => {
+    const sh = ui.sheet;
+    sh.parts = sh.parts.includes(d.v) ? sh.parts.filter(p => p !== d.v) : [...sh.parts, d.v].slice(-3);
+    sh.picked = M.suggestForParts(state, sh.parts, sh.exclude);
+    renderSheet();
+  },
+  mobTick: d => {
+    const sh = ui.sheet;
+    sh.picked = sh.picked.includes(d.id) ? sh.picked.filter(x => x !== d.id) : [...sh.picked, d.id];
+    renderSheet();
+  },
+  mobAddPicked: () => {
+    const sh = ui.sheet;
+    const exs = sh.picked.map(mobEx).filter(Boolean);
+    if (!exs.length) return toast('Tick at least one');
+    if (sh.mode === 'routine') ui.mobRoutine.items.push(...exs.map(e => e.id));
+    else {
+      const items = exs.map(e => M.newItem(state, e));
+      const open = currentMobility();
+      if (sh.mode === 'workout') (currentSession().mobility ??= []).push(...items);
+      else if (open) { open.items.push(...items); ui.showWorkout = false; }
+      else startMobility(items, { parts: sh.parts });
+      ui.tab = 'today';
+    }
+    ui.sheet = null; renderSheet();
+    save(); render();
+  },
+  mcheck: d => {
+    const { item, list } = findMobItem(d.i);
+    const st = item?.sets.find(x => x.id === d.s);
+    if (!st) return;
+    if (!st.done) {
+      st.done = true;
+      st.at = Date.now();
+      unlockAudio();
+      const more = list.some(it => it.sets.some(x => !x.done));
+      if (timerCfg().autoStart && more) startMobTimer(list, item, st);
+      else if (!more && state.timer && !state.timer.blockId) state.timer = null;
+    } else {
+      st.done = false;
+      delete st.at;
+      if (state.timer?.setId === st.id) state.timer = null;
+    }
+    save(); render();
+  },
+  mAddSet: d => {
+    const { item } = findMobItem(d.i);
+    const last = item.sets.at(-1);
+    item.sets.push({ ...last, id: L.uid(), done: false, at: undefined });
+    save(); render();
+  },
+  mRemoveSet: d => {
+    const { item } = findMobItem(d.i);
+    const i = item.sets.map(s => s.done).lastIndexOf(false);
+    if (i < 0) return toast('Only logged sets left');
+    item.sets.splice(i, 1);
+    save(); render();
+  },
+  mRemove: d => {
+    const { item, list } = findMobItem(d.i);
+    if (item.sets.some(s => s.done)) { item.sets = item.sets.filter(s => s.done); toast('Logged sets kept; the rest removed'); }
+    else list.splice(list.indexOf(item), 1);
+    save(); render();
+  },
+  mobFinish: () => {
+    const m = currentMobility();
+    const n = m.items.reduce((t, it) => t + it.sets.filter(s => s.done).length, 0);
+    endMobility(m);
+    if (state.timer && !state.timer.blockId) state.timer = null;
+    setWakeLock(false);
+    save(); render(); window.scrollTo(0, 0);
+    toast(n ? `Mobility saved · ${n} sets` : 'Nothing logged, so nothing saved');
+  },
+  mobDiscard: () => askConfirm('Discard this mobility session?', 'Nothing from it is kept, including sets you logged.', 'Discard', () => {
+    const m = currentMobility();
+    state.mobility.sessions = state.mobility.sessions.filter(x => x !== m);
+    if (state.timer && !state.timer.blockId) state.timer = null;
+    save(); render();
+  }),
+
+  libMode: d => { ui.libMode = d.v; ui.libQuery = ''; render(); },
+  mobPartFilter: d => { ui.mobPart = ui.mobPart === d.v ? null : d.v; render(); },
+  mobExNew: () => openSheet({ type: 'mobEx', isNew: true, ret: ui.sheet?.type === 'mobPick' ? ui.sheet : null,
+    draft: { name: '', parts: ui.sheet?.parts ? [...ui.sheet.parts] : ui.mobPart ? [ui.mobPart] : [], sets: 3, reps: 10, repsMax: null, hold: null, holdMax: null,
+      perSide: false, tempo: '', restSec: 45, track: { reps: true, hold: false, load: false, extra: '' }, cues: '', video: '', notes: '', archived: false } }),
+  mobExEdit: d => openSheet({ type: 'mobEx', id: d.id, draft: structuredClone(mobEx(d.id)) }),
+  mobExPart: d => {
+    const dr = readMobDraft();
+    dr.parts = dr.parts.includes(d.v) ? dr.parts.filter(p => p !== d.v) : [...dr.parts, d.v];
+    renderSheet();
+  },
+  mobExSave: () => {
+    const sh = ui.sheet, d = readMobDraft();
+    if (!d.name) return toast('Give it a name');
+    if (!d.parts.length) return toast('Pick at least one body part');
+    if (!d.track.reps && !d.track.hold && !d.track.load && !d.track.extra) d.track[d.hold ? 'hold' : 'reps'] = true;
+    let id = sh.id;
+    if (sh.isNew) { id = L.uid(); state.mobility.exercises.push({ ...d, id }); }
+    else Object.assign(mobEx(sh.id), d, { id: sh.id });
+    save();
+    if (sh.ret) {
+      const back = sh.ret;
+      if (sh.isNew) back.picked = [...back.picked, id];
+      if (!back.parts.length) back.parts = d.parts.slice(0, 3);
+      openSheet(back);
+    } else {
+      ui.sheet = null; renderSheet();
+    }
+    render(); toast(sh.isNew ? `Added ${d.name}` : 'Saved');
+  },
+  mobExDelete: () => {
+    const id = ui.sheet.id;
+    askConfirm(`Delete “${mobEx(id).name}”?`, 'It is also taken out of your mobility routines.', 'Delete', () => {
+      state.mobility.exercises = state.mobility.exercises.filter(e => e.id !== id);
+      for (const r of state.mobility.routines) r.items = r.items.filter(x => x !== id);
+      save(); render();
+    });
+  },
+
+  mobRoutineNew: () => { ui.mobRoutine = { name: '', items: [] }; render(); },
+  mobRoutineEdit: d => { ui.mobRoutine = structuredClone(L.byId(state.mobility.routines, d.id)); render(); },
+  mobRoutineMove: d => {
+    const a = ui.mobRoutine.items, i = Number(d.i), j = i + Number(d.dir);
+    if (j < 0 || j >= a.length) return;
+    [a[i], a[j]] = [a[j], a[i]];
+    render();
+  },
+  mobRoutineDel: d => { ui.mobRoutine.items.splice(Number(d.i), 1); render(); },
+  mobRoutineCancel: () => { ui.mobRoutine = null; render(); },
+  mobRoutineSave: () => {
+    const r = ui.mobRoutine;
+    r.name = (document.querySelector('#mr-name')?.value ?? r.name).trim();
+    if (!r.name) return toast('Give the routine a name');
+    if (r.id) Object.assign(L.byId(state.mobility.routines, r.id), r);
+    else state.mobility.routines.push({ ...r, id: L.uid() });
+    ui.mobRoutine = null;
+    save(); render(); toast('Routine saved');
+  },
+  mobRoutineDelete: () => askConfirm(`Delete “${ui.mobRoutine.name}”?`, 'Sessions you did with it keep their logs.', 'Delete routine', () => {
+    state.mobility.routines = state.mobility.routines.filter(r => r.id !== ui.mobRoutine.id);
+    ui.mobRoutine = null;
+    save(); render();
+  }),
 
   pairAdd: d => {
     const { s, b } = findBlock(d.b);
@@ -2049,6 +2414,13 @@ document.addEventListener('change', e => {
     const st = L.byId(state.sets, d.set);
     st[d.f] = el.value === '' ? null : Number(el.value);
     save();
+  } else if (d.mset) {
+    const [iid, sid] = d.mset.split('|');
+    const st = findMobItem(iid).item?.sets.find(x => x.id === sid);
+    if (st) { st[d.f] = el.value.trim() === '' ? null : d.f === 'extra' ? el.value.trim() : Number(el.value); save(); }
+  } else if (d.mnote) {
+    const it = findMobItem(d.mnote).item;
+    if (it) { it.note = el.value.trim(); save(); }
   } else if (d.bind !== undefined) {
     setPath(state, d.bind, readValue(el));
     save();
@@ -2118,6 +2490,8 @@ document.addEventListener('input', e => {
     ui.libQuery = e.target.value;
     ui.focus = '#libq';
     render();
+  } else if (e.target.hasAttribute('data-mrname')) {
+    ui.mobRoutine.name = e.target.value;
   } else if (e.target.dataset.pbind === 'name') {
     ui.plan.name = e.target.value;
   }

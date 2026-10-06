@@ -1,5 +1,7 @@
 // Seed data: real lifts from the PRD plus placeholder T3 work. Everything is editable in-app.
 
+import { mobilitySeed } from './mobility.js';
+
 export const EQUIPMENT = [
   'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell',
   'dip-belt', 'pullup-bar', 'rings', 'dip-station', 'bands', 'ab-wheel', 'box',
@@ -165,7 +167,7 @@ export function seed() {
   ];
 
   return {
-    version: 8,
+    version: 9,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
@@ -190,6 +192,7 @@ export function seed() {
     },
     equipment: [...EQUIPMENT], // grows as you add gear in the app
     families, exercises, schemes, slots,
+    mobility: mobilitySeed(), // separate from strength: { exercises, routines, sessions }
     plans: [],
     sessions: [],
     sets: [],

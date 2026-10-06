@@ -125,6 +125,68 @@ step('video links must be web links', () => {
   click('[data-act=recheck]');
 });
 
+step('mobility: routine session, body-part picks, mobility in a workout, library and routines', () => {
+  click('[data-act=nav][data-tab=today]');
+  check('check-in lists your mobility routines', /Day 1: Long & Strong/.test(text()) && qa('[data-act=mobStart]').length === 4);
+  click('[data-act=mobStart][data-id=mobr-day1]');
+  check('routine session opens with its 4 moves', /Mobility/.test(q('#app h1').innerText) && qa('section.block.mob').length === 4 && /Jefferson curl/.test(text()));
+  check('history notes and video link shown', /Week 1: 70 lb/.test(q('#app').textContent) && qa('section.block.mob a').some(a => a.href.startsWith('https://www.youtube.com/results')));
+  const jc = qa('section.block.mob').find(b => /Jefferson curl/.test(b.innerText));
+  const load = jc.querySelector('[data-f=load]');
+  setVal(load, '90');
+  setVal(jc.querySelector('[data-f=extra]'), '35+25+25');
+  setVal(jc.querySelector('[data-mnote]'), 'left side tight');
+  click(qa('section.block.mob').find(b => /Jefferson curl/.test(b.innerText)).querySelector('[data-act=mcheck]'));
+  check('logging a set starts its rest', !!state.timer && state.timer.total === 60 && /Jefferson curl · set 2/.test(state.timer.next), JSON.stringify(state.timer));
+  click('[data-act=mobPick][data-mode=session]');
+  click('[data-act=mobPart][data-v="Lats"]');
+  check('picking a body part ticks a suggestion', /☑/.test(sheet()));
+  click('[data-act=mobAddPicked]');
+  check('added to the session', qa('section.block.mob').length === 5);
+  click('[data-act=mobFinish]');
+  check('finish saves only what was logged', state.mobility.sessions.at(-1).status === 'done' && state.mobility.sessions.at(-1).items.length === 1
+    && state.mobility.sessions.at(-1).items[0].note === 'left side tight');
+  check('routine shows when it was last done', /Day 1: Long & Strong\s*4 exercises · last today/.test(text()), text().slice(0, 600));
+
+  click('[data-k=locationId][data-v=loc-basement]');
+  click('[data-act=suggest]');
+  click('[data-act=mobPick][data-mode=workout]');
+  click('[data-act=mobPart][data-v="Hip flexors"]');
+  click('[data-act=mobPart][data-v="Adductors"]');
+  const picked = (sheet().match(/☑/g) || []).length;
+  check('two body parts, two suggestions', picked === 2, String(picked));
+  click('[data-act=mobAddPicked]');
+  check('mobility shows in the workout', qa('section.block.mob').length === 2 && /Mobility/.test(text()));
+  click(qa('section.block.mob')[0].querySelector('[data-act=mcheck]'));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  const w = state.sessions.filter(x => x.mobility?.length).at(-1);
+  check('workout with only mobility logged is kept', !!w && w.status === 'done' && w.mobility.length === 1);
+
+  click('[data-act=nav][data-tab=library]');
+  click('[data-act=libMode][data-v=mobility]');
+  check('library mobility tab lists all 16', qa('[data-act=mobExEdit]').length === 16);
+  click('[data-act=mobExNew]');
+  q('#me-name').value = '90/90 hip switch';
+  click('[data-act=mobExPart][data-v="Glutes"]');
+  check('typed name survives picking a body part', q('#me-name').value === '90/90 hip switch');
+  click('[data-act=mobExSave]');
+  check('new mobility exercise saved', qa('[data-act=mobExEdit]').length === 17 && /90\/90 hip switch/.test(text()));
+  click('[data-act=libMode][data-v=strength]');
+
+  click('[data-act=nav][data-tab=plans]');
+  check('plans tab lists the mobility routines', /Mobility routines/.test(text()) && /Day 4: Primal Roots/.test(text()));
+  click('[data-act=mobRoutineNew]');
+  setVal(q('#mr-name'), 'Hips before volleyball', 'input');
+  click('[data-act=mobPick][data-mode=routine]');
+  click('[data-act=mobPart][data-v="Glutes"]');
+  click('[data-act=mobAddPicked]');
+  click('[data-act=mobRoutineSave]');
+  check('new routine saved', state.mobility.routines.some(r => r.name === 'Hips before volleyball' && r.items.length >= 1));
+  click('[data-act=nav][data-tab=week]');
+  check('week tab shows mobility and body parts covered', /Mobility this week/.test(text()) && /2 sessions/.test(text()), text().slice(-400));
+});
+
 step('library shows region + explosive, edit sheet has the controls', () => {
   click('[data-act=nav][data-tab=library]');
   check('library lists explosive tag', /explosive/.test(text()));

@@ -4,6 +4,7 @@ import * as L from './logic.js';
 import { migrate } from './store.js';
 import * as FN from './fitnotes.js';
 import * as G from './goals.js';
+import * as M from './mobility.js';
 
 const results = [];
 const test = (name, fn) => {
@@ -209,7 +210,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 8);
+  eq(m.version, 9);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -228,7 +229,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 8);
+  eq(m.version, 9);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -500,7 +501,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 8);
+  eq(m.version, 9);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -601,6 +602,72 @@ test('T3s superset with each other; main lifts stay free; an odd T3 makes a gian
   const r = L.buildSuggestion(s, ci({ minutes: 90 }));
   ok(r.blocks.filter(b => b.tier === 'T3').every(b => b.pairOf || r.blocks.some(x => x.pairOf === b.id)), 'every suggested T3 is grouped');
   ok(L.restCompatible(s, ex('ex-power-clean'), ex('ex-ring-facepull')) && !L.restCompatible(s, ex('ex-power-clean'), ex('ex-air-squat')));
+});
+
+// ---------- mobility ----------
+test('mobility starter library: your 4 routines and 16 exercises, outside the strength library', () => {
+  const s = seed();
+  eq([s.mobility.routines.length, s.mobility.exercises.length], [4, 16]);
+  ok(s.mobility.routines.every(r => r.items.length === 4 && r.items.every(id => s.mobility.exercises.some(e => e.id === id))), 'routines resolve');
+  ok(s.mobility.exercises.every(e => e.parts.length && e.parts.every(p => M.BODY_PARTS.includes(p))), 'body parts');
+  ok(!s.exercises.some(e => e.id.startsWith('mob-')), 'not in the strength library');
+  const ex = id => s.mobility.exercises.find(e => e.id === id);
+  eq(M.doseText(ex('mob-elephant-walk')), '3 × 10/side');
+  eq(M.doseText(ex('mob-couch-stretch')), '3 × 45s/side');
+  eq(M.doseText(ex('mob-horse-stance')), '4 × 30–45s');
+  eq(M.doseText(ex('mob-jefferson-curl')), '3 × 6 · 4s down / 2s hold');
+  eq(M.doseText(ex('mob-psoas-lift')), '3 × 10–12/side · 1s pause at top');
+  ok(M.videoSearch('kneesovertoesguy elephant walk').startsWith('https://www.youtube.com/results?search_query=kneesovertoesguy%20elephant%20walk'));
+});
+test('mobility by body part: least recently done first, one per part, no repeats', () => {
+  const s = seed();
+  const parts = ['Adductors', 'Hamstrings'];
+  const first = M.suggestForParts(s, parts);
+  eq(first.length, 2);
+  const ex = id => s.mobility.exercises.find(e => e.id === id);
+  ok(ex(first[0]).parts.includes('Adductors') && first.some(id => ex(id).parts.includes('Hamstrings')), first.join());
+  // Log the first pick: next time something else comes first for adductors.
+  const item = M.newItem(s, ex(first[0]));
+  item.sets[0].done = true; item.sets[0].at = Date.now();
+  s.mobility.sessions.push({ id: 'm1', day: L.dayKey(), startedAt: Date.now(), status: 'done', items: [item] });
+  ok(M.suggestForParts(s, ['Adductors'])[0] !== first[0], 'rotates to a move not done lately');
+  ok(!M.suggestForParts(s, ['Adductors'], [first[0]]).includes(first[0]), 'excluded stays out');
+  const ranked = M.rankForParts(s, ['Adductors', 'Hamstrings']);
+  ok(ranked[0].hits === 2, 'a move covering both parts ranks first');
+});
+test('mobility logs: last time, prefilled loads, week summary, workouts count too', () => {
+  const s = seed();
+  const jc = s.mobility.exercises.find(e => e.id === 'mob-jefferson-curl');
+  const a = M.newItem(s, jc);
+  eq(a.sets.map(x => x.reps), [6, 6, 6]);
+  a.sets[0] = { ...a.sets[0], done: true, at: Date.now() - DAY, load: 88, extra: '35+25+25' };
+  a.note = 'tight hamstrings';
+  s.mobility.sessions.push({ id: 'm1', day: L.dayKey(Date.now() - DAY), startedAt: Date.now() - DAY, status: 'done', items: [a] });
+  const b = M.newItem(s, jc);
+  eq([b.sets[0].load, b.sets[0].extra], [88, '35+25+25'], 'prefilled from last time');
+  const last = M.lastFor(s, jc.id, b.id);
+  eq(M.itemText(jc, last.item, 'lb'), '88 lb × 6 · Deficit (cm) 35+25+25');
+  eq(last.item.note, 'tight hamstrings');
+  const hang = s.mobility.exercises.find(e => e.id === 'mob-bar-hang');
+  const c = M.newItem(s, hang);
+  c.sets[0] = { ...c.sets[0], done: true, at: Date.now() };
+  s.sessions.push({ id: 'w1', day: L.dayKey(), status: 'done', blocks: [], mobility: [c] });
+  const wk = L.weekBounds(s);
+  const sum = M.weekSummary(s, wk.start, wk.end);
+  ok(sum.parts.includes('Shoulders') && sum.parts.includes('Lats'), 'workout mobility counts');
+  ok(L.creditWeek(s).slots.size === s.slots.length && !L.creditWeek(s).assign.size, 'mobility never touches strength goals');
+});
+test('v8 data gets the mobility suite and keeps everything else', () => {
+  const s = seed();
+  s.version = 8;
+  delete s.mobility;
+  s.plans.push({ id: 'p', name: 'mine', items: [] });
+  const m = migrate(s);
+  eq(m.version, 9);
+  eq(m.mobility.routines.length, 4);
+  ok(m.plans.some(p => p.id === 'p'));
+  const again = migrate(structuredClone(m));
+  eq(again.mobility.exercises.length, 16, 'idempotent');
 });
 
 // ---------- render ----------
