@@ -387,7 +387,9 @@ label.btn.fnpick { width: 100%; min-height: 56px; font-size: 18px; margin-top: 1
 .tier.MOB { background: #7fd1c2; color: #111; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 700; }
 .block.mob .bhead { align-items: center; }
 .mobname { font-weight: 600; }
-input.num.wide { width: 8em; }
+.block.mob input.num { width: 56px; flex: none; }
+.block.mob input.num.wide { width: auto; flex: 1 1 0; min-width: 0; }
+.block.mob .set .check { flex: none; margin-left: auto; }
 .mobnote { width: 100%; margin: 8px 0 4px; font-size: 14px; }
 .addrow { display: flex; gap: 8px; }
 .addrow .addblock { flex: 1; }
