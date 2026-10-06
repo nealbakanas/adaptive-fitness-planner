@@ -116,6 +116,15 @@ check('a T3-led group exists', !!lead);
   check('done today shows real rest', /Done today: .*real rest/.test(text()), text().slice(0, 300));
 });
 
+step('video links must be web links', () => {
+  for (const e of state.exercises) e.youtube = 'javascript:alert(1)';
+  click('[data-act=nav][data-tab=today]');
+  click('[data-act=suggest]');
+  check('no javascript: link rendered', qa('section.block').length > 0 && !qa('a').some(a => /^javascript:/i.test(a.getAttribute('href') || '')));
+  for (const e of state.exercises) e.youtube = '';
+  click('[data-act=recheck]');
+});
+
 step('library shows region + explosive, edit sheet has the controls', () => {
   click('[data-act=nav][data-tab=library]');
   check('library lists explosive tag', /explosive/.test(text()));

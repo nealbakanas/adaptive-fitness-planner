@@ -3,7 +3,8 @@
 import * as L from './logic.js';
 import { defaultAnytime } from './seed.js';
 
-const SQLJS = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.14.2/';
+// sql.js 1.14.2, kept in the repo so no outside server can ever run code inside the app.
+const SQLJS = 'vendor/sql.js/';
 const KG_TO_LB = 2.20462262;
 const DAY = 864e5;
 const REF_DAYS = 84; // tier guesses compare a set with that lift's best from the 12 weeks before it
@@ -27,7 +28,7 @@ function loadSql() {
     const s = document.createElement('script');
     s.src = `${SQLJS}sql-wasm.js`;
     s.onload = () => resolve(globalThis.initSqlJs);
-    s.onerror = () => reject(new Error('Couldn’t download the SQLite reader. Check your internet connection and try again.'));
+    s.onerror = () => reject(new Error('Couldn’t load the SQLite reader. Check your connection and try again.'));
     document.head.appendChild(s);
   }).then(init => init({ locateFile: f => SQLJS + f }));
   sqlReady.catch(() => { sqlReady = null; }); // a later attempt retries the download

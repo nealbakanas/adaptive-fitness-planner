@@ -73,7 +73,7 @@ Week → **Suggest from history** (also offered after a FitNotes import). It loo
 
 ## FitNotes import
 
-Settings → Backup and data → **Import from FitNotes**. Pick the `.fitnotes` backup; it's read on the phone with sql.js (loaded from cdnjs the first time, about 0.7 MB) and never uploaded.
+Settings → Backup and data → **Import from FitNotes**. Pick the `.fitnotes` backup; it's read on the phone with sql.js (kept in `vendor/sql.js`, version 1.14.2, about 0.7 MB, loaded the first time you import) and never uploaded.
 
 - **Window**: the last 1, 2 (default) or 4 years. Two years of your history is about 5,700 sets and 1.3 MB of saved data.
 - **Review**: exercises with 3+ workouts in the last year are listed with best guesses (existing exercise or new; family; how it was logged; body region; explosive; equipment) and can be changed. Older ones come in archived.

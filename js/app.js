@@ -203,8 +203,9 @@ function sessionBudget(s, exceptBlock) {
     .reduce((m, b) => m + ((schOf(b.schemeId)?.minutes || 0) + L.WARMUP[b.tier]) * (b.pairOf ? 0.5 : 1), 0));
 }
 
+// Only real web links: a javascript: link in an imported or restored library would run code when tapped.
 function videoUrl(ex) {
-  if (!ex.youtube) return null;
+  if (!/^https?:\/\//i.test(ex.youtube || '')) return null;
   if (!ex.start) return ex.youtube;
   return ex.youtube + (ex.youtube.includes('?') ? '&' : '?') + 't=' + ex.start;
 }
