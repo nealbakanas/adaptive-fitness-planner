@@ -15,7 +15,7 @@ const REASONS = ['Equipment busy', 'Pain / niggle', 'Preference', 'Variety', 'Ti
 const METRICS = [['load_reps', 'Load × reps'], ['reps', 'Reps only'], ['time', 'Time'], ['distance', 'Distance'], ['none', 'None']];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const ui = { tab: 'today', ci: defaultCheckin(), sheet: null, plan: null, whyOpen: false, libQuery: '', focus: null, setPage: null };
+const ui = { tab: 'today', ci: defaultCheckin(), sheet: null, plan: null, whyOpen: false, libQuery: '', focus: null, setPage: null, history: null };
 
 // ---------- helpers ----------
 
@@ -77,6 +77,17 @@ function endSession(s) {
 }
 
 const blockSets = b => state.sets.filter(s => s.blockId === b.id);
+
+// One logged set as text: "185×5", "BW+45×3", "40s", "100m", "12 reps".
+const setAmount = (ex, s) => ex?.metric === 'load_reps' ? `${ex.bodyweight ? 'BW+' : ''}${s.load ?? 0}×${s.reps}`
+  : ex?.metric === 'time' ? `${s.time ?? '?'}s` : ex?.metric === 'distance' ? `${s.distance ?? '?'}m` : `${s.reps ?? ''} reps`;
+
+// Most recent time logged for a timed exercise, so the next hold starts from it.
+function lastTime(exerciseId) {
+  let best = null;
+  for (const s of state.sets) if (s.done && s.exerciseId === exerciseId && s.time > 0 && (!best || s.loggedAt > best.loggedAt)) best = s;
+  return best ? Number(best.time) : null;
+}
 
 // ---------- mobility (its own exercises and sessions; no tiers, goals or maxes) ----------
 
@@ -149,7 +160,7 @@ function newSet(session, block, ex, sc, load) {
     id: L.uid(), sessionId: session.id, blockId: block.id, exerciseId: ex.id, tier: block.tier, schemeId: sc.id,
     load: ex.metric === 'load_reps' ? load : null,
     reps: ['load_reps', 'reps'].includes(ex.metric) ? sc.reps : null,
-    time: null, distance: null, done: false,
+    time: ex.metric === 'time' ? lastTime(ex.id) : null, distance: null, done: false,
   };
 }
 
@@ -362,6 +373,77 @@ function stopTimer() {
   renderTimer();
 }
 
+// ---------- hold timer ----------
+// For timed sets (holds, planks) and mobility holds: a get-ready countdown, then the hold, each side in turn
+// for per-side moves. When it runs out the set is logged with that time, which starts the rest as usual.
+// Shares the timer bar with rest, so starting one replaces the other.
+
+const goBtn = (attrs, on) => on
+  ? '<button class="go on" data-act="workCancel" aria-label="Stop the timer">■</button>'
+  : `<button class="go" ${attrs} aria-label="Start a timer for this set">▶</button>`;
+
+function startWork(target, name, secs, perSide = false) {
+  secs = Math.max(1, Math.round(secs));
+  const prep = Math.max(0, timerCfg().prep ?? 5);
+  const phases = [
+    ...(prep ? [{ label: 'Get ready', secs: prep }] : []),
+    ...(perSide ? [{ label: 'Left side', secs, hold: true }, { label: 'Switch sides', secs: Math.max(prep, 3) }, { label: 'Right side', secs, hold: true }]
+      : [{ label: 'Go', secs, hold: true }]),
+  ];
+  const now = Date.now();
+  state.timer = { kind: 'work', target, name, phases, startedAt: now, endsAt: now + phases.reduce((t, p) => t + p.secs, 0) * 1000 };
+  unlockAudio();
+  setWakeLock(true);
+}
+
+// Where a hold timer is: the phase, seconds left in it and seconds into it. Null once it has run out.
+function workPhase(t, now = Date.now()) {
+  let at = t.startedAt;
+  for (let i = 0; i < t.phases.length; i++) {
+    const p = t.phases[i], end = at + p.secs * 1000;
+    if (now < end) return { i, p, rem: Math.ceil((end - now) / 1000), into: Math.floor((now - at) / 1000), frac: (now - at) / (p.secs * 1000) };
+    at = end;
+  }
+  return null;
+}
+
+// Seconds held so far: into the current hold, else the last finished one (a per-side hold logs one side's time).
+function workHeld(t) {
+  const ph = workPhase(t);
+  if (!ph) return t.phases.filter(p => p.hold).at(-1).secs;
+  if (ph.p.hold) return ph.into;
+  return t.phases.slice(0, ph.i).filter(p => p.hold).at(-1)?.secs ?? 0;
+}
+
+// Puts the held time on the set and logs it, unless it was logged by hand in the meantime.
+function finishWork(t, held) {
+  state.timer = null;
+  if (t.target.set) {
+    const st = L.byId(state.sets, t.target.set);
+    if (st && !st.done && held > 0) { st.time = held; return actions.check({ id: st.id }); }
+  } else {
+    const st = findMobItem(t.target.item).item?.sets.find(x => x.id === t.target.mset);
+    if (st && !st.done && held > 0) { st.hold = held; return actions.mcheck({ i: t.target.item, s: st.id }); }
+  }
+  save(); render();
+}
+
+function tickWork(t) {
+  const ph = workPhase(t);
+  if (!ph) {
+    beep(3, 880);
+    if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
+    return finishWork(t, workHeld(t));
+  }
+  // A high beep as each hold starts, and 3-2-1 before every change.
+  if (t.phase !== ph.i) {
+    t.phase = ph.i;
+    if (ph.p.hold) { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(200); }
+  }
+  if (ph.rem <= 3 && t.beeped !== `${ph.i}:${ph.rem}`) { t.beeped = `${ph.i}:${ph.rem}`; beep(1, 660); }
+  renderTimer();
+}
+
 // Hand the timer to the service worker so it can notify while the page is hidden.
 let syncedEndsAt;
 function syncTimerToWorker(force = false) {
@@ -369,7 +451,8 @@ function syncTimerToWorker(force = false) {
   if (!force && endsAt === syncedEndsAt) return;
   syncedEndsAt = endsAt;
   if (!navigator.serviceWorker) return;
-  const wanted = timerCfg().notify && window.Notification?.permission === 'granted';
+  // Background notifications are for rest only: a hold is done with the app open.
+  const wanted = timerCfg().notify && window.Notification?.permission === 'granted' && state.timer?.kind !== 'work';
   navigator.serviceWorker.ready.then(reg => reg.active?.postMessage({
     type: 'rest', id: String(endsAt), endsAt: wanted ? endsAt : null, next: state.timer?.next ?? null,
   }));
@@ -394,6 +477,7 @@ function tickTimer() {
   syncTimerToWorker();
   const t = state.timer;
   if (!t) return;
+  if (t.kind === 'work') return tickWork(t);
   const rem = t.endsAt - Date.now();
   if (!t.warned && timerCfg().warn10 && rem <= 10000 && rem > 0 && t.total > 20) {
     t.warned = true;
@@ -413,6 +497,7 @@ function renderTimer() {
   const t = state.timer;
   document.body.classList.toggle('has-timer', !!t);
   if (!t) { timerEl.hidden = true; timerEl.innerHTML = ''; return; }
+  if (t.kind === 'work') return renderWork(t);
   const rem = Math.round((t.endsAt - Date.now()) / 1000);
   const over = rem <= 0;
   const pct = over ? 100 : Math.min(100, 100 * (1 - rem / t.total));
@@ -423,6 +508,20 @@ function renderTimer() {
       <span class="tlabel">${over ? 'Go' : 'Rest'}${t.next ? ` · next: ${esc(t.next)}` : ''}</span></div>
       <div class="tbtns">${over ? '' : `<button data-act="timerAdj" data-d="-15">−15</button><button data-act="timerAdj" data-d="15">+15</button>`}
       <button data-act="timerStop">${over ? 'Done' : 'Skip'}</button></div></div>`;
+}
+
+function renderWork(t) {
+  const ph = workPhase(t);
+  if (!ph) return;
+  timerEl.hidden = false;
+  timerEl.className = ph.p.hold ? 'work' : 'prep';
+  const held = workHeld(t);
+  timerEl.innerHTML = `<div class="fill" style="width:${Math.min(100, ph.frac * 100)}%"></div>
+    <div class="tbody"><div class="tmain"><span class="tclock">${clock(ph.rem)}</span>
+      <span class="tlabel">${esc(ph.p.label)} · ${esc(t.name)}</span></div>
+      <div class="tbtns"><button data-act="workAdd">+15</button>
+      ${held ? `<button data-act="workLog">Log ${clock(held)}</button>` : ''}
+      <button data-act="workCancel" aria-label="Cancel the timer">✕</button></div></div>`;
 }
 
 setInterval(tickTimer, 250);
@@ -618,7 +717,7 @@ function viewBlock(s, b, credit, idea = null) {
     } else if (sx.metric === 'reps') {
       inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">reps</span>`;
     } else if (sx.metric === 'time') {
-      inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>`;
+      inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>${st.done ? '' : goBtn(`data-act="workStart" data-id="${st.id}"`, state.timer?.target?.set === st.id)}`;
     } else if (sx.metric === 'distance') {
       inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
     }
@@ -668,7 +767,8 @@ function viewMobItem(item) {
     let h = '';
     if (t.load) h += `${input(st, 'load', 'decimal')}<span class="u">${unit()}</span>`;
     if (t.reps) h += `${input(st, 'reps', 'numeric')}<span class="u">reps</span>`;
-    if (t.hold) h += `${input(st, 'hold', 'numeric')}<span class="u">s</span>`;
+    // A timer only for moves dosed as a hold (couch stretch), not reps with a pause at the top (cobra).
+    if (t.hold) h += `${input(st, 'hold', 'numeric')}<span class="u">s</span>${st.done || !ex.hold ? '' : goBtn(`data-act="mworkStart" data-i="${item.id}" data-s="${st.id}"`, state.timer?.target?.mset === st.id)}`;
     if (t.extra) h += input(st, 'extra', 'text', t.extra);
     return `<div class="set ${st.done ? 'done' : ''}"><span class="n">${i + 1}</span>${h}
       <button class="check" data-act="mcheck" data-i="${item.id}" data-s="${st.id}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
@@ -733,11 +833,13 @@ function viewMobRoutine(r) {
 }
 
 function viewWeek() {
+  if (ui.history) return viewHistory(ui.history);
   if (ui.goalSuggest) return viewGoalSuggest(ui.goalSuggest);
   const c = L.creditWeek(state);
   const fmt = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const dayName = k => new Date(k + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' });
-  let h = `<header class="top"><div><h1>This week</h1><div class="sub">${fmt(c.start)} – ${fmt(c.end - 864e5)} · ${L.daysLeftInWeek(state)} day(s) left</div></div></header>`;
+  let h = `<header class="top"><div><h1>This week</h1><div class="sub">${fmt(c.start)} – ${fmt(c.end - 864e5)} · ${L.daysLeftInWeek(state)} day(s) left</div></div>
+    <button class="small" data-act="histOpen">History</button></header>`;
   if (ui.goalsUndo) h += `<div class="banner">Goals updated. <button class="link" data-act="gsUndo">Undo</button></div>`;
 
   const slots = [...c.slots.values()].sort((a, b) => a.slot.tier.localeCompare(b.slot.tier) || (b.slot.priority - a.slot.priority));
@@ -772,7 +874,7 @@ function viewWeek() {
         const auto = L.autoSlotFor(state, s);
         const autoLbl = auto ? slotLabel(L.byId(state.slots, auto)) : 'none';
         const val = s.countsManual ? (s.countsToward ?? 'none') : 'auto';
-        const amount = ex?.metric === 'load_reps' ? `${ex.bodyweight ? 'BW+' : ''}${s.load ?? 0}×${s.reps}` : ex?.metric === 'time' ? `${s.time ?? '?'}s` : ex?.metric === 'distance' ? `${s.distance ?? '?'}m` : `${s.reps ?? ''} reps`;
+        const amount = setAmount(ex, s);
         return `<div class="setlog"><div class="grow"><span class="tier ${s.tier}">${s.tier}</span> ${esc(ex?.name ?? '?')} <span class="meta">${esc(amount)}</span></div>
           <select data-counts="${s.id}">${opts([['auto', `Auto: ${autoLbl}`], ...state.slots.map(sl => [sl.id, slotLabel(sl)]), ['none', 'Counts toward nothing']], val)}</select></div>`;
       }).join('')}</div>`;
@@ -786,6 +888,95 @@ function viewWeek() {
       <div class="chips">${M.BODY_PARTS.map(p => `<span class="chip ${mw.parts.includes(p) ? 'on' : ''}">${esc(p)}</span>`).join('')}</div>`
     : '<p class="muted">None yet. Start one from Today, or add mobility to a workout.</p>'}</div>`;
   return h;
+}
+
+// ---------- history ----------
+
+const HISTORY_PAGE = 20;
+
+// Every workout and mobility session with something logged, newest first. Each lists its exercises in the
+// order they were first logged; a search keeps only sessions (and exercises) whose name matches.
+function historyEntries(q) {
+  const match = name => !q || (name || '').toLowerCase().includes(q);
+  const bySession = new Map();
+  for (const st of state.sets) {
+    if (!st.done) continue;
+    if (!bySession.has(st.sessionId)) bySession.set(st.sessionId, []);
+    bySession.get(st.sessionId).push(st);
+  }
+  const mobLines = items => (items || []).filter(it => it.sets.some(x => x.done) && match(mobEx(it.exerciseId)?.name));
+  const out = [];
+  for (const s of state.sessions) {
+    const sets = (bySession.get(s.id) || []).sort((a, b) => a.loggedAt - b.loggedAt);
+    const groups = new Map();
+    for (const st of sets) {
+      const ex = exOf(st.exerciseId);
+      if (!match(ex?.name)) continue;
+      const k = `${st.exerciseId}|${st.tier}`;
+      if (!groups.has(k)) groups.set(k, { ex, tier: st.tier, sets: [] });
+      groups.get(k).sets.push(st);
+    }
+    const mob = mobLines(s.mobility);
+    if (!groups.size && !mob.length) continue;
+    const times = [...sets.map(x => x.loggedAt), ...(s.mobility || []).flatMap(it => it.sets.filter(x => x.done).map(x => x.at))].filter(Boolean);
+    out.push({ s, at: times.length ? Math.min(...times) : s.checkinAt, end: times.length ? Math.max(...times) : s.checkinAt, sets: sets.length, groups: [...groups.values()], mob });
+  }
+  for (const m of state.mobility.sessions) {
+    const mob = mobLines(m.items);
+    if (!mob.length) continue;
+    const times = m.items.flatMap(it => it.sets.filter(x => x.done).map(x => x.at)).filter(Boolean);
+    out.push({ m, at: times.length ? Math.min(...times) : m.startedAt, end: times.length ? Math.max(...times) : m.startedAt, groups: [], mob });
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
+// "185×5 (×3), 190×3": repeats of the same set are counted, not listed.
+function setsText(ex, sets) {
+  const runs = [];
+  for (const st of sets) {
+    const a = setAmount(ex, st);
+    if (runs.at(-1)?.a === a) runs.at(-1).n++;
+    else runs.push({ a, n: 1 });
+  }
+  return runs.map(r => r.n > 1 ? `${r.a} (×${r.n})` : r.a).join(', ');
+}
+
+function viewHistory(hs) {
+  const q = hs.q.trim().toLowerCase();
+  const all = historyEntries(q);
+  const shown = all.slice(0, hs.limit);
+  const thisYear = new Date().getFullYear();
+  const dateText = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...(new Date(t).getFullYear() !== thisYear ? { year: 'numeric' } : {}) });
+  const card = e => {
+    const { s, m } = e;
+    const bits = [];
+    if (s) {
+      if (s.source === 'imported') bits.push('from FitNotes');
+      else {
+        bits.push(L.byId(state.locations, s.locationId)?.name);
+        const mins = Math.round((e.end - e.at) / 60e3);
+        if (mins > 0) bits.push(`${mins} min`);
+      }
+      if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
+      if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
+    } else {
+      bits.push(L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
+      if (m.status === 'open') bits.push('in progress');
+    }
+    const lines = e.groups.map(g => `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(g.ex?.name ?? '?')}</span>
+      <span class="meta">${esc(setsText(g.ex, g.sets))}</span></span></div>`).join('')
+      + e.mob.map(it => {
+        const ex = mobEx(it.exerciseId);
+        return `<div class="histex"><span class="tier MOB">MOB</span><span class="grow"><span class="name">${esc(ex?.name ?? '?')}</span>
+          <span class="meta">${esc(ex ? M.itemText(ex, it, unit()) : '')}${it.note ? ` · “${esc(it.note)}”` : ''}</span></span></div>`;
+      }).join('');
+    return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span></div>${lines}</div>`;
+  };
+  return `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
+    <input class="search" id="histq" placeholder="Search an exercise" value="${esc(hs.q)}" data-histq>
+    ${q ? `<p class="meta pad">${all.length} session${all.length === 1 ? '' : 's'} with “${esc(hs.q.trim())}”.</p>` : ''}
+    ${shown.map(card).join('') || `<p class="muted">${q ? 'No sessions match.' : 'Nothing logged yet. Finished workouts and mobility sessions show up here.'}</p>`}
+    ${all.length > shown.length ? `<button class="addblock" data-act="histMore">Show ${Math.min(HISTORY_PAGE, all.length - shown.length)} more (${all.length - shown.length} older)</button>` : ''}`;
 }
 
 function viewLibrary() {
@@ -911,7 +1102,8 @@ function settingsYou() {
 function settingsTimer() {
   const tc = state.settings.timer;
   const sw = (key, label, hint) => frow(label, switchIn(`settings.timer.${key}`, tc[key]), hint);
-  return `<p class="meta pad">Each scheme sets the rest. An exercise can override it, and you can change it for today by tapping ⏱ on a block.</p>
+  return `<p class="meta pad">Each scheme sets the rest. An exercise can override it, and you can change it for today by tapping ⏱ on a block.
+      Timed sets and mobility holds have ▶ to run a hold timer: it counts you in, times the hold (each side in turn when it's per side) and logs the set.</p>
     <div class="menu">
       ${sw('autoStart', 'Start when I log a set')}
       ${sw('sound', 'Beep when rest is over')}
@@ -919,6 +1111,7 @@ function settingsTimer() {
       ${sw('vibrate', 'Vibrate when rest is over', 'Android only')}
       ${sw('keepAwake', 'Keep the screen on', 'During a session')}
       ${sw('notify', 'Notify in the background', 'Works best on Android with the app installed')}
+      ${frow('Get-ready countdown (s)', numIn('settings.timer.prep', tc.prep ?? 5), 'Before a hold timer starts, and between sides')}
     </div>
     <div class="actions"><button data-act="timerTest">Test sound</button>
       ${tc.notify ? '<button data-act="notifyTest">Test notification</button>' : ''}</div>`;
@@ -1368,7 +1561,7 @@ function sheetMobEx(sh) {
     <div class="field"><label>Video search <span class="hint">opens YouTube results</span></label><input id="me-video" value="${esc(d.video)}" placeholder="e.g. kneesovertoesguy elephant walk"></div>
     <div class="field"><label>History notes</label><textarea id="me-notes" rows="2">${esc(d.notes)}</textarea></div>
     ${sh.isNew ? '' : box('me-arch', d.archived, 'Archived <span class="hint">kept for history, left out of pickers</span>')}
-    <div class="actions">${!sh.isNew && !used ? '<button class="danger" data-act="mobExDelete">Delete</button>' : ''}<button class="primary" data-act="mobExSave">Save</button></div>`;
+    <div class="actions">${!sh.isNew && !used ? '<button class="danger" data-act="mobExDelete">Delete</button>' : ''}${used ? `<button data-act="histOpen" data-q="${esc(d.name)}">History</button>` : ''}<button class="primary" data-act="mobExSave">Save</button></div>`;
 }
 
 function readMobDraft() {
@@ -1541,6 +1734,7 @@ function sheetEditEx(sh) {
     <div class="field"><label>Start time (m:ss)</label><input id="ee-start" value="${esc(fmtMSS(e.start))}" placeholder="0:42"></div>
     <div class="field"><label>Cues</label><textarea id="ee-cues" rows="3">${esc(e.cues)}</textarea></div>
     <div class="actions">${hasHistory ? '' : `<button class="danger" data-act="exDelete" data-id="${e.id}">Delete</button>`}
+      ${hasHistory ? `<button data-act="histOpen" data-q="${esc(e.name)}">History</button>` : ''}
       <button data-act="qaVariation" data-id="${e.id}">Make a variation</button>
       <button class="primary" data-act="exSave" data-id="${e.id}">Save</button></div>`;
 }
@@ -1567,8 +1761,19 @@ const actions = {
     ui.plan = ui.tab === 'plans' ? ui.plan : null;
     ui.setPage = null;
     if (d.tab !== 'week') ui.goalsUndo = null;
+    ui.history = null;
     render(); window.scrollTo(0, 0);
   },
+
+  histOpen: d => {
+    ui.history = { q: d.q ?? '', limit: HISTORY_PAGE };
+    ui.goalSuggest = null;
+    ui.sheet = null; renderSheet();
+    ui.tab = 'week';
+    render(); window.scrollTo(0, 0);
+  },
+  histClose: () => { ui.history = null; render(); window.scrollTo(0, 0); },
+  histMore: () => { ui.history.limit += HISTORY_PAGE; render(); },
 
   gsOpen: () => {
     ui.goalSuggest = { ...G.suggestGoals(state), open: new Set() };
@@ -1639,9 +1844,10 @@ const actions = {
       st.bw = state.settings.bodyweight;
       st.refMax = L.estimatedMax(state, st.exerciseId, s.checkinAt);
       if (!s.firstSetAt) s.firstSetAt = st.loggedAt;
-      // Carry the load forward into empty rows so the next set is one tap.
+      // Carry the load (or a hold's time) forward into empty rows so the next set is one tap.
       for (const o of blockSets({ id: st.blockId })) {
-        if (!o.done && (o.load == null || o.load === '') && st.load != null && st.load !== '' && o.exerciseId === st.exerciseId) o.load = st.load;
+        if (o.done || o.exerciseId !== st.exerciseId) continue;
+        for (const f of ['load', 'time']) if ((o[f] == null || o[f] === '') && st[f] != null && st[f] !== '') o[f] = st[f];
       }
       unlockAudio();
       const b = s.blocks.find(x => x.id === st.blockId);
@@ -1983,6 +2189,36 @@ const actions = {
     save(); renderTimer();
   },
   timerStop: () => { stopTimer(); save(); },
+
+  workStart: d => {
+    const st = L.byId(state.sets, d.id);
+    const ex = st && exOf(st.exerciseId);
+    if (!ex) return;
+    st.time = Number(st.time) || lastTime(ex.id) || 30;
+    startWork({ set: st.id }, ex.name, st.time);
+    save(); render();
+  },
+  mworkStart: d => {
+    const { item } = findMobItem(d.i);
+    const st = item?.sets.find(x => x.id === d.s);
+    const ex = st && mobEx(item.exerciseId);
+    if (!ex) return;
+    st.hold = Number(st.hold) || ex.holdMax || ex.hold || 30;
+    startWork({ mset: st.id, item: item.id }, ex.name, st.hold, ex.perSide);
+    save(); render();
+  },
+  workAdd: () => {
+    const t = state.timer, ph = t?.kind === 'work' && workPhase(t);
+    if (!ph) return;
+    ph.p.secs += 15;
+    t.endsAt += 15000;
+    save(); renderTimer();
+  },
+  workLog: () => {
+    const t = state.timer;
+    if (t?.kind === 'work') finishWork(t, workHeld(t));
+  },
+  workCancel: () => { state.timer = null; save(); render(); },
   timerTest: () => {
     unlockAudio();
     const was = timerCfg().sound;
@@ -2486,6 +2722,11 @@ document.addEventListener('input', e => {
     renderSheet();
   } else if (e.target.hasAttribute('data-qaname')) {
     onQaName(e.target.value);
+  } else if (e.target.hasAttribute('data-histq')) {
+    ui.history.q = e.target.value;
+    ui.history.limit = HISTORY_PAGE;
+    ui.focus = '#histq';
+    render();
   } else if (e.target.hasAttribute('data-libq')) {
     ui.libQuery = e.target.value;
     ui.focus = '#libq';
@@ -2601,6 +2842,6 @@ onSaveFail(() => { toast('Couldn’t save your last change. See the message at t
 
 closeStale();
 // Drop a timer left over from an earlier visit.
-if (state.timer && (!currentSession() || Date.now() - state.timer.endsAt > 10 * 60e3)) state.timer = null;
+if (state.timer && ((!currentSession() && !currentMobility()) || Date.now() - state.timer.endsAt > 10 * 60e3)) state.timer = null;
 save();
 render();

@@ -210,7 +210,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 9);
+  eq(m.version, 10);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -229,7 +229,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 9);
+  eq(m.version, 10);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -501,7 +501,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 9);
+  eq(m.version, 10);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -663,11 +663,53 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 9);
+  eq(m.version, 10);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
   eq(again.mobility.exercises.length, 16, 'idempotent');
+});
+
+test('deficit RDL is a hamstring exercise with a weekly T2 goal', () => {
+  const s = seed();
+  const rdl = s.exercises.find(e => e.id === 'ex-deficit-rdl');
+  eq([rdl.familyId, rdl.metric, rdl.region, rdl.explosive], ['fam-hams', 'load_reps', 'lower', false]);
+  const goal = s.slots.find(x => x.exerciseId === 'ex-deficit-rdl');
+  eq([goal.familyId, goal.tier, goal.quota], ['fam-hams', 'T2', 1]);
+  eq(L.slotFor(s, rdl, 'T2')?.id, goal.id, 'its T2 sets count toward the goal');
+  eq(L.slotFor(s, s.exercises.find(e => e.id === 'ex-nordic'), 'T2'), null, 'Nordics don\'t stand in for it');
+  const loc = id => s.locations.find(l => l.id === id);
+  eq(L.pickExercise(s, 'fam-hams', loc('loc-basement'), 'T2', 'ex-deficit-rdl')?.id, 'ex-deficit-rdl');
+  eq(L.pickExercise(s, 'fam-hams', loc('loc-office'), 'T2', 'ex-deficit-rdl'), null, 'needs the barbell');
+  const res = L.buildSuggestion(s, ci({ minutes: 90 }));
+  ok(res.scored.some(c => c.slot.id === goal.id), 'scored for a basement session');
+});
+test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have', () => {
+  const s = seed();
+  s.version = 9;
+  s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
+  s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
+  const m = migrate(structuredClone(s));
+  eq(m.version, 10);
+  const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
+  ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
+  ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
+  const again = migrate(structuredClone(m));
+  eq(again.exercises.filter(e => e.id === 'ex-deficit-rdl').length, 1, 'idempotent exercise');
+  eq(again.slots.filter(x => x.exerciseId === 'ex-deficit-rdl').length, 1, 'idempotent goal');
+  // Imported from FitNotes as "Deficit RDL" in its own family: that one gets the goal, no duplicate.
+  const t = structuredClone(s);
+  t.families.push({ id: 'f-imp', name: 'Romanian deadlift', defaultExerciseId: 'x-imp' });
+  t.exercises.push({ ...rdl, id: 'x-imp', name: 'Deficit RDL', familyId: 'f-imp' });
+  const n = migrate(t);
+  ok(!n.exercises.some(e => e.id === 'ex-deficit-rdl'), 'no duplicate exercise');
+  eq(n.slots.filter(x => x.exerciseId === 'x-imp').map(x => [x.familyId, x.tier]), [['f-imp', 'T2']]);
+  // No Hamstrings family at all: it comes back with the RDL as its usual exercise.
+  const u = structuredClone(s);
+  u.families = u.families.filter(f => f.id !== 'fam-hams');
+  u.exercises = u.exercises.filter(e => e.familyId !== 'fam-hams');
+  const w = migrate(u);
+  eq(w.families.find(f => f.id === 'fam-hams')?.defaultExerciseId, 'ex-deficit-rdl');
 });
 
 // ---------- render ----------

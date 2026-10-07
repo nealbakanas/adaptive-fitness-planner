@@ -108,6 +108,7 @@ export function seed() {
     ex('ex-ghr', 'Glute-ham raise', 'fam-hams', 2, 'reps', ['hyper-pro']),
     ex('ex-seated-legcurl', 'Seated leg curl', 'fam-hams', 3, 'load_reps', ['hyper-pro', 'leg-developer']),
     ex('ex-lying-legcurl', 'Lying leg curl', 'fam-hams', 4, 'load_reps', ['hyper-pro', 'leg-developer']),
+    ex('ex-deficit-rdl', 'Deficit Romanian deadlift', 'fam-hams', 5, 'load_reps', ['barbell']),
     ex('ex-back-ext-90', '90° back extension', 'fam-hinge', 1, 'load_reps', ['hyper-pro']),
     ex('ex-back-ext', 'Back extension', 'fam-hinge', 2, 'load_reps', ['hyper-pro']),
     ex('ex-reverse-hyper', 'Reverse hyper', 'fam-hinge', 3, 'load_reps', ['hyper-pro']),
@@ -164,10 +165,12 @@ export function seed() {
     { id: 'sl-t2-jumps', familyId: 'fam-jumps', tier: 'T2', quota: 2, priority: 2, repMin: 12, repMax: 20 },
     // Technique: the same explosive lifts practiced when tired or after heavy work. Credits only this goal.
     { id: 'sl-tq-clean', familyId: 'fam-clean', tier: 'TECH', quota: 2, priority: 1 },
+    // Hamstrings: deficit RDLs as moderate (T2) loaded work. Names the exercise so Nordics don't stand in for it.
+    { id: 'sl-t2-hams', familyId: 'fam-hams', exerciseId: 'ex-deficit-rdl', tier: 'T2', quota: 1, priority: 2 },
   ];
 
   return {
-    version: 9,
+    version: 10,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
@@ -176,7 +179,7 @@ export function seed() {
       kettlebells: [30, 40, 45, 53], // loads for kettlebell exercises snap to these
       recovery: { t1AfterT1: true },
       lastExportAt: null,
-      timer: { autoStart: true, sound: true, vibrate: true, warn10: true, keepAwake: true, notify: false },
+      timer: { autoStart: true, sound: true, vibrate: true, warn10: true, keepAwake: true, notify: false, prep: 5 },
     },
     locations: [
       { id: 'loc-office', name: 'Office', equipment: ['pullup-bar', 'rings', 'dip-belt', 'kettlebell', 'ab-wheel'] },

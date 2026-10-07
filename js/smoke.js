@@ -254,6 +254,83 @@ step('archiving hides an exercise until you ask for it', () => {
   click('[data-act=libArchived]');
 });
 
+step('hold timer logs a timed set and starts the rest', () => {
+  click('[data-act=nav][data-tab=today]');
+  if (!q('[data-act=addEx]')) { click('[data-k=locationId][data-v=loc-basement]'); click('[data-act=suggest]'); }
+  click('[data-act=addEx]');
+  click('[data-act=addExPick][data-id=ex-sorensen]');
+  const block = qa('section.block').find(b => /Sorensen hold/.test(b.innerText));
+  check('timed set has a start button', !!block?.querySelector('[data-act=workStart]'));
+  const setId = block.querySelector('[data-act=workStart]').dataset.id;
+  click(block.querySelector('[data-act=workStart]'));
+  check('timer counts you in', /Get ready · Sorensen hold/.test(q('#timer').innerText), q('#timer').innerText);
+  check('set row shows it is running', !!qa('section.block').find(b => /Sorensen hold/.test(b.innerText))?.querySelector('.go.on'));
+  const st = state.sets.find(x => x.id === setId);
+  check('starts from 30s with no history', st.time === 30, String(st.time));
+  state.timer.startedAt -= 7000; // 5s get-ready + 2s into the hold
+  document.dispatchEvent(new Event('visibilitychange')); // runs a timer tick
+  check('then the hold', /Go · Sorensen hold/.test(q('#timer').innerText), q('#timer').innerText);
+  click('[data-act=workLog]');
+  check('log now records the time held', st.done && st.time === 2, `${st.done} ${st.time}`);
+  check('rest starts after the hold', state.timer && state.timer.kind !== 'work' && /Rest/.test(q('#timer').innerText));
+  const next = state.sets.find(x => x.blockId === st.blockId && !x.done);
+  check('the next set starts from that time', next?.time === 2, String(next?.time));
+  click(qa('section.block').find(b => /Sorensen hold/.test(b.innerText)).querySelector('[data-act=workStart]'));
+  state.timer.startedAt -= 60000;
+  state.timer.endsAt -= 60000;
+  document.dispatchEvent(new Event('visibilitychange'));
+  check('running out logs the full hold', next.done && next.time === 2, `${next.done} ${next.time}`);
+});
+
+step('per-side mobility hold runs each side', () => {
+  click('[data-act=mobPick][data-mode=workout]');
+  click('[data-act=mobPart][data-v="Hip flexors"]');
+  for (const b of qa('#sheet [data-act=mobTick]')) if (b.classList.contains('on')) click(b);
+  click('#sheet [data-act=mobTick][data-id=mob-couch-stretch]');
+  click('[data-act=mobAddPicked]');
+  const go = q('[data-act=mworkStart]');
+  check('mobility hold has a start button', !!go);
+  click(go);
+  check('per-side hold counts you in', /Get ready · Active couch stretch/.test(q('#timer').innerText), q('#timer').innerText);
+  state.timer.startedAt -= 5000 + 45000 + 1000;
+  document.dispatchEvent(new Event('visibilitychange'));
+  check('switches sides', /Switch sides/.test(q('#timer').innerText), q('#timer').innerText);
+  state.timer.startedAt -= 5000;
+  document.dispatchEvent(new Event('visibilitychange'));
+  check('then the right side', /Right side/.test(q('#timer').innerText), q('#timer').innerText);
+  click('[data-act=workCancel]');
+  check('cancel logs nothing', !q('#timer').innerText.trim() || !/Right side/.test(q('#timer').innerText));
+  const couch = state.sessions.find(s => s.status === 'open')?.mobility?.find(it => it.exerciseId === 'mob-couch-stretch');
+  check('mobility set not logged', couch && !couch.sets.some(x => x.done));
+  click('[data-act=finish]');
+  if (q('[data-act=finishNow]')) click('[data-act=finishNow]');
+});
+
+step('history lists logged workouts and searches by exercise', () => {
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  check('history page', /History/.test(text()) && qa('.card.hist').length > 0, text().slice(0, 300));
+  check('timed sets shown with their times', /Sorensen hold/.test(text()) && /2s \(×2\)/.test(text()), text().slice(0, 600));
+  const search = q('#histq');
+  setVal(search, 'sorensen', 'input');
+  check('search keeps matching sessions and exercises', /session with “sorensen”/.test(text()) && qa('.histex').every(r => /Sorensen/.test(r.innerText)), text().slice(0, 400));
+  check('search box keeps focus', document.activeElement?.id === 'histq');
+  setVal(q('#histq'), 'zzz', 'input');
+  check('no matches message', /No sessions match/.test(text()));
+  click('[data-act=histClose]');
+  check('back to the week', /This week/.test(text()));
+  click('[data-act=nav][data-tab=library]');
+  click('[data-act=libEdit][data-id=ex-sorensen]');
+  click('#sheet [data-act=histOpen]');
+  check('history from an exercise opens filtered', q('#histq')?.value === 'Sorensen hold' && !q('#sheet:not([hidden])'));
+  click('[data-act=nav][data-tab=week]');
+  check('leaving and coming back shows the week', /This week/.test(text()) && !q('#histq'));
+});
+
+step('deficit RDL goal on the week', () => {
+  check('T2 deficit RDL goal listed', qa('.slotrow').some(r => /T2/.test(r.innerText) && /Deficit Romanian deadlift/.test(r.innerText)));
+});
+
 step('suggested goals need history first', () => {
   click('[data-act=nav][data-tab=week]');
   click('[data-act=gsOpen]');

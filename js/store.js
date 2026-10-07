@@ -144,6 +144,25 @@ export function migrate(s) {
     s.mobility ??= base.mobility;
     s.version = 9;
   }
+  if (s.version < 10) {
+    // v10: deficit Romanian deadlifts in Hamstrings, with a weekly T2 goal for them.
+    // Reuses a Hamstrings family or deficit RDL you already have by the same name.
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const seedEx = base.exercises.find(e => e.id === 'ex-deficit-rdl');
+    let rdl = s.exercises.find(e => e.id === seedEx.id || ['deficitromaniandeadlift', 'deficitrdl'].includes(norm(e.name)));
+    if (!rdl) {
+      let fam = s.families.find(f => f.id === 'fam-hams') ?? s.families.find(f => norm(f.name) === 'hamstrings');
+      if (!fam) { fam = { ...base.families.find(f => f.id === 'fam-hams'), defaultExerciseId: seedEx.id }; s.families.push(fam); }
+      const rank = Math.max(0, ...s.exercises.filter(x => x.familyId === fam.id).map(x => x.rank || 0)) + 1;
+      rdl = { ...seedEx, familyId: fam.id, rank };
+      s.exercises.push(rdl);
+    }
+    if (!s.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2')) {
+      const id = s.slots.some(x => x.id === 'sl-t2-hams') ? `sl-t2-hams-${rdl.id}` : 'sl-t2-hams';
+      s.slots.push({ id, familyId: rdl.familyId, exerciseId: rdl.id, tier: 'T2', quota: 1, priority: 2 });
+    }
+    s.version = 10;
+  }
   return s;
 }
 
