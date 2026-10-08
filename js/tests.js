@@ -712,6 +712,18 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   eq(w.families.find(f => f.id === 'fam-hams')?.defaultExerciseId, 'ex-deficit-rdl');
 });
 
+test('warm-up sets never count: max, goals, target load, heavy work', () => {
+  const s = seed();
+  const warm = (load, reps, tier = 'T1') => s.sets.push({ id: L.uid(), sessionId: 'w', blockId: 'b', exerciseId: 'ex-back-squat', tier, load, reps, done: true, warmup: true, loggedAt: NOON(0), bw: 235 });
+  warm(135, 5); warm(225, 3); warm(275, 1);
+  eq(L.estimatedMax(s, 'ex-back-squat'), null, 'no max from warm-ups');
+  eq(L.lastLoad(s, 'ex-back-squat'), null, 'no target load from warm-ups');
+  ok(![...L.creditWeek(s).slots.values()].some(r => r.days.size), 'no goal credit');
+  eq(L.readinessSummary(s, ci()).heavy, [], 'warm-ups aren\'t heavy work');
+  done(s, 'ex-back-squat', 'T1', 3, 5, 0, 300);
+  ok(Math.round(L.estimatedMax(s, 'ex-back-squat')) === 330 && L.lastLoad(s, 'ex-back-squat') === 300, 'working sets still do');
+});
+
 // ---------- render ----------
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

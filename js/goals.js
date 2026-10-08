@@ -19,7 +19,7 @@ function familyStats(state, now, days) {
   const byFam = new Map();
   const workouts = new Set();
   for (const s of state.sets) {
-    if (!s.done || s.loggedAt < from || s.loggedAt >= now) continue;
+    if (!s.done || s.warmup || s.loggedAt < from || s.loggedAt >= now) continue;
     const ex = L.byId(state.exercises, s.exerciseId);
     if (!ex) continue;
     const day = L.dayKey(s.loggedAt);

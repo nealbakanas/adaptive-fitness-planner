@@ -20,6 +20,7 @@ const wipe = () => Object.keys(localStorage).filter(k => k === KEY || k.startsWi
 wipe();
 await import('./app.js');
 const { state } = await import('./store.js');
+const L = await import('./logic.js');
 await new Promise(r => setTimeout(r, 200));
 
 step('check-in renders', () => check('check-in renders', text().includes('Check in') && !!q('[data-act=suggest]')));
@@ -252,6 +253,38 @@ step('archiving hides an exercise until you ask for it', () => {
   click('[data-act=libArchived]');
   check('shown on request, marked archived', /Air squat/.test(text()) && /archived/.test(text()));
   click('[data-act=libArchived]');
+});
+
+step('warm-ups are optional, only for T1/T2, and never fill the working sets', () => {
+  click('[data-act=nav][data-tab=today]');
+  if (!q('[data-act=addEx]')) { click('[data-k=locationId][data-v=loc-basement]'); click('[data-act=suggest]'); }
+  click('[data-act=addEx]');
+  click('[data-act=addExTier][data-t=T2]');
+  click('[data-act=addExPick][data-id=ex-deficit-rdl]');
+  const blk = () => qa('section.block').find(b => /Deficit Romanian deadlift/.test(b.innerText));
+  check('no warm-ups until asked', !blk().querySelector('.set.warm'));
+  const work = () => state.sets.filter(x => x.blockId === blk().querySelector('[data-act=addWarm]').dataset.b && !x.warmup);
+  setVal(blk().querySelector('.set:not(.warm) input[data-f=load]'), '200');
+  click(blk().querySelector('[data-act=addWarm]'));
+  click(blk().querySelector('[data-act=addWarm]'));
+  const rows = blk().querySelectorAll('.set.warm');
+  check('two warm-up rows, before the working sets', rows.length === 2 && blk().querySelector('.sets').firstElementChild.classList.contains('warm'));
+  check('warm-up fields start empty, suggestions as placeholders', rows[0].querySelector('[data-f=load]').value === '' && rows[0].querySelector('[data-f=load]').placeholder === '80' && rows[1].querySelector('[data-f=reps]').placeholder === '3',
+    `${rows[0].querySelector('[data-f=load]').placeholder} ${rows[1].querySelector('[data-f=reps]').placeholder}`);
+  const loads = work().map(x => x.load).join();
+  state.timer = null;
+  setVal(rows[0].querySelector('[data-f=load]'), '95');
+  setVal(rows[0].querySelector('[data-f=reps]'), '5');
+  click(blk().querySelector('.set.warm [data-act=check]'));
+  check('logging a warm-up leaves the working sets alone', work().map(x => x.load).join() === loads && work().every(x => !x.done), `${loads} -> ${work().map(x => x.load).join()}`);
+  check('no rest after a warm-up', !state.timer);
+  const credit = L.creditWeek(state);
+  check('warm-ups count toward nothing', !state.sets.some(x => x.warmup && credit.assign.get(x.id)));
+  check('and never set a max', L.estimatedMax(state, 'ex-deficit-rdl') == null);
+  click(blk().querySelector('[data-act=tierEdit]'));
+  click('[data-act=tierPick][data-t=T3]');
+  check('T3 has no warm-up button, unlogged warm-ups go', !blk().querySelector('[data-act=addWarm]') && blk().querySelectorAll('.set.warm').length === 1);
+  click(blk().querySelector('[data-act=removeBlock]'));
 });
 
 step('hold timer logs a timed set and starts the rest', () => {

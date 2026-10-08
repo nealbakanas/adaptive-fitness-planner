@@ -119,7 +119,8 @@ export const setE1rm = (state, s) => epley(setTotalLoad(state, s), Number(s.reps
 
 // Only heavy and moderate work (T1/T2) sets the max. Light technique or pump sessions would
 // otherwise push real sessions out of the window and drag every suggested load down.
-const countsForMax = s => !s.tier || s.tier === 'T1' || s.tier === 'T2';
+// Warm-up sets never count: not toward a max, a goal, a target load or the heavy-work rules.
+const countsForMax = s => !s.warmup && (!s.tier || s.tier === 'T1' || s.tier === 'T2');
 
 // Best e1RM across the last 3 T1/T2 sessions with this exercise, before `before`.
 // Falls back to the exercise's starting max (added load for bodyweight moves).
@@ -160,7 +161,7 @@ export function targetPct(cfg, reps) {
 export function lastLoad(state, exerciseId) {
   let best = null;
   for (const s of state.sets) {
-    if (s.done && s.exerciseId === exerciseId && s.load != null && s.load !== '' && (!best || s.loggedAt > best.loggedAt)) best = s;
+    if (s.done && !s.warmup && s.exerciseId === exerciseId && s.load != null && s.load !== '' && (!best || s.loggedAt > best.loggedAt)) best = s;
   }
   return best ? Number(best.load) : null;
 }
@@ -213,7 +214,7 @@ export function slotFor(state, ex, tier) {
 
 export function autoSlotFor(state, s) {
   const ex = byId(state.exercises, s.exerciseId);
-  if (!ex) return null;
+  if (!ex || s.warmup) return null;
   const slot = slotFor(state, ex, s.tier);
   if (!slot) return null;
   if (s.tier === 'T3' || s.tier === 'TECH') return slot.id;
@@ -237,7 +238,7 @@ export function creditWeek(state, t = Date.now()) {
   const slots = new Map(state.slots.map(sl => [sl.id, { slot: sl, days: new Map(), exposures: 0, filled: 0, todayMet: false }]));
   const assign = new Map();
   for (const s of state.sets) {
-    if (!s.done || s.loggedAt < start || s.loggedAt >= end) continue;
+    if (!s.done || s.warmup || s.loggedAt < start || s.loggedAt >= end) continue;
     const slotId = slotForSet(state, s);
     assign.set(s.id, slotId);
     const r = slotId && slots.get(slotId);
@@ -280,7 +281,7 @@ export function energy(ci) {
 
 function hadT1Recently(state, t) {
   const from = startOfDay(t) - DAY;
-  return state.sets.some(s => s.done && s.tier === 'T1' && s.loggedAt >= from && s.loggedAt < t);
+  return state.sets.some(s => s.done && !s.warmup && s.tier === 'T1' && s.loggedAt >= from && s.loggedAt < t);
 }
 
 // Heavy (T1) work logged since the start of yesterday, as the set of body regions it taxed.
@@ -289,7 +290,7 @@ export function recentHeavyRegions(state, t = Date.now(), excludeBlockId = null)
   const from = startOfDay(t) - DAY;
   const out = new Set();
   for (const s of state.sets) {
-    if (!s.done || s.tier !== 'T1' || s.loggedAt < from || s.loggedAt >= t || s.blockId === excludeBlockId) continue;
+    if (!s.done || s.warmup || s.tier !== 'T1' || s.loggedAt < from || s.loggedAt >= t || s.blockId === excludeBlockId) continue;
     const ex = byId(state.exercises, s.exerciseId);
     if (ex?.explosive) continue;
     out.add(ex?.region || 'full');
@@ -366,7 +367,7 @@ export function doseFit(state, tier, sc, dose = null) {
 
 function recentSchemes(state, exerciseId, n) {
   const seen = [];
-  const sets = state.sets.filter(s => s.done && s.exerciseId === exerciseId).sort((a, b) => b.loggedAt - a.loggedAt);
+  const sets = state.sets.filter(s => s.done && !s.warmup && s.exerciseId === exerciseId).sort((a, b) => b.loggedAt - a.loggedAt);
   for (const s of sets) {
     if (!seen.some(x => x.sessionId === s.sessionId)) seen.push(s);
     if (seen.length >= n) break;
@@ -514,7 +515,7 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
   const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2')
     .map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
   const since = Date.now() - 84 * DAY;
-  const lately = state.sets.filter(x => x.done && x.loggedAt >= since);
+  const lately = state.sets.filter(x => x.done && !x.warmup && x.loggedAt >= since);
   const recent = new Set(lately.map(x => x.exerciseId));
   const heavyLately = new Set(lately.filter(x => x.tier === 'T1' || x.tier === 'T2').map(x => x.exerciseId));
   let best = null;

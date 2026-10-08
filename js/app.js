@@ -76,7 +76,18 @@ function endSession(s) {
   }
 }
 
-const blockSets = b => state.sets.filter(s => s.blockId === b.id);
+// A block's working sets. Warm-ups are kept apart: they never count, carry their load forward or start a rest.
+const blockSets = b => state.sets.filter(s => s.blockId === b.id && !s.warmup);
+const warmSets = b => state.sets.filter(s => s.blockId === b.id && s.warmup);
+const canWarm = (b, ex) => (b.tier === 'T1' || b.tier === 'T2') && ex?.metric === 'load_reps';
+
+// Suggested ramp to the first working load, shown as placeholders only: 40/60/80/90% for 5/3/2/1.
+const WARM_RAMP = [[0.4, 5], [0.6, 3], [0.8, 2], [0.9, 1]];
+function warmHint(b, ex, i) {
+  const [pct, reps] = WARM_RAMP[Math.min(i, WARM_RAMP.length - 1)];
+  const top = Number(blockSets(b)[0]?.load);
+  return { load: top > 0 ? L.snapLoad(state, ex, top * pct) : null, reps };
+}
 
 // One logged set as text: "185×5", "BW+45×3", "40s", "100m", "12 reps".
 const setAmount = (ex, s) => ex?.metric === 'load_reps' ? `${ex.bodyweight ? 'BW+' : ''}${s.load ?? 0}×${s.reps}`
@@ -85,7 +96,7 @@ const setAmount = (ex, s) => ex?.metric === 'load_reps' ? `${ex.bodyweight ? 'BW
 // Most recent time logged for a timed exercise, so the next hold starts from it.
 function lastTime(exerciseId) {
   let best = null;
-  for (const s of state.sets) if (s.done && s.exerciseId === exerciseId && s.time > 0 && (!best || s.loggedAt > best.loggedAt)) best = s;
+  for (const s of state.sets) if (s.done && !s.warmup && s.exerciseId === exerciseId && s.time > 0 && (!best || s.loggedAt > best.loggedAt)) best = s;
   return best ? Number(best.time) : null;
 }
 
@@ -166,9 +177,11 @@ function newSet(session, block, ex, sc, load) {
 
 // Regenerate a block's undone sets after an exercise or scheme change; logged sets stay.
 function genSets(session, block) {
-  state.sets = state.sets.filter(s => !(s.blockId === block.id && !s.done));
   const ex = exOf(block.exerciseId), sc = schOf(block.schemeId);
-  const done = state.sets.filter(s => s.blockId === block.id).length;
+  const warm = canWarm(block, ex);
+  state.sets = state.sets.filter(s => !(s.blockId === block.id && !s.done && (!s.warmup || !warm)));
+  for (const w of warmSets(block)) if (!w.done) w.exerciseId = ex.id; // unlogged warm-ups follow a swap
+  const done = blockSets(block).length;
   const load = L.targetLoad(state, ex, block.tier, sc);
   for (let i = done; i < sc.sets; i++) state.sets.push(newSet(session, block, ex, sc, load));
 }
@@ -591,14 +604,14 @@ function viewCheckin() {
   const paused = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'paused');
   let h = `<header class="top"><h1>Check in</h1></header>`;
   for (const p of paused) {
-    const left = state.sets.filter(x => x.sessionId === p.id && !x.done).length;
+    const left = state.sets.filter(x => x.sessionId === p.id && !x.done && !x.warmup).length;
     const blocksLeft = p.blocks.filter(b => blockSets(b).some(x => !x.done)).length;
     const at = new Date(p.pausedAt ?? p.checkinAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     h += `<div class="card resume"><div><b>Paused at ${at}</b><div class="meta">${left} set${left === 1 ? '' : 's'} left in ${blocksLeft} exercise${blocksLeft === 1 ? '' : 's'}</div></div>
       <button class="primary" data-act="resume" data-id="${p.id}">Resume</button></div>`;
   }
   if (doneToday.length) {
-    const sets = state.sets.filter(x => x.done && doneToday.some(s => s.id === x.sessionId));
+    const sets = state.sets.filter(x => x.done && !x.warmup && doneToday.some(s => s.id === x.sessionId));
     const rest = restSummary(sets);
     h += `<div class="card muted">Done today: ${doneToday.length} session${doneToday.length > 1 ? 's' : ''}, ${sets.length} sets${rest ? ` · ${rest.text}` : ''}.</div>`;
   }
@@ -707,6 +720,14 @@ function viewBlock(s, b, credit, idea = null) {
     if (!rd.fresh) dose += `<div class="dose warn">Not fresh for power work: ${esc(rd.reasons.join('; '))}. <button class="link" data-act="toTech" data-b="${b.id}">Do it as technique</button></div>`;
   }
 
+  const warmRows = warmSets(b).map((st, i) => {
+    const hint = warmHint(b, ex, i);
+    return `<div class="set warm ${st.done ? 'done' : ''}"><span class="n" title="Warm-up">W</span>
+      <input class="num" inputmode="decimal" data-set="${st.id}" data-f="load" value="${esc(st.load)}" placeholder="${esc(hint.load ?? '—')}"><span class="u">${ex.bodyweight ? '+' : ''}${unit()}</span>
+      <span class="x">×</span><input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}" placeholder="${hint.reps}">
+      <button class="check" data-act="check" data-id="${st.id}" aria-label="Log warm-up set">${st.done ? '✓' : ''}</button></div>`;
+  }).join('');
+
   const rows = sets.map((st, i) => {
     const sx = exOf(st.exerciseId) || ex;
     const other = st.exerciseId !== ex.id ? `<span class="meta">${esc(sx.name)}</span>` : '';
@@ -744,8 +765,9 @@ function viewBlock(s, b, credit, idea = null) {
       <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${sc.minutes}m ▾</button></div>
     <div class="meta">${info.join(' · ')} ${restBtn}</div>
     ${dose}
-    <div class="sets">${rows}</div>
+    <div class="sets">${warmRows}${rows}</div>
     <div class="brow">
+      ${canWarm(b, ex) ? `<button class="small" data-act="addWarm" data-b="${b.id}">+ warm-up</button>` : ''}
       <button class="small" data-act="addSet" data-b="${b.id}">+ set</button>
       <button class="small" data-act="removeSet" data-b="${b.id}">− set</button>
       <button class="small" data-act="timerStart" data-b="${b.id}">⏱ Rest</button>
@@ -863,7 +885,7 @@ function viewWeek() {
     <div class="kv"><span>Sessions this week</span><b>${wk.count}</b></div>
     <div class="kv"><span>Acceptance (week)</span><b>${acc(wk)}</b></div></div>`;
 
-  const sets = state.sets.filter(s => s.done && s.loggedAt >= c.start && s.loggedAt < c.end).sort((a, b) => a.loggedAt - b.loggedAt);
+  const sets = state.sets.filter(s => s.done && !s.warmup && s.loggedAt >= c.start && s.loggedAt < c.end).sort((a, b) => a.loggedAt - b.loggedAt);
   if (sets.length) {
     const byDay = new Map();
     for (const s of sets) { const k = L.dayKey(s.loggedAt); byDay.set(k, [...(byDay.get(k) || []), s]); }
@@ -919,7 +941,7 @@ function historyEntries(q) {
     const mob = mobLines(s.mobility);
     if (!groups.size && !mob.length) continue;
     const times = [...sets.map(x => x.loggedAt), ...(s.mobility || []).flatMap(it => it.sets.filter(x => x.done).map(x => x.at))].filter(Boolean);
-    out.push({ s, at: times.length ? Math.min(...times) : s.checkinAt, end: times.length ? Math.max(...times) : s.checkinAt, sets: sets.length, groups: [...groups.values()], mob });
+    out.push({ s, at: times.length ? Math.min(...times) : s.checkinAt, end: times.length ? Math.max(...times) : s.checkinAt, sets: sets.filter(x => !x.warmup).length, groups: [...groups.values()], mob });
   }
   for (const m of state.mobility.sessions) {
     const mob = mobLines(m.items);
@@ -939,6 +961,12 @@ function setsText(ex, sets) {
     else runs.push({ a, n: 1 });
   }
   return runs.map(r => r.n > 1 ? `${r.a} (×${r.n})` : r.a).join(', ');
+}
+
+function histSets(g) {
+  const warm = g.sets.filter(x => x.warmup), work = g.sets.filter(x => !x.warmup);
+  const w = warm.map(x => x.load != null || x.reps != null ? `${x.load ?? '—'}×${x.reps ?? '—'}` : '✓').join(', ');
+  return [w && `warm-up ${w}`, work.length && setsText(g.ex, work)].filter(Boolean).join(' · ');
 }
 
 function viewHistory(hs) {
@@ -964,7 +992,7 @@ function viewHistory(hs) {
       if (m.status === 'open') bits.push('in progress');
     }
     const lines = e.groups.map(g => `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(g.ex?.name ?? '?')}</span>
-      <span class="meta">${esc(setsText(g.ex, g.sets))}</span></span></div>`).join('')
+      <span class="meta">${esc(histSets(g))}</span></span></div>`).join('')
       + e.mob.map(it => {
         const ex = mobEx(it.exerciseId);
         return `<div class="histex"><span class="tier MOB">MOB</span><span class="grow"><span class="name">${esc(ex?.name ?? '?')}</span>
@@ -1837,7 +1865,13 @@ const actions = {
   check: d => {
     const st = L.byId(state.sets, d.id);
     const s = L.byId(state.sessions, st.sessionId);
-    if (!st.done) {
+    if (!st.done && st.warmup) {
+      // A warm-up just gets logged: nothing carried into the working sets, no rest, no max.
+      st.done = true;
+      st.loggedAt = Date.now();
+      st.bw = state.settings.bodyweight;
+      if (!s.firstSetAt) s.firstSetAt = st.loggedAt;
+    } else if (!st.done) {
       const prev = blockSets({ id: st.blockId }).filter(x => x.done).sort((x, y) => y.loggedAt - x.loggedAt)[0];
       st.done = true;
       st.loggedAt = Date.now();
@@ -1854,7 +1888,7 @@ const actions = {
       // Real rest: time since this block's previous set, minus roughly how long the set took. Long gaps are breaks, not rest.
       const gap = prev && (st.loggedAt - prev.loggedAt) / 1000;
       if (b && gap && gap < 15 * 60) { st.restSec = Math.max(0, Math.round(gap - workSec(st))); st.restPlan = effectiveRest(b); }
-      const more = state.sets.some(x => x.sessionId === s.id && !x.done);
+      const more = state.sets.some(x => x.sessionId === s.id && !x.done && !x.warmup);
       const group = b ? groupOf(s, b) : [];
       const lead = group[0];
       const next = b && nextInGroup(s, b);
@@ -1886,6 +1920,16 @@ const actions = {
     save(); render();
   },
 
+  addWarm: d => {
+    const { s, b } = findBlock(d.b);
+    const ex = exOf(b.exerciseId);
+    if (!canWarm(b, ex)) return;
+    const w = { ...newSet(s, b, ex, schOf(b.schemeId), null), warmup: true, reps: null };
+    // Before the working sets, after any earlier warm-ups.
+    const at = state.sets.findIndex(x => x.blockId === b.id && !x.warmup);
+    state.sets.splice(at < 0 ? state.sets.length : at, 0, w);
+    save(); render();
+  },
   removeSet: d => {
     const { b } = findBlock(d.b);
     const undone = blockSets(b).filter(x => !x.done);
@@ -1931,7 +1975,7 @@ const actions = {
   finish: () => {
     const s = currentSession();
     const mobSets = (s.mobility || []).flatMap(it => it.sets);
-    const left = state.sets.filter(x => x.sessionId === s.id && !x.done).length + mobSets.filter(x => !x.done).length;
+    const left = state.sets.filter(x => x.sessionId === s.id && !x.done && !x.warmup).length + mobSets.filter(x => !x.done).length;
     const any = state.sets.some(x => x.sessionId === s.id && x.done) || mobSets.some(x => x.done);
     if (left && any) return openSheet({ type: 'finishAsk', left });
     actions.finishNow();
@@ -2365,7 +2409,7 @@ const actions = {
 
   removeBlock: d => {
     const { s, b } = findBlock(d.b);
-    const logged = blockSets(b).some(x => x.done);
+    const logged = state.sets.some(x => x.blockId === b.id && x.done);
     state.sets = state.sets.filter(x => x.blockId !== b.id || x.done);
     if (logged) toast('Logged sets kept; the rest removed');
     else {
