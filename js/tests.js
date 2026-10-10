@@ -724,6 +724,53 @@ test('warm-up sets never count: max, goals, target load, heavy work', () => {
   ok(Math.round(L.estimatedMax(s, 'ex-back-squat')) === 330 && L.lastLoad(s, 'ex-back-squat') === 300, 'working sets still do');
 });
 
+test('focused workouts: upper and lower from the whole library, explosive first when fresh', () => {
+  const s = seed();
+  const names = res => res.blocks.map(b => `${b.tier} ${s.exercises.find(e => e.id === b.exerciseId).name}`);
+  const region = id => s.exercises.find(e => e.id === id).region;
+  const pat = id => L.movementPattern(s, s.exercises.find(e => e.id === id));
+  const lower = L.buildFocus(s, ci({ minutes: 60 }), { region: 'lower', explosive: true });
+  ok(lower.blocks.length >= 4, names(lower).join(', '));
+  const first = s.exercises.find(e => e.id === lower.blocks[0].exerciseId);
+  ok(first.explosive && first.region === 'lower' && lower.blocks[0].tier === 'T2', `explosive first: ${names(lower)}`);
+  ok(lower.blocks.some(b => b.tier === 'T1'), 'a heavy main lift');
+  ok(lower.blocks.every(b => ['lower', 'full'].includes(region(b.exerciseId)) || pat(b.exerciseId) === 'core'), `lower only: ${names(lower)}`);
+  ok(lower.blocks.some(b => b.tier === 'T3') && lower.blocks.filter(b => b.tier === 'T3').every(b => b.pairOf || lower.blocks.some(x => x.pairOf === b.id)), 'T3s grouped');
+  ok(lower.minutesUsed <= 60, 'fits the time');
+  const upper = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper' });
+  ok(upper.blocks.every(b => ['push', 'pull', 'core'].includes(pat(b.exerciseId))), `upper only: ${names(upper)}`);
+  ok(new Set(upper.blocks.filter(b => b.tier !== 'T3').map(b => pat(b.exerciseId))).size === 2, 'push and pull main lifts');
+  ok(!upper.blocks.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), 'no explosive work unless asked');
+  // No upper-body explosive lift in the starter library: cleans (whole body) lead instead.
+  const upx = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper', explosive: true });
+  eq(upx.blocks[0].exerciseId, 'ex-power-clean');
+  // Tired: explosive work becomes technique and the main lift drops to T2.
+  const tired = L.buildFocus(s, ci({ minutes: 60, fatigue: 5 }), { region: 'lower', explosive: true });
+  eq(tired.blocks[0].tier, 'TECH');
+  ok(!tired.blocks.some(b => b.tier === 'T1'), `no T1 when tired: ${names(tired)}`);
+  // Accessories only (for + Time), nothing from families already in the workout.
+  const more = L.buildFocus(s, ci({ minutes: 20 }), { region: 'lower', accessoriesOnly: true }, Date.now(), { excludeFamilies: ['fam-hams'] });
+  ok(more.blocks.length && more.blocks.every(b => b.tier === 'T3' && s.exercises.find(e => e.id === b.exerciseId).familyId !== 'fam-hams'), names(more).join(', '));
+});
+test('goals nearly done: suggestion is thin but a focused workout still fills the time', () => {
+  const s = seed();
+  // Fill every goal except incline press this week.
+  const credit = () => L.creditWeek(s);
+  for (const sl of s.slots.filter(x => x.familyId !== 'fam-incline')) {
+    const ex = L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId) ?? s.exercises.find(e => e.familyId === sl.familyId);
+    for (let q = 0; q < sl.quota; q++) {
+      for (let i = 0; i < 6; i++) s.sets.push({ id: L.uid(), sessionId: `x${q}`, blockId: `b${sl.id}${q}`, exerciseId: ex.id, tier: sl.tier, load: 100, reps: 5, done: true,
+        loggedAt: L.weekBounds(s).start + q * DAY + i, bw: 235, countsManual: true, countsToward: sl.id });
+    }
+  }
+  const open = [...credit().slots.values()].filter(r => r.filled < r.slot.quota).map(r => r.slot.familyId);
+  eq(open, ['fam-incline']);
+  const sug = L.buildSuggestion(s, ci({ minutes: 60 }));
+  ok(sug.blocks.length === 1, 'only incline from goals');
+  const f = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper' });
+  ok(f.blocks.length >= 4 && f.minutesUsed >= 40, `${f.blocks.length} blocks, ${f.minutesUsed} min`);
+});
+
 // ---------- render ----------
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

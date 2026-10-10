@@ -598,6 +598,11 @@ function seg(key, items, cur) {
     `<button data-act="ci" data-k="${key}" data-v="${v}" class="${String(cur) === String(v) ? 'on' : ''}">${t}</button>`).join('')}</div>`;
 }
 
+// Upper/lower workouts from the whole library, for when the weekly goals are done.
+const focusName = (r, x) => `${r === 'upper' ? 'Upper' : 'Lower'} body${x ? ' + explosive' : ''}`;
+const focusButtons = () => `<div class="focusgrid">${L.FOCUS_REGIONS.flatMap(r => [false, true].map(x =>
+  `<button data-act="focus" data-r="${r}" ${x ? 'data-x="1"' : ''}>${focusName(r, x)}</button>`)).join('')}</div>`;
+
 function viewCheckin() {
   const ci = ui.ci;
   const doneToday = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'done');
@@ -621,7 +626,8 @@ function viewCheckin() {
     <div class="field"><label>Sleep <span class="hint">optional · 1 poor · 5 great · tap again to clear</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
     <div class="field"><label>Intent</label>${seg('intent', INTENTS, ci.intent)}</div>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
-    <button class="primary big" data-act="suggest">Suggest a session</button>`;
+    <button class="primary big" data-act="suggest">Suggest a session</button>
+    <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals</span></label>${focusButtons()}</div>`;
   const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
   h += `<div class="field"><label>Mobility <span class="hint">its own session, outside your weekly goals</span></label><div class="list">${state.mobility.routines.map(r =>
     `<button class="row" data-act="mobStart" data-id="${r.id}"><span>${esc(r.name)}</span><span class="meta">${r.items.length} exercises${lastRoutine(r.id)}</span></button>`).join('')}
@@ -642,9 +648,14 @@ function viewSession(s) {
   let h = `<header class="top"><div><h1>Today</h1>
     <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)} · est ${est} min</div>${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
     ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
-    <div class="hbtns"><span class="badge ${s.source}">${s.source}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
+    <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   if (!s.blocks.length) {
     h += `<div class="card muted">Nothing from your weekly goals fits this location and time. Add an exercise below, use a plan, or check in with more time.</div>`;
+  }
+  // Goals nearly done: the suggestion fills little of the time. Offer a full workout instead.
+  if (s.source === 'suggested' && sessionBudget(s) >= Math.max(15, s.minutes * 0.4) && !state.sets.some(x => x.sessionId === s.id && x.done)) {
+    h += `<div class="card focusoffer"><b>${s.blocks.length ? `Your open goals only fill about ${s.minutes - sessionBudget(s)} of your ${s.minutes} minutes.` : 'Nothing left from your goals here.'}</b>
+      <p class="meta">Want a full workout instead? It uses your whole library and still counts toward any goal it matches.</p>${focusButtons()}</div>`;
   }
   // Each superset partner renders right after the block it's paired with.
   const ordered = [];
@@ -656,6 +667,9 @@ function viewSession(s) {
   h += ordered.map(b => viewBlock(s, b, credit, ideas.get(b.id))).join('');
   if (s.mobility?.length) h += `<div class="sectionhead"><h3>Mobility</h3></div>${s.mobility.map(viewMobItem).join('')}`;
   h += `<div class="addrow"><button class="addblock" data-act="addEx">+ Add exercise</button><button class="addblock" data-act="mobPick" data-mode="workout">+ Mobility</button></div>`;
+  if (s.focusNotes?.length) {
+    h += `<details class="why" ${ui.whyOpen ? 'open' : ''} data-why><summary>How this was built</summary><ul>${s.focusNotes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>`;
+  }
   if (s.why?.length) {
     h += `<details class="why" ${ui.whyOpen ? 'open' : ''} data-why><summary>Why this session</summary><ul>${s.why.map(w =>
       `<li class="${w.picked ? 'picked' : ''}"><b>${esc(w.label)}</b> ${w.score.toFixed(2)}${w.picked ? ' ✓' : ''} <span class="meta">${esc(w.why.join(' · '))}${w.note ? ' · ' + esc(w.note) : ''}</span></li>`).join('')}</ul></details>`;
@@ -1856,6 +1870,33 @@ const actions = {
     render(); window.scrollTo(0, 0);
   },
 
+  // A focused workout replaces what's unlogged in the open session (logged work stays), or starts a new one.
+  focus: d => {
+    const region = d.r, explosive = !!d.x;
+    let s = currentSession();
+    if (s) {
+      const keep = s.blocks.filter(b => state.sets.some(x => x.blockId === b.id && x.done));
+      state.sets = state.sets.filter(x => x.sessionId !== s.id || x.done);
+      s.blocks = keep;
+      for (const b of keep) if (b.pairOf && !keep.some(x => x.id === b.pairOf)) delete b.pairOf;
+    }
+    const ci = s ? { ...s, minutes: sessionBudget(s) } : ui.ci;
+    const res = L.buildFocus(state, ci, { region, explosive }, Date.now(), { excludeFamilies: (s?.blocks || []).map(b => exOf(b.exerciseId)?.familyId) });
+    const extra = { focusRegion: region, focusExplosive: explosive, focusNotes: res.notes, ready: res.ready };
+    if (s) {
+      s.blocks.push(...res.blocks);
+      L.pairT3s(state, s.blocks);
+      for (const b of res.blocks) genSets(s, b);
+      Object.assign(s, extra, { source: 'focus' });
+      delete s.why;
+      save();
+    } else {
+      s = createSession(res.blocks, 'focus', extra);
+    }
+    render(); window.scrollTo(0, 0);
+    if (!res.blocks.length) toast('Nothing fits here. Try another location or more time.');
+  },
+
   startPlan: d => {
     const p = L.byId(state.plans, d.id);
     createSession(planBlocks(p), 'custom', { planId: p.id });
@@ -2012,7 +2053,10 @@ const actions = {
   addTime: d => {
     const s = currentSession();
     const extra = Number(d.v);
-    const res = L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies: s.blocks.map(b => exOf(b.exerciseId)?.familyId) });
+    const excludeFamilies = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
+    const res = s.source === 'focus'
+      ? L.buildFocus(state, { ...s, minutes: extra }, { region: s.focusRegion, accessoriesOnly: true }, Date.now(), { excludeFamilies })
+      : L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies });
     s.minutes += extra;
     s.blocks.push(...res.blocks);
     L.pairT3s(state, s.blocks);

@@ -287,6 +287,31 @@ step('warm-ups are optional, only for T1/T2, and never fill the working sets', (
   click(blk().querySelector('[data-act=removeBlock]'));
 });
 
+step('focused workouts from check-in and when a suggestion is thin', () => {
+  click('[data-act=nav][data-tab=today]');
+  if (q('[data-act=finish]')) { click('[data-act=finish]'); if (q('[data-act=finishNow]')) click('[data-act=finishNow]'); }
+  check('focus buttons on check-in', qa('[data-act=focus]').length === 4);
+  click('[data-k=locationId][data-v=loc-basement]');
+  click('[data-k=minutes][data-v="60"]');
+  click('[data-act=focus][data-r=lower][data-x="1"]');
+  check('focused lower + explosive workout', /Lower body \+ explosive/i.test(q('.badge')?.innerText) && qa('section.block').length >= 4, text().slice(0, 300));
+  check('explains how it was built', /How this was built/.test(text()));
+  click('[data-act=recheck]');
+  // Short on goals: an incline-only goal list leaves most of the hour empty.
+  const saved = state.slots;
+  state.slots = state.slots.filter(x => x.familyId === 'fam-incline');
+  click('[data-k=minutes][data-v="60"]');
+  click('[data-act=suggest]');
+  check('thin suggestion offers a focused workout', !!q('.focusoffer [data-act=focus]'), text().slice(0, 300));
+  click('.focusoffer [data-act=focus][data-r=upper]');
+  check('replaced with an upper workout', /Upper body/i.test(q('.badge')?.innerText) && qa('section.block').length >= 4 && !q('.focusoffer'));
+  click('[data-act=moreTime]');
+  click('[data-act=addTime][data-v="15"]');
+  check('+ Time adds accessories to a focused workout', qa('section.block').length >= 5);
+  state.slots = saved;
+  click('[data-act=recheck]');
+});
+
 step('hold timer logs a timed set and starts the rest', () => {
   click('[data-act=nav][data-tab=today]');
   if (!q('[data-act=addEx]')) { click('[data-k=locationId][data-v=loc-basement]'); click('[data-act=suggest]'); }

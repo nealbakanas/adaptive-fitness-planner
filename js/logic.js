@@ -539,6 +539,97 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
   return best;
 }
 
+// ---------- focused workouts ----------
+// For when the weekly goals are (nearly) done but you have time and energy: an upper- or lower-body workout
+// from the whole library, optionally led by explosive work. Same rules as the goal-driven suggestion:
+// power work only when fresh (else technique), heavy work eased when tired or after heavy work in the region,
+// schemes that fit the time, T3s grouped. Goals still get credit for anything that matches them.
+
+const FOCUS_MAIN = { upper: ['push', 'pull'], lower: ['knee', 'hinge'] };
+const FOCUS_T3 = { upper: ['pull', 'push', 'pull', 'core', 'push'], lower: ['hinge', 'knee', 'calf', 'core', 'hinge'] };
+export const FOCUS_REGIONS = Object.keys(FOCUS_MAIN);
+
+export function buildFocus(state, ci, { region, explosive = false, accessoriesOnly = false }, t = Date.now(), { excludeFamilies = [] } = {}) {
+  const loc = byId(state.locations, ci.locationId);
+  const notes = [];
+  const famUsed = new Set(excludeFamilies);
+  const pattern = e => movementPattern(state, e);
+  // When each exercise, family and pattern was last trained (pattern: heavy or moderate work only).
+  const exLast = new Map(), patLast = new Map();
+  for (const s of state.sets) {
+    if (!s.done || s.warmup || s.loggedAt >= t) continue;
+    const e = byId(state.exercises, s.exerciseId);
+    if (!e) continue;
+    exLast.set(e.id, Math.max(exLast.get(e.id) ?? 0, s.loggedAt));
+    if (s.tier === 'T1' || s.tier === 'T2') patLast.set(pattern(e), Math.max(patLast.get(pattern(e)) ?? 0, s.loggedAt));
+  }
+  const lately = e => (exLast.get(e.id) ?? 0) >= t - 182 * DAY; // something you actually do
+  const usable = e => !e.archived && !famUsed.has(e.familyId) && isAvailable(e, loc);
+  let budget = ci.minutes;
+  const blocks = [];
+  const add = (e, tier, why) => {
+    const slot = slotFor(state, e, tier);
+    const sc = pickScheme(state, tier, e, budget - WARMUP[tier], ci, slotDose(state, slot, tier));
+    if (!sc) return false;
+    blocks.push({ id: uid(), tier, slotId: slot?.id ?? null, exerciseId: e.id, schemeId: sc.id, swaps: [] });
+    famUsed.add(e.familyId);
+    budget -= sc.minutes + WARMUP[tier];
+    notes.push(`${tier} ${e.name}: ${why}`);
+    return true;
+  };
+  const tired = energy(ci) <= 2.5;
+  const easy = ci.intent === 'easy';
+
+  if (explosive && !accessoriesOnly) {
+    // Explosive work for this region first; whole-body lifts (cleans) count for either.
+    const cands = state.exercises.filter(e => usable(e) && e.explosive && (e.region === region || e.region === 'full'))
+      .sort((a, b) => (b.region === region) - (a.region === region) || lately(b) - lately(a)
+        || (byId(state.families, b.familyId)?.defaultExerciseId === b.id) - (byId(state.families, a.familyId)?.defaultExerciseId === a.id) || a.rank - b.rank);
+    const e = cands[0];
+    if (!e) notes.push(`No ${region}-body explosive exercise is available here, so this is a plain ${region}-body workout.`);
+    else {
+      const rd = powerReadiness(state, ci, e, t);
+      if (rd.fresh) add(e, e.metric === 'load_reps' ? 'T1' : 'T2', 'explosive work first, while you\'re fresh');
+      else add(e, 'TECH', `technique instead of power (${rd.reasons.join('; ')})`);
+    }
+  }
+
+  if (!accessoriesOnly) {
+    // Main lift: the pattern trained heavy least recently. Second lift: the other pattern, moderate.
+    const heavyHere = regionConflict(region, recentHeavyRegions(state, t));
+    const mainTier = tired || easy || heavyHere ? 'T2' : 'T1';
+    if (mainTier === 'T2') notes.push(`Main lift at T2, not T1: ${tired ? 'low energy' : easy ? 'easy day' : `heavy ${region}-body work since yesterday`}.`);
+    const [first, second] = [...FOCUS_MAIN[region]].sort((a, b) => (patLast.get(a) ?? 0) - (patLast.get(b) ?? 0));
+    const pickMain = (p, tier) => {
+      let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && pattern(e) === p);
+      if (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null)) c = c.filter(e => estimatedMax(state, e.id) != null);
+      const isDefault = e => byId(state.families, e.familyId)?.defaultExerciseId === e.id;
+      return c.sort((a, b) => lately(b) - lately(a) || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null)
+        || isDefault(b) - isDefault(a) || a.rank - b.rank)[0] ?? null;
+    };
+    const label = { push: 'pushing', pull: 'pulling', knee: 'squat pattern', hinge: 'hinge' };
+    const m = pickMain(first, mainTier);
+    if (m) add(m, mainTier, `main lift: ${label[first]}, trained heavy least recently`);
+    else notes.push(`No loaded ${label[first]} lift here, so accessories fill in.`);
+    if (!easy) {
+      const s2 = pickMain(second, 'T2');
+      if (s2) add(s2, 'T2', `${label[second]} to balance it`);
+    }
+  }
+
+  // Accessories: a balanced rotation for the region (no barbell setups), the ones you do but haven't done for longest first.
+  for (const p of FOCUS_T3[region]) {
+    if (budget < 5 || blocks.length >= 7) break;
+    const e = state.exercises.filter(x => usable(x) && !x.explosive && pattern(x) === p && !(x.equipment || []).some(q => q === 'barbell' || q === 'rack'))
+      .sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0];
+    if (e) add(e, 'T3', p === 'core' ? 'core' : `${p} accessory${lately(e) ? ', not done for a while' : ''}`);
+  }
+
+  blocks.sort((a, b) => blockRank(state, a) - blockRank(state, b));
+  pairT3s(state, blocks);
+  return { blocks, notes, minutesUsed: ci.minutes - budget, ready: readinessSummary(state, ci, t) };
+}
+
 // ---------- analytics ----------
 
 export function median(xs) {

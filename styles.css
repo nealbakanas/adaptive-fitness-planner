@@ -420,3 +420,10 @@ label.btn.fnpick { width: 100%; min-height: 56px; font-size: 18px; margin-top: 1
 .set.warm .n { color: var(--warn); font-weight: 700; }
 .set.warm .check { border-style: dashed; }
 .set.warm.done .check { background: var(--card2); border: 2px solid var(--warn); color: var(--warn); }
+
+/* ---------- focused workouts ---------- */
+.focusgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.focusgrid button { min-height: 48px; }
+.focusoffer { border-color: var(--accent); }
+.focusoffer .focusgrid { margin-top: 10px; }
+.badge.focus { color: var(--accent); }

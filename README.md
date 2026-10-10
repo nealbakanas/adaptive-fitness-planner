@@ -74,6 +74,14 @@ Mobility lives outside the strength framework: its own exercises, routines and s
 - **Picking by body part**: choose up to 3; for each part the move you've done least recently is ticked (moves covering more of the picked parts rank first). Each set shows last time's numbers and note; loads and the custom field prefill from last time.
 - Logging a set starts that exercise's rest. Finishing keeps only what you logged. The Week tab shows mobility sessions and which body parts you've covered.
 
+## Focused workouts
+
+For days when your weekly goals are (nearly) done but you have time and energy. Check-in has **Upper body**, **Lower body**, **Upper body + explosive** and **Lower body + explosive**; a suggestion that fills under 60% of your time (or nothing) offers the same four, replacing whatever isn't logged yet. Built from your whole library at the location (`buildFocus` in `js/logic.js`), not just open goals, and anything that matches a goal still counts toward it.
+
+- **Explosive** (if picked): one explosive exercise for that region first, whole-body lifts (cleans) counting for either. Power work (T1 for cleans, T2 for jumps) when fresh, technique when tired or after heavy work in the region, same as suggestions. No upper-body explosive lift available: cleans lead instead, else it says so.
+- **Main lift**: from the movement pattern trained heavy least recently (upper: push or pull; lower: squat pattern or hinge), a loaded lift you do, T1, or T2 when you're tired, picked Easy, or did heavy work in that region since yesterday. **Second lift**: the other pattern at T2 (skipped on Easy).
+- **Accessories** (T3, no barbell setups): a rotation for the region (upper: pull, push, pull, core, push; lower: hinge, squat pattern, calves, core, hinge), the ones you do but haven't done for longest first, grouped into supersets as usual. *How this was built* explains each pick; *+ Time* adds more accessories.
+
 ## Suggested weekly goals
 
 Week → **Suggest from history** (also offered after a FitNotes import). It looks at the last 12 weeks (26 if that's thin) and proposes goals for review: untick or change any of them, then **Replace my goals** or **Add to my goals**, with Undo.
