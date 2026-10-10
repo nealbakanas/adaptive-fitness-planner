@@ -210,7 +210,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 10);
+  eq(m.version, 11);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -229,7 +229,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 10);
+  eq(m.version, 11);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -501,7 +501,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 10);
+  eq(m.version, 11);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -663,7 +663,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 10);
+  eq(m.version, 11);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -690,7 +690,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 10);
+  eq(m.version, 11);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -769,6 +769,34 @@ test('goals nearly done: suggestion is thin but a focused workout still fills th
   ok(sug.blocks.length === 1, 'only incline from goals');
   const f = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper' });
   ok(f.blocks.length >= 4 && f.minutesUsed >= 40, `${f.blocks.length} blocks, ${f.minutesUsed} min`);
+});
+
+test('T3 schemes: sets of 8-15, not 2×25, and hard bodyweight moves stay under their cap', () => {
+  const s = seed();
+  const ex = id => s.exercises.find(e => e.id === id);
+  for (const fatigue of [1, 2, 3, 4, 5]) {
+    for (const id of ['ex-ring-facepull', 'ex-db-curl', 'ex-calf-raise', 'ex-hanging-knee']) {
+      const sc = L.pickScheme(s, 'T3', ex(id), 30, ci({ fatigue }));
+      ok(sc.reps >= 8 && sc.reps <= 15, `${id} fatigue ${fatigue}: ${sc.name}`);
+    }
+  }
+  eq(L.pickScheme(s, 'T3', ex('ex-ring-facepull'), 5, ci()).name, '2×25', 'only when 5 minutes is all there is');
+  eq(L.pickScheme(s, 'T3', ex('ex-nordic'), 30, ci()).name, '6×5');
+  ok(L.pickScheme(s, 'T3', ex('ex-ghr'), 30, ci()).reps <= 8, 'GHR under its cap');
+  const f = L.buildFocus(s, ci({ minutes: 60 }), { region: 'lower' });
+  ok(f.blocks.filter(b => b.tier === 'T3').every(b => s.schemes.find(x => x.id === b.schemeId).reps <= 15), 'focused workout accessories');
+});
+test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () => {
+  const s = seed();
+  s.version = 10;
+  s.schemes = s.schemes.filter(x => !['s-t3-4x8', 's-t3-6x5'].includes(x.id));
+  for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
+  s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
+  const m = migrate(s);
+  eq(m.version, 11);
+  ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
+  eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
+  eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
 });
 
 // ---------- render ----------

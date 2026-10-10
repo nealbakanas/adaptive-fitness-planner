@@ -386,8 +386,10 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
     if (sc.minutes > budget || overRepCap(ex, sc)) continue;
     let s = 0;
     if (doseFit(state, tier, sc, dose)) s += 3;
-    if (e <= 2.5) s += (6 - sc.reps) * 0.3;          // low energy: low reps, many sets
-    else if (e >= 3.5 && !ex.explosive) s += sc.sets * sc.reps * 0.04; // high energy: more volume, but not for power work
+    if (e <= 2.5) s += tier === 'T3' ? sc.sets * 0.1 : (6 - sc.reps) * 0.3; // low energy: low reps, many sets (T3: more, shorter sets)
+    else if (e >= 3.5 && !ex.explosive && tier !== 'T3') s += sc.sets * sc.reps * 0.04; // high energy: more volume, but not for power work
+    // T3 is already volume work: sets of 8-15 keep the reps good, so 2×25 is only for a tight squeeze on time.
+    if (tier === 'T3') s -= Math.max(0, sc.reps - 15) * 0.15 + Math.max(0, 8 - sc.reps) * 0.1;
     if (ex.explosive && sc.reps <= 3) s += 1;          // power work: sets of 1-3 keep every rep fast
     if (recent.includes(sc.id)) s -= 1;
     if (ci.split && sc.sets >= 5) s += 0.5;

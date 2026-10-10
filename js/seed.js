@@ -104,8 +104,8 @@ export function seed() {
     ex('ex-jump-lunge', 'Jump lunge', 'fam-jumps', 6, 'reps', [], { maxReps: 10 }),
 
     // Freak Athlete Hyper Pro (with the GHD pad) and the Leg Developer attachment: accessory (T3) work.
-    ex('ex-nordic', 'Nordic curl', 'fam-hams', 1, 'reps', ['hyper-pro']),
-    ex('ex-ghr', 'Glute-ham raise', 'fam-hams', 2, 'reps', ['hyper-pro']),
+    ex('ex-nordic', 'Nordic curl', 'fam-hams', 1, 'reps', ['hyper-pro'], { maxReps: 5 }),
+    ex('ex-ghr', 'Glute-ham raise', 'fam-hams', 2, 'reps', ['hyper-pro'], { maxReps: 8 }),
     ex('ex-seated-legcurl', 'Seated leg curl', 'fam-hams', 3, 'load_reps', ['hyper-pro', 'leg-developer']),
     ex('ex-lying-legcurl', 'Lying leg curl', 'fam-hams', 4, 'load_reps', ['hyper-pro', 'leg-developer']),
     ex('ex-deficit-rdl', 'Deficit Romanian deadlift', 'fam-hams', 5, 'load_reps', ['barbell']),
@@ -116,7 +116,7 @@ export function seed() {
     ex('ex-sorensen', 'Sorensen hold', 'fam-hinge', 5, 'time', ['hyper-pro']),
     ex('ex-belt-squat', 'Belt squat', 'fam-quads', 1, 'load_reps', ['hyper-pro']),
     ex('ex-leg-ext', 'Leg extension', 'fam-quads', 2, 'load_reps', ['hyper-pro', 'leg-developer']),
-    ex('ex-reverse-nordic', 'Reverse Nordic', 'fam-quads', 3, 'reps', ['hyper-pro']),
+    ex('ex-reverse-nordic', 'Reverse Nordic', 'fam-quads', 3, 'reps', ['hyper-pro'], { maxReps: 10 }),
     ex('ex-calf-raise', 'Calf raise', 'fam-calves', 1, 'load_reps', ['hyper-pro']),
     ex('ex-ghd-situp', 'GHD sit-up', 'fam-core', 5, 'reps', ['hyper-pro']),
     ex('ex-trap3', 'Trap 3 raise', 'fam-upperback', 4, 'load_reps', ['hyper-pro']),
@@ -150,6 +150,9 @@ export function seed() {
     sc('s-tq-5x2', 5, 2, 60, 7, ['TECH']),
     sc('s-tq-4x3', 4, 3, 60, 7, ['TECH']),
     sc('s-tq-6x2', 6, 2, 60, 8, ['TECH']),
+    // T3 for hard bodyweight moves capped at a few reps a set (Nordics, glute-ham raises).
+    sc('s-t3-4x8', 4, 8, 60, 7, ['T3']),
+    sc('s-t3-6x5', 6, 5, 60, 8, ['T3']),
   ];
 
   const slots = [
@@ -170,7 +173,7 @@ export function seed() {
   ];
 
   return {
-    version: 10,
+    version: 11,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,

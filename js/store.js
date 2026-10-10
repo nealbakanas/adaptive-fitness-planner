@@ -163,6 +163,16 @@ export function migrate(s) {
     }
     s.version = 10;
   }
+  if (s.version < 11) {
+    // v11: T3 schemes for hard bodyweight moves (4×8, 6×5), and rep caps on Nordics, glute-ham raises and reverse Nordics
+    // so they stop getting sets of 15-25. A cap you've already set is kept.
+    for (const sc of base.schemes) if (['s-t3-4x8', 's-t3-6x5'].includes(sc.id) && !s.schemes.some(x => x.id === sc.id)) s.schemes.push(sc);
+    for (const id of ['ex-nordic', 'ex-ghr', 'ex-reverse-nordic']) {
+      const e = s.exercises.find(x => x.id === id);
+      if (e && e.maxReps == null) e.maxReps = base.exercises.find(x => x.id === id).maxReps;
+    }
+    s.version = 11;
+  }
   return s;
 }
 
