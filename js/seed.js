@@ -200,6 +200,7 @@ export function seed() {
     families, exercises, schemes, slots,
     mobility: mobilitySeed(), // separate from strength: { exercises, routines, sessions }
     plans: [],
+    programs: {}, // fixed programs you're running (js/programs.js), e.g. aa2: { startedAt, week, day, finished, verticals }
     sessions: [],
     sets: [],
     timer: null, // running rest timer: { endsAt, total, blockId, setId, next, warned, alerted }

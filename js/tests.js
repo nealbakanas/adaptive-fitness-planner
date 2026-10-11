@@ -5,6 +5,7 @@ import { migrate } from './store.js';
 import * as FN from './fitnotes.js';
 import * as G from './goals.js';
 import * as M from './mobility.js';
+import * as P from './programs.js';
 
 const results = [];
 const test = (name, fn) => {
@@ -797,6 +798,38 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
+});
+
+test('Air Alert 2: the chart, each week\'s dose, and moving through 12 weeks of 5 days', () => {
+  const d = P.programDef('aa2');
+  eq([P.weeksOf(d), d.days, d.exercises.length], [12, 5, 5]);
+  ok(d.chart.every(w => w.length === 5), 'five exercises every week');
+  eq(P.dayPlan(d, 1).map(e => `${e.name} ${e.sets}x${e.reps}`), ['Leap ups 2x25', 'Calf raises 2x10', 'Step ups 2x10', 'Thrust ups 2x15', 'Burnouts 1x100']);
+  eq(P.dayPlan(d, 7).map(e => [e.sets, e.reps]), [[1, 125], [2, 45], [2, 25], [2, 50], [1, 700]]);
+  eq(P.dayPlan(d, 12).map(e => [e.sets, e.reps]), [[2, 200], [2, 70], [2, 40], [2, 100], [1, 1200]]);
+  eq(M.doseText(P.dayPlan(d, 1)[1]), '2 × 10/side', 'calf raises are each leg');
+  const s = seed();
+  eq(P.progress(s, 'aa2'), null, 'optional: not running until started');
+  P.startProgram(s, 'aa2');
+  for (let i = 0; i < 5; i++) P.advance(s, 'aa2');
+  eq([P.progress(s, 'aa2').week, P.progress(s, 'aa2').day], [2, 1], 'five days make a week');
+  for (let i = 0; i < 55; i++) P.advance(s, 'aa2');
+  ok(P.progress(s, 'aa2').finished, 'done after 60 days');
+  P.setWeek(s, 'aa2', 4);
+  eq([P.progress(s, 'aa2').week, P.progress(s, 'aa2').day, P.progress(s, 'aa2').finished], [4, 1, false]);
+  s.programs.aa2 = { stopped: true, verticals: [{ week: 1, value: 24 }] };
+  eq(P.progress(s, 'aa2'), null, 'stopped');
+  P.startProgram(s, 'aa2');
+  eq(P.progress(s, 'aa2').verticals.length, 1, 'restarting keeps your verticals');
+  // Program sessions aren't mobility: the week summary leaves them out.
+  const item = { ...M.newItem(s, P.dayPlan(d, 1)[0]), def: P.dayPlan(d, 1)[0] };
+  eq(item.sets.map(x => x.reps), [25, 25], 'rows prefilled with the week\'s reps');
+  item.sets[0] = { ...item.sets[0], done: true, at: Date.now() };
+  s.mobility.sessions.push({ id: 'p1', day: L.dayKey(), startedAt: Date.now(), status: 'done', items: [item], program: { id: 'aa2', week: 1, day: 1 } });
+  const wk = L.weekBounds(s);
+  eq(M.weekSummary(s, wk.start, wk.end).sessions, 0);
+  eq(P.daysDoneByWeek(s, 'aa2'), { 1: 1 });
+  ok(P.doneToday(s, 'aa2', L.dayKey()));
 });
 
 // ---------- render ----------

@@ -312,6 +312,37 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
   click('[data-act=recheck]');
 });
 
+step('Air Alert 2: optional, started from Plans, one day per finished session', () => {
+  click('[data-act=nav][data-tab=today]');
+  if (q('[data-act=finish]')) { click('[data-act=finish]'); if (q('[data-act=finishNow]')) click('[data-act=finishNow]'); }
+  check('offered on check-in, not started', !!q('[data-act=progOpen][data-id=aa2]') && !q('[data-act=progSession]'));
+  click('[data-act=progOpen][data-id=aa2]');
+  check('program page with the 12-week chart', /Air Alert 2/.test(text()) && qa('.progchart tbody tr').length === 12 && /1×1200/.test(text()));
+  setVal(q('[data-vert="aa2|1"]'), '24');
+  check('a vertical can be logged before starting', state.programs.aa2?.verticals?.[0]?.value === 24);
+  click('[data-act=progStart][data-id=aa2]');
+  check('week 1 is highlighted', q('.progchart tr.cur th')?.textContent === '1');
+  click('[data-act=progSession][data-id=aa2]');
+  check('session with the week 1 dose', /Jump program/.test(text()) && /week 1, day 1/.test(text()) && qa('section.block.mob').length === 5 && /2 × 25/.test(text()), text().slice(0, 300));
+  check('rows prefilled with the reps', q('section.block.mob input[data-f=reps]')?.value === '25');
+  click(q('section.block.mob [data-act=mcheck]'));
+  click('[data-act=mobFinish]');
+  check('finishing moves to day 2', state.programs.aa2.week === 1 && state.programs.aa2.day === 2, JSON.stringify(state.programs.aa2));
+  check('check-in card shows the next day and done today', /week 1 of 12, day 2 of 5/.test(text()) && /Done today/.test(text()), text().slice(0, 500));
+  click('[data-act=nav][data-tab=week]');
+  check('week tab shows program days, not as mobility', /Air Alert 2/.test(text()) && /1 of 5 days this week/.test(text()));
+  click('[data-act=histOpen]');
+  check('history lists it', /Air Alert 2 · week 1, day 1/.test(text()) && /Leap ups/.test(text()));
+  click('[data-act=nav][data-tab=plans]');
+  click('[data-act=progOpen][data-id=aa2]');
+  setVal(q('[data-progweek=aa2]'), '6');
+  check('jump to a week', state.programs.aa2.week === 6 && state.programs.aa2.day === 1);
+  click('[data-act=progStop][data-id=aa2]');
+  click('[data-act=confirmYes]');
+  check('stop keeps verticals', !!state.programs.aa2.stopped && state.programs.aa2.verticals.length === 1);
+  click('[data-act=nav][data-tab=today]');
+});
+
 step('hold timer logs a timed set and starts the rest', () => {
   click('[data-act=nav][data-tab=today]');
   if (!q('[data-act=addEx]')) { click('[data-k=locationId][data-v=loc-basement]'); click('[data-act=suggest]'); }

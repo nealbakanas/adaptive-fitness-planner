@@ -98,7 +98,7 @@ export function weekSummary(state, start, end) {
       for (const s of it.sets) if (s.done) days.add(new Date(s.at).toDateString());
     }
   };
-  for (const m of state.mobility?.sessions || []) count(m.id, m.items);
+  for (const m of state.mobility?.sessions || []) if (!m.program) count(m.id, m.items); // programs (Air Alert) aren't mobility
   for (const s of state.sessions || []) count(s.id, s.mobility);
   return { sessions, days: days.size, parts: BODY_PARTS.filter(p => parts.has(p)) };
 }

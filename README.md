@@ -25,6 +25,7 @@ After the first visit it works offline: `sw.js` fetches from the network first (
 | `js/logic.js` | Pure rules: estimated max, dose crediting, slot scoring, scheme/exercise choice |
 | `js/app.js` | Views, bottom sheets, rest timer, event handling |
 | `js/goals.js` | Suggested weekly goals from history (pure functions) |
+| `js/programs.js` | Fixed multi-week programs (Air Alert 2): chart, exercises, progress (pure functions) |
 | `js/fitnotes.js` | FitNotes import: reads a `.fitnotes` backup with sql.js, then plain functions plan and apply the import |
 | `sw.js` | Offline cache and background rest-over notifications |
 | `tests.html`, `smoke.html` | Rules tests and a UI smoke test. Open them in the browser. Each uses its own storage key, so they never touch real data. `smoke.html?fitnotes=<url of a backup>` also runs a full import through the screens and undoes it |
@@ -82,6 +83,15 @@ For days when your weekly goals are (nearly) done but you have time and energy. 
 - **Explosive** (if picked): one explosive exercise for that region first, whole-body lifts (cleans) counting for either. Power work (T1 for cleans, T2 for jumps) when fresh, technique when tired or after heavy work in the region, same as suggestions. No upper-body explosive lift available: cleans lead instead, else it says so.
 - **Main lift**: from the movement pattern trained heavy least recently (upper: push or pull; lower: squat pattern or hinge), a loaded lift you do, T1, or T2 when you're tired, picked Easy, or did heavy work in that region since yesterday. **Second lift**: the other pattern at T2 (skipped on Easy).
 - **Accessories** (T3, no barbell setups): a rotation for the region (upper: pull, push, pull, core, push; lower: hinge, squat pattern, calves, core, hinge), the ones you do but haven't done for longest first, grouped into supersets as usual. *How this was built* explains each pick; *+ Time* adds more accessories.
+
+## Programs: Air Alert 2
+
+An optional 12-week jump program, kept separate like mobility: it never counts toward weekly goals, estimated maxes or the heavy-work readiness rules. Start it from Plans → Programs (or the Programs row on check-in).
+
+- **The chart** (TMT Sports' Air Alert II): leap ups, calf raises (each leg), step ups, thrust ups and burnouts, Monday to Friday, the same workout every day of a week, from 2×25 / 2×10 / 2×10 / 2×15 / 1×100 in week 1 to 2×200 / 2×70 / 2×40 / 2×100 / 1×1200 in week 12. Thrust-up and burnout cues are written for the app (the source sheet was cut off).
+- **Progress**: check-in shows *Week 3 of 12, day 2 of 5* with today's doses and *Start today's session*. A session is logged like mobility (reps prefilled, 1:00 rest, notes, last time). Finishing one with anything logged moves to the next day; after day 5, the next week. On the program page you can restart the week, jump to any week, or stop (sessions and verticals stay). After 7+ days away it suggests repeating a week; on weekends it reminds you program days are Monday to Friday.
+- **Progress chart**: the 12-week table with days done per week and a vertical jump entry per week (in, or cm with kg units), like the sheet's progress chart.
+- Sessions show in History (*Air Alert 2 · week 1, day 1*) and as a line on the Week tab, not in the mobility body-part summary.
 
 ## Suggested weekly goals
 

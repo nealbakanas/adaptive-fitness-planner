@@ -3,6 +3,7 @@ import * as L from './logic.js';
 import * as FN from './fitnotes.js';
 import * as G from './goals.js';
 import * as M from './mobility.js';
+import * as P from './programs.js';
 
 const appEl = document.getElementById('app');
 const navEl = document.getElementById('nav');
@@ -103,6 +104,9 @@ function lastTime(exerciseId) {
 // ---------- mobility (its own exercises and sessions; no tiers, goals or maxes) ----------
 
 const mobEx = id => L.byId(state.mobility.exercises, id);
+// A logged item's exercise: a program item carries its own (with that week's dose), else the mobility library's.
+const itemEx = it => it.def ?? mobEx(it.exerciseId);
+const progLabel = m => m.program ? `${P.programDef(m.program.id)?.name ?? 'Program'} · week ${m.program.week}, day ${m.program.day}` : null;
 const fmtAgo = t => { const d = Math.floor((L.startOfDay() - L.startOfDay(t)) / 864e5); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
 
 function currentMobility() {
@@ -127,7 +131,12 @@ function trimMobility(items) {
 
 function endMobility(m) {
   m.items = trimMobility(m.items);
-  if (m.items.length) { m.status = 'done'; m.endedAt = Date.now(); }
+  if (m.items.length) {
+    m.status = 'done'; m.endedAt = Date.now();
+    // A program day with anything logged moves the program on, unless you've moved it yourself since.
+    const p = m.program && P.progress(state, m.program.id);
+    if (p && p.week === m.program.week && p.day === m.program.day) P.advance(state, m.program.id);
+  }
   else state.mobility.sessions = state.mobility.sessions.filter(x => x !== m);
 }
 
@@ -141,7 +150,7 @@ function startMobility(items, extra = {}) {
 function nextMobLabel(list, item) {
   for (const it of [item, ...list.filter(x => x !== item)]) {
     const i = it.sets.findIndex(s => !s.done);
-    if (i >= 0) return `${mobEx(it.exerciseId)?.name ?? ''} · set ${i + 1}`;
+    if (i >= 0) return `${itemEx(it)?.name ?? ''} · set ${i + 1}`;
   }
   return null;
 }
@@ -375,7 +384,7 @@ function startTimer(s, b, setId = null) {
 }
 
 function startMobTimer(list, item, set) {
-  const secs = mobEx(item.exerciseId)?.restSec || 0;
+  const secs = itemEx(item)?.restSec || 0;
   if (!secs) return;
   state.timer = { endsAt: Date.now() + secs * 1000, total: secs, blockId: null, setId: set.id, next: nextMobLabel(list, item), warned: false, alerted: false };
   setWakeLock(true);
@@ -603,6 +612,65 @@ const focusName = (r, x) => `${r === 'upper' ? 'Upper' : 'Lower'} body${x ? ' + 
 const focusButtons = () => `<div class="focusgrid">${L.FOCUS_REGIONS.flatMap(r => [false, true].map(x =>
   `<button data-act="focus" data-r="${r}" ${x ? 'data-x="1"' : ''}>${focusName(r, x)}</button>`)).join('')}</div>`;
 
+// Started programs: today's session and where you are. Programs not started are offered under Plans.
+function programCards() {
+  const started = P.PROGRAMS.filter(d => P.progress(state, d.id));
+  if (!started.length) {
+    return `<div class="field"><label>Programs</label><div class="list">${P.PROGRAMS.map(d =>
+      `<button class="row" data-act="progOpen" data-id="${d.id}"><span>${esc(d.name)}</span><span class="meta">${P.weeksOf(d)}-week jump program · optional ›</span></button>`).join('')}</div></div>`;
+  }
+  return started.map(d => {
+    const p = P.progress(state, d.id);
+    if (p.finished) {
+      return `<div class="card prog"><b>${esc(d.name)}: all ${P.weeksOf(d)} weeks done</b>
+        <div class="brow"><button class="small" data-act="progOpen" data-id="${d.id}">See your progress</button></div></div>`;
+    }
+    const today = P.doneToday(state, d.id, L.dayKey());
+    const last = P.lastSessionAt(state, d.id);
+    const gap = last ? Math.floor((L.startOfDay() - L.startOfDay(last)) / 864e5) : null;
+    const weekend = [0, 6].includes(new Date().getDay());
+    const hint = today ? 'Done today ✓' : gap >= 7 ? `${gap} days since your last session: consider repeating week ${Math.max(1, p.week - 1)}.`
+      : weekend ? 'Program days are Monday to Friday.' : '';
+    const dose = P.dayPlan(d, p.week).map(e => `${e.name} ${M.doseText(e)}`).join(' · ');
+    return `<div class="card prog"><div><b>${esc(d.name)}</b> · week ${p.week} of ${P.weeksOf(d)}, day ${p.day} of ${d.days}</div>
+      <div class="meta">${esc(dose)}</div>${hint ? `<div class="meta ${today ? 'good' : ''}">${esc(hint)}</div>` : ''}
+      <div class="brow"><button class="${today ? '' : 'primary'}" data-act="progSession" data-id="${d.id}">Start ${today ? 'another' : "today's"} session</button>
+        <button data-act="progOpen" data-id="${d.id}">Program ›</button></div></div>`;
+  }).join('');
+}
+
+function viewProgram(id) {
+  const d = P.programDef(id), p = P.progress(state, id);
+  const done = P.daysDoneByWeek(state, id);
+  const vert = Object.fromEntries((state.programs?.[id]?.verticals || []).map(v => [v.week, v.value]));
+  const vu = unit() === 'kg' ? 'cm' : 'in';
+  const names = d.exercises.map(e => e.short ?? e.name);
+  const rows = d.chart.map((wk, i) => {
+    const w = i + 1, cur = p && !p.finished && p.week === w;
+    return `<tr class="${cur ? 'cur' : ''} ${(done[w] || 0) >= d.days ? 'full' : ''}"><th>${w}</th>${wk.map(([sets, reps]) => `<td>${sets}×${reps}</td>`).join('')}
+      <td>${done[w] ? `${done[w]}/${d.days}` : ''}</td>
+      <td><input class="vert" inputmode="decimal" data-vert="${id}|${w}" value="${esc(vert[w] ?? '')}" aria-label="Vertical, week ${w}"></td></tr>`;
+  }).join('');
+  let h = `<header class="top sub"><button class="back" data-act="progClose">‹ Plans</button></header><h1 class="pagetitle">${esc(d.name)}</h1>
+    <p class="meta pad">${P.weeksOf(d)} weeks, ${d.days} days a week: ${esc(d.schedule)} It's separate from your weekly goals: it doesn't count toward them or affect suggestions.</p>`;
+  if (!p) {
+    h += `<button class="primary big" data-act="progStart" data-id="${id}">Start the program at week 1</button>`;
+  } else if (p.finished) {
+    h += `<div class="card"><b>All ${P.weeksOf(d)} weeks done.</b> <button class="link" data-act="progStart" data-id="${id}">Start over</button></div>`;
+  } else {
+    h += `<div class="card"><div><b>Week ${p.week}, day ${p.day} of ${d.days}</b></div>
+      <div class="brow"><button class="primary" data-act="progSession" data-id="${id}">Start today's session</button>
+        ${p.day > 1 || p.week > 1 ? `<button data-act="progWeek" data-id="${id}" data-w="${p.week}">Restart week ${p.week}</button>` : ''}
+        <select data-progweek="${id}" aria-label="Go to week">${opts(d.chart.map((_, i) => [i + 1, `Go to week ${i + 1}`]), p.week)}</select>
+        <button class="quiet" data-act="progStop" data-id="${id}">Stop</button></div></div>`;
+  }
+  h += `<div class="label">Workout chart <span class="hint">sets × reps, every program day that week · vertical in ${vu}</span></div>
+    <div class="card flush tablewrap"><table class="progchart"><thead><tr><th>Wk</th>${names.map(n => `<th>${esc(n)}</th>`).join('')}<th>Days</th><th>Vert</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="label">The exercises</div><div class="card">${d.exercises.map(e => `<p><b>${esc(e.name)}</b>${e.perSide ? ' · each leg' : ''}<br><span class="meta">${esc(e.cues)}</span>
+      ${M.videoSearch(e.video) ? ` <a class="small" href="${esc(M.videoSearch(e.video))}" target="_blank" rel="noopener">▶ Video</a>` : ''}</p>`).join('')}</div>`;
+  return h;
+}
+
 function viewCheckin() {
   const ci = ui.ci;
   const doneToday = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'done');
@@ -628,6 +696,7 @@ function viewCheckin() {
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
     <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals</span></label>${focusButtons()}</div>`;
+  h += programCards();
   const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
   h += `<div class="field"><label>Mobility <span class="hint">its own session, outside your weekly goals</span></label><div class="list">${state.mobility.routines.map(r =>
     `<button class="row" data-act="mobStart" data-id="${r.id}"><span>${esc(r.name)}</span><span class="meta">${r.items.length} exercises${lastRoutine(r.id)}</span></button>`).join('')}
@@ -795,7 +864,7 @@ function viewBlock(s, b, credit, idea = null) {
 }
 
 function viewMobItem(item) {
-  const ex = mobEx(item.exerciseId);
+  const ex = itemEx(item);
   if (!ex) return '';
   const t = ex.track, last = M.lastFor(state, ex.id, item.id);
   const input = (st, f, mode, ph = '—') => `<input class="num${f === 'extra' ? ' wide' : ''}" inputmode="${mode}" data-mset="${item.id}|${st.id}" data-f="${f}" value="${esc(st[f])}" placeholder="${esc(ph)}">`;
@@ -812,8 +881,8 @@ function viewMobItem(item) {
   const vid = M.videoSearch(ex.video);
   const day = x => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return `<section class="block mob">
-    <div class="bhead"><span class="tier MOB">MOB</span><span class="mobname">${esc(ex.name)}</span></div>
-    <div class="meta">${esc(M.doseText(ex))} · rest ${clock(ex.restSec || 0)} · ${esc(ex.parts.join(', '))}</div>
+    <div class="bhead"><span class="tier MOB">${item.def ? 'JUMP' : 'MOB'}</span><span class="mobname">${esc(ex.name)}</span></div>
+    <div class="meta">${esc([M.doseText(ex), `rest ${clock(ex.restSec || 0)}`, ex.parts.join(', ')].filter(Boolean).join(' · '))}</div>
     ${last ? `<div class="dose">Last time (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
     <div class="sets">${rows}</div>
     <input class="mobnote" data-mnote="${item.id}" value="${esc(item.note)}" placeholder="Notes for today: depth, pain, how it felt">
@@ -830,8 +899,10 @@ function viewMobItem(item) {
 function viewMobSession(m, workoutOpen) {
   const total = m.items.reduce((n, it) => n + it.sets.length, 0);
   const done = m.items.reduce((n, it) => n + it.sets.filter(s => s.done).length, 0);
-  const title = L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Your picks');
-  let h = `<header class="top"><div><h1>Mobility</h1><div class="sub">${esc(title)} · ${done}/${total} sets</div></div><span class="badge mobility">mobility</span></header>`;
+  const title = progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Your picks');
+  let h = `<header class="top"><div><h1>${m.program ? 'Jump program' : 'Mobility'}</h1><div class="sub">${esc(title)} · ${done}/${total} sets</div></div>
+    <span class="badge mobility">${m.program ? 'program' : 'mobility'}</span></header>`;
+  if (m.program) h += `<p class="meta pad">${esc(P.programDef(m.program.id)?.schedule ?? '')} Log what you did; finishing moves the program to the next day.</p>`;
   if (workoutOpen) h += `<div class="banner">Your workout is still open. <button class="link" data-act="showWorkout">Switch to it</button></div>`;
   h += m.items.map(viewMobItem).join('') || '<div class="card muted">Nothing here yet. Add some mobility work below.</div>';
   return h + `<button class="addblock" data-act="mobPick" data-mode="session">+ Add mobility</button>
@@ -923,6 +994,13 @@ function viewWeek() {
     ? `<p>${mw.sessions} session${mw.sessions === 1 ? '' : 's'} on ${mw.days} day${mw.days === 1 ? '' : 's'}. Highlighted: body parts you've worked.</p>
       <div class="chips">${M.BODY_PARTS.map(p => `<span class="chip ${mw.parts.includes(p) ? 'on' : ''}">${esc(p)}</span>`).join('')}</div>`
     : '<p class="muted">None yet. Start one from Today, or add mobility to a workout.</p>'}</div>`;
+  for (const d of P.PROGRAMS) {
+    const p = P.progress(state, d.id);
+    if (!p) continue;
+    const n = P.programSessions(state, d.id).filter(m => m.startedAt >= c.start && m.startedAt < c.end).length;
+    h += `<button class="card row" data-act="progOpen" data-id="${d.id}"><span><b>${esc(d.name)}</b>
+      <span class="meta">${n} of ${d.days} days this week · ${p.finished ? 'finished' : `next: week ${p.week}, day ${p.day}`}</span></span><span>›</span></button>`;
+  }
   return h;
 }
 
@@ -940,7 +1018,7 @@ function historyEntries(q) {
     if (!bySession.has(st.sessionId)) bySession.set(st.sessionId, []);
     bySession.get(st.sessionId).push(st);
   }
-  const mobLines = items => (items || []).filter(it => it.sets.some(x => x.done) && match(mobEx(it.exerciseId)?.name));
+  const mobLines = items => (items || []).filter(it => it.sets.some(x => x.done) && match(itemEx(it)?.name));
   const out = [];
   for (const s of state.sessions) {
     const sets = (bySession.get(s.id) || []).sort((a, b) => a.loggedAt - b.loggedAt);
@@ -1002,14 +1080,14 @@ function viewHistory(hs) {
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
       if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
     } else {
-      bits.push(L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
+      bits.push(progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
       if (m.status === 'open') bits.push('in progress');
     }
     const lines = e.groups.map(g => `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(g.ex?.name ?? '?')}</span>
       <span class="meta">${esc(histSets(g))}</span></span></div>`).join('')
       + e.mob.map(it => {
-        const ex = mobEx(it.exerciseId);
-        return `<div class="histex"><span class="tier MOB">MOB</span><span class="grow"><span class="name">${esc(ex?.name ?? '?')}</span>
+        const ex = itemEx(it);
+        return `<div class="histex"><span class="tier MOB">${it.def ? 'JUMP' : 'MOB'}</span><span class="grow"><span class="name">${esc(ex?.name ?? '?')}</span>
           <span class="meta">${esc(ex ? M.itemText(ex, it, unit()) : '')}${it.note ? ` · “${esc(it.note)}”` : ''}</span></span></div>`;
       }).join('');
     return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span></div>${lines}</div>`;
@@ -1053,6 +1131,7 @@ function exerciseOptions(sel) {
 }
 
 function viewPlans() {
+  if (ui.program) return viewProgram(ui.program);
   if (ui.mobRoutine) return viewMobRoutine(ui.mobRoutine);
   const p = ui.plan;
   if (p) {
@@ -1076,6 +1155,12 @@ function viewPlans() {
   h += state.mobility.routines.map(r => `<button class="card row" data-act="mobRoutineEdit" data-id="${r.id}"><span><b>${esc(r.name)}</b>
     <span class="meta">${esc(r.items.map(id => mobEx(id)?.name ?? '?').join(' · '))}</span></span><span>›</span></button>`).join('')
     || '<p class="muted">No mobility routines yet.</p>';
+  h += `<div class="sectionhead"><h3>Programs</h3></div>`;
+  h += P.PROGRAMS.map(d => {
+    const p = P.progress(state, d.id);
+    const where = !p ? `${P.weeksOf(d)} weeks · not started` : p.finished ? 'finished' : `week ${p.week}, day ${p.day}`;
+    return `<button class="card row" data-act="progOpen" data-id="${d.id}"><span><b>${esc(d.name)}</b><span class="meta">Jump program · ${where}</span></span><span>›</span></button>`;
+  }).join('');
   return h;
 }
 
@@ -1804,6 +1889,7 @@ const actions = {
     ui.setPage = null;
     if (d.tab !== 'week') ui.goalsUndo = null;
     ui.history = null;
+    if (d.tab !== 'plans') ui.program = null;
     render(); window.scrollTo(0, 0);
   },
 
@@ -2075,6 +2161,27 @@ const actions = {
     startMobility(r.items.map(mobEx).filter(e => e && !e.archived).map(e => M.newItem(state, e)), { routineId: r.id });
     save(); render(); window.scrollTo(0, 0);
   },
+  progOpen: d => { ui.program = d.id; ui.mobRoutine = null; ui.plan = null; ui.tab = 'plans'; render(); window.scrollTo(0, 0); },
+  progClose: () => { ui.program = null; render(); window.scrollTo(0, 0); },
+  progStart: d => {
+    P.startProgram(state, d.id);
+    save(); render(); toast(`${P.programDef(d.id).name}: week 1, day 1`);
+  },
+  progSession: d => {
+    if (currentMobility()) { ui.showWorkout = false; ui.tab = 'today'; render(); return toast('Finish or discard the open mobility session first'); }
+    const p = P.progress(state, d.id), def = P.programDef(d.id);
+    if (!p || p.finished) return;
+    const items = P.dayPlan(def, p.week).map(e => ({ ...M.newItem(state, e), def: e }));
+    startMobility(items, { program: { id: d.id, week: p.week, day: p.day } });
+    ui.program = null; ui.tab = 'today';
+    save(); render(); window.scrollTo(0, 0);
+  },
+  progWeek: d => { P.setWeek(state, d.id, Number(d.w)); save(); render(); toast(`Week ${d.w}, day 1`); },
+  progStop: d => askConfirm(`Stop ${P.programDef(d.id).name}?`, 'Your sessions and verticals stay. You can start again from week 1 later.', 'Stop program', () => {
+    state.programs[d.id] = { stopped: true, verticals: state.programs[d.id]?.verticals ?? [] };
+    save(); render();
+  }),
+
   mobPick: d => {
     const ids = items => (items || []).map(i => i.exerciseId);
     const exclude = d.mode === 'session' ? ids(currentMobility()?.items) : d.mode === 'workout' ? ids(currentSession()?.mobility)
@@ -2289,7 +2396,7 @@ const actions = {
   mworkStart: d => {
     const { item } = findMobItem(d.i);
     const st = item?.sets.find(x => x.id === d.s);
-    const ex = st && mobEx(item.exerciseId);
+    const ex = st && itemEx(item);
     if (!ex) return;
     st.hold = Number(st.hold) || ex.holdMax || ex.hold || 30;
     startWork({ mset: st.id, item: item.id }, ex.name, st.hold, ex.perSide);
@@ -2742,6 +2849,19 @@ document.addEventListener('change', e => {
     const [iid, sid] = d.mset.split('|');
     const st = findMobItem(iid).item?.sets.find(x => x.id === sid);
     if (st) { st[d.f] = el.value.trim() === '' ? null : d.f === 'extra' ? el.value.trim() : Number(el.value); save(); }
+  } else if (d.vert) {
+    const [id, w] = d.vert.split('|');
+    state.programs ??= {};
+    const p = state.programs[id] ??= { stopped: true, verticals: [] }; // verticals can be logged before starting
+    {
+      p.verticals = (p.verticals || []).filter(v => v.week !== Number(w));
+      const v = Number(el.value);
+      if (el.value.trim() !== '' && v > 0) p.verticals.push({ week: Number(w), value: v, at: Date.now() });
+      save();
+    }
+  } else if (d.progweek) {
+    P.setWeek(state, d.progweek, Number(el.value));
+    save(); render(); toast(`Week ${el.value}, day 1`);
   } else if (d.mnote) {
     const it = findMobItem(d.mnote).item;
     if (it) { it.note = el.value.trim(); save(); }
