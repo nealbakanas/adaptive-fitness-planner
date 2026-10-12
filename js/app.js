@@ -11,6 +11,7 @@ const sheetEl = document.getElementById('sheet');
 
 const TABS = [['today', 'Today'], ['week', 'Week'], ['library', 'Library'], ['plans', 'Plans'], ['more', 'Settings']];
 const INTENTS = [['auto', 'You pick'], ['heavy', 'Heavy'], ['sweat', 'Sweat'], ['easy', 'Easy']];
+const LEANS = [['either', 'Either'], ['upper', 'Upper body'], ['lower', 'Lower body']];
 const TIMES = [10, 15, 20, 30, 45, 60, 90];
 const REASONS = ['Equipment busy', 'Pain / niggle', 'Preference', 'Variety', 'Time'];
 const METRICS = [['load_reps', 'Load × reps'], ['reps', 'Reps only'], ['time', 'Time'], ['distance', 'Distance'], ['none', 'None']];
@@ -34,7 +35,7 @@ function defaultCheckin() {
   return {
     locationId: last?.locationId ?? state.locations[0]?.id,
     minutes: last?.minutes ?? 45,
-    fatigue: 2, sleep: null, intent: 'auto', split: false,
+    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false,
   };
 }
 
@@ -693,6 +694,7 @@ function viewCheckin() {
     <div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${seg('energy', [1, 2, 3, 4, 5].map(n => [n, n]), 6 - ci.fatigue)}</div>
     <div class="field"><label>Sleep <span class="hint">optional · 1 poor · 5 great · tap again to clear</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
     <div class="field"><label>Intent</label>${seg('intent', INTENTS, ci.intent)}</div>
+    <div class="field"><label>Lean <span class="hint">which half feels up for it today</span></label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
     <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals</span></label>${focusButtons()}</div>`;
@@ -715,16 +717,17 @@ function viewSession(s) {
   const intent = INTENTS.find(i => i[0] === s.intent)?.[1] ?? s.intent;
   const rest = restSummary(state.sets.filter(x => x.sessionId === s.id));
   let h = `<header class="top"><div><h1>Today</h1>
-    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)} · est ${est} min</div>${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
+    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)}${L.leanOf(s) ? ` · leaning ${L.leanOf(s)}` : ''} · est ${est} min</div>${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
     ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
     <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   if (!s.blocks.length) {
     h += `<div class="card muted">Nothing from your weekly goals fits this location and time. Add an exercise below, use a plan, or check in with more time.</div>`;
   }
-  // Goals nearly done: the suggestion fills little of the time. Offer a full workout instead.
-  if (s.source === 'suggested' && sessionBudget(s) >= Math.max(15, s.minutes * 0.4) && !state.sets.some(x => x.sessionId === s.id && x.done)) {
-    h += `<div class="card focusoffer"><b>${s.blocks.length ? `Your open goals only fill about ${s.minutes - sessionBudget(s)} of your ${s.minutes} minutes.` : 'Nothing left from your goals here.'}</b>
-      <p class="meta">Want a full workout instead? It uses your whole library and still counts toward any goal it matches.</p>${focusButtons()}</div>`;
+  // Goals nearly done: they fill little of the time and the rest came from the library. Offer a focused workout instead.
+  const goalMin = s.goalMinutes ?? s.minutes - sessionBudget(s);
+  if (s.source === 'suggested' && s.minutes - goalMin >= Math.max(15, s.minutes * 0.4) && !state.sets.some(x => x.sessionId === s.id && x.done)) {
+    h += `<div class="card focusoffer"><b>${goalMin > 0 ? `Your open goals only fill about ${goalMin} of your ${s.minutes} minutes.` : 'Nothing left from your goals here.'}</b>
+      <p class="meta">${s.blocks.length ? 'The rest is from your library (see How this was built). Or pick a focused workout instead; ' : 'Want a full workout instead? '}it uses your whole library and still counts toward any goal it matches.</p>${focusButtons()}</div>`;
   }
   // Each superset partner renders right after the block it's paired with.
   const ordered = [];
@@ -1952,7 +1955,7 @@ const actions = {
   suggest: () => {
     const res = L.buildSuggestion(state, ui.ci);
     const why = res.scored.map(c => ({ label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
-    createSession(res.blocks, 'suggested', { why, ready: res.ready });
+    createSession(res.blocks, 'suggested', { why, ready: res.ready, goalMinutes: res.goalMinutes, focusNotes: res.notes });
     render(); window.scrollTo(0, 0);
   },
 
@@ -1975,6 +1978,7 @@ const actions = {
       for (const b of res.blocks) genSets(s, b);
       Object.assign(s, extra, { source: 'focus' });
       delete s.why;
+      delete s.goalMinutes;
       save();
     } else {
       s = createSession(res.blocks, 'focus', extra);
@@ -2144,12 +2148,13 @@ const actions = {
       ? L.buildFocus(state, { ...s, minutes: extra }, { region: s.focusRegion, accessoriesOnly: true }, Date.now(), { excludeFamilies })
       : L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies });
     s.minutes += extra;
+    if (res.notes?.length) s.focusNotes = [...(s.focusNotes || []), ...res.notes];
     s.blocks.push(...res.blocks);
     L.pairT3s(state, s.blocks);
     for (const b of res.blocks) genSets(s, b);
     ui.sheet = null;
     save(); render();
-    toast(res.blocks.length ? `Added ${res.blocks.map(b => exOf(b.exerciseId)?.name).join(', ')}` : 'Nothing else from your goals fits. Add an exercise below.');
+    toast(res.blocks.length ? `Added ${res.blocks.map(b => exOf(b.exerciseId)?.name).join(', ')}` : 'Nothing else fits. Add an exercise below.');
   },
 
   showWorkout: () => { ui.showWorkout = true; render(); window.scrollTo(0, 0); },

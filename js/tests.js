@@ -766,10 +766,70 @@ test('goals nearly done: suggestion is thin but a focused workout still fills th
   }
   const open = [...credit().slots.values()].filter(r => r.filled < r.slot.quota).map(r => r.slot.familyId);
   eq(open, ['fam-incline']);
-  const sug = L.buildSuggestion(s, ci({ minutes: 60 }));
-  ok(sug.blocks.length === 1, 'only incline from goals');
+  const thin = L.buildSuggestion(s, ci({ minutes: 60 }), Date.now(), { fill: false });
+  ok(thin.blocks.length === 1, 'only incline from goals');
   const f = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper' });
   ok(f.blocks.length >= 4 && f.minutesUsed >= 40, `${f.blocks.length} blocks, ${f.minutesUsed} min`);
+  // By default the suggestion fills the rest of the hour from the library, with T2 and T3 work.
+  const name = id => s.exercises.find(e => e.id === id).name;
+  const sug = L.buildSuggestion(s, ci({ minutes: 60 }));
+  eq(sug.blocks.filter(b => b.slotId === 'sl-t2-incline').length, 1, 'the open goal is still in it');
+  ok(sug.goalMinutes <= 15 && sug.minutesUsed >= 54 && sug.minutesUsed <= 60, `goals ${sug.goalMinutes} min, used ${sug.minutesUsed}: ${sug.blocks.map(b => name(b.exerciseId))}`);
+  ok(sug.blocks.some(b => b.tier === 'T2' && b.slotId !== 'sl-t2-incline') && sug.blocks.filter(b => b.tier === 'T3').length >= 3, 'T2 and T3 fill');
+  ok(/library/.test(sug.notes[0]), 'explained');
+  // Leaning lower: the extra T2 lift is lower body and lower-body accessories come first.
+  const low = L.buildSuggestion(s, ci({ minutes: 60, lean: 'lower' }));
+  const extra = low.blocks.filter(b => b.slotId !== 'sl-t2-incline');
+  ok(extra.filter(b => b.tier === 'T2').every(b => L.bodyRegion(s, s.exercises.find(e => e.id === b.exerciseId)) === 'lower'), `T2: ${extra.map(b => name(b.exerciseId))}`);
+  const firstT3s = low.notes.filter(n => /^T3/.test(n)).slice(0, 3).join(' | ');
+  ok(!/pull|push|dip|curl|press/i.test(firstT3s), `lower accessories first: ${firstT3s}`);
+  // Easy day: no extra T2 lift, just accessories.
+  const easy = L.buildSuggestion(s, ci({ minutes: 60, intent: 'easy' }));
+  ok(!easy.blocks.some(b => b.tier === 'T2' && b.slotId !== 'sl-t2-incline'), 'no T2 fill on an easy day');
+  ok(L.buildSuggestion(s, ci({ minutes: 60 }), Date.now(), { excludeFamilies: ['fam-incline'] }).minutesUsed >= 50, '+ Time fills from the library too');
+});
+test('lean: goals for the half you lean toward come first', () => {
+  const s = seed();
+  const score = (lean, fam) => L.scoreSlots(s, ci({ lean })).find(c => c.slot.familyId === fam)?.score;
+  ok(score('lower', 'fam-squat') > score('either', 'fam-squat') && score('upper', 'fam-squat') < score('either', 'fam-squat'), 'squat');
+  ok(score('upper', 'fam-vpull') > score('either', 'fam-vpull') && score('lower', 'fam-vpull') < score('either', 'fam-vpull'), 'pull-ups');
+  eq(score('lower', 'fam-core'), score('either', 'fam-core'), 'core is neither half');
+  eq(score('lower', 'fam-clean'), score('either', 'fam-clean'), 'cleans are whole body');
+  const t1 = lean => L.buildSuggestion(s, ci({ minutes: 45, lean }), Date.now(), { fill: false }).blocks.find(b => b.tier === 'T1')?.exerciseId;
+  eq(t1('lower'), 'ex-back-squat');
+  eq(t1('upper'), 'ex-wpullup');
+});
+test('explosive lower: jumps, one or two cleans, then lower back, leg and core accessories, filling the hour', () => {
+  const s = seed();
+  const ex = b => s.exercises.find(e => e.id === b.exerciseId);
+  const r = L.buildFocus(s, ci({ minutes: 60 }), { region: 'lower', explosive: true });
+  const names = r.blocks.map(b => `${b.tier} ${ex(b).name}`).join(', ');
+  eq(ex(r.blocks[0]).familyId, 'fam-jumps', names);
+  const cleans = r.blocks.filter(b => ex(b).familyId === 'fam-clean');
+  ok(cleans.length >= 1 && cleans.length <= 2 && r.blocks.indexOf(cleans[0]) === 1, `cleans after the jumps: ${names}`);
+  ok(cleans.every(b => s.schemes.find(x => x.id === b.schemeId).reps <= 3), 'cleans in sets of 1-3');
+  const t3 = r.blocks.filter(b => b.tier === 'T3').map(ex);
+  ok(t3.length >= 2, names);
+  ok(t3.some(e => /back extension|reverse hyper|sorensen/i.test(e.name)) && t3.some(e => L.movementPattern(s, e) === 'core'), `lower back and core: ${names}`);
+  ok(r.blocks.every(b => L.bodyRegion(s, ex(b)) !== 'upper'), `nothing upper: ${names}`);
+  ok(r.minutesUsed >= 55 && r.minutesUsed <= 60, `${r.minutesUsed} min: ${names}`);
+  // 30 minutes: one clean, a couple of accessories.
+  const short = L.buildFocus(s, ci({ minutes: 30 }), { region: 'lower', explosive: true });
+  ok(short.blocks.filter(b => ex(b).familyId === 'fam-clean').length === 1 && short.minutesUsed <= 30, short.blocks.map(b => ex(b).name).join(', '));
+});
+test('focused workouts use the whole time block', () => {
+  const s = seed();
+  for (const region of ['upper', 'lower']) {
+    for (const explosive of [false, true]) {
+      for (const minutes of [30, 45, 60]) {
+        const r = L.buildFocus(s, ci({ minutes }), { region, explosive });
+        ok(r.minutesUsed <= minutes && r.minutesUsed >= minutes * 0.8, `${region}${explosive ? ' + explosive' : ''} ${minutes}: ${r.minutesUsed} min`);
+      }
+    }
+  }
+  // Goal lifts aren't accessory filler.
+  const r = L.buildSuggestion(s, ci({ minutes: 90 }));
+  ok(!r.blocks.some(b => b.tier === 'T3' && ['ex-wpullup', 'ex-wdip', 'ex-back-squat'].includes(b.exerciseId)), 'no goal lifts as T3');
 });
 
 test('T3 schemes: sets of 8-15, not 2×25, and hard bodyweight moves stay under their cap', () => {

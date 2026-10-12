@@ -301,8 +301,12 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
   const saved = state.slots;
   state.slots = state.slots.filter(x => x.familyId === 'fam-incline');
   click('[data-k=minutes][data-v="60"]');
+  click('[data-k=lean][data-v=lower]');
+  check('lean picked', q('[data-k=lean][data-v=lower]').classList.contains('on'));
   click('[data-act=suggest]');
   check('thin suggestion offers a focused workout', !!q('.focusoffer [data-act=focus]'), text().slice(0, 300));
+  check('and fills the hour from the library anyway', qa('section.block').length >= 5 && Number(/est (\d+) min/.exec(text())?.[1]) >= 50 && /leaning lower/.test(text()), text().slice(0, 300));
+  check('says how the rest was filled', qa('details.why').some(d => /rest is from your library, leaning lower-body/.test(d.textContent)));
   click('.focusoffer [data-act=focus][data-r=upper]');
   check('replaced with an upper workout', /Upper body/i.test(q('.badge')?.innerText) && qa('section.block').length >= 4 && !q('.focusoffer'));
   click('[data-act=moreTime]');
@@ -310,6 +314,7 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
   check('+ Time adds accessories to a focused workout', qa('section.block').length >= 5);
   state.slots = saved;
   click('[data-act=recheck]');
+  click('[data-k=lean][data-v=either]');
 });
 
 step('Air Alert 2: optional, started from Plans, one day per finished session', () => {
