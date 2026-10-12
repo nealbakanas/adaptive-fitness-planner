@@ -609,9 +609,10 @@ function seg(key, items, cur) {
 }
 
 // Upper/lower workouts from the whole library, for when the weekly goals are done.
+// With a lean, that half's two come first and stand out; the other half stays one tap away.
 const focusName = (r, x) => `${r === 'upper' ? 'Upper' : 'Lower'} body${x ? ' + explosive' : ''}`;
-const focusButtons = () => `<div class="focusgrid">${L.FOCUS_REGIONS.flatMap(r => [false, true].map(x =>
-  `<button data-act="focus" data-r="${r}" ${x ? 'data-x="1"' : ''}>${focusName(r, x)}</button>`)).join('')}</div>`;
+const focusButtons = lean => `<div class="focusgrid">${[...L.FOCUS_REGIONS].sort((a, b) => (b === lean) - (a === lean)).flatMap(r => [false, true].map(x =>
+  `<button data-act="focus" data-r="${r}" ${x ? 'data-x="1"' : ''} class="${r === lean ? 'lean' : ''}">${focusName(r, x)}</button>`)).join('')}</div>`;
 
 // Started programs: today's session and where you are. Programs not started are offered under Plans.
 function programCards() {
@@ -697,7 +698,7 @@ function viewCheckin() {
     <div class="field"><label>Lean <span class="hint">which half feels up for it today</span></label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
-    <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals</span></label>${focusButtons()}</div>`;
+    <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals${L.leanOf(ci) ? ` · leaning ${L.leanOf(ci)}` : ''}</span></label>${focusButtons(L.leanOf(ci))}</div>`;
   h += programCards();
   const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
   h += `<div class="field"><label>Mobility <span class="hint">its own session, outside your weekly goals</span></label><div class="list">${state.mobility.routines.map(r =>
@@ -727,7 +728,7 @@ function viewSession(s) {
   const goalMin = s.goalMinutes ?? s.minutes - sessionBudget(s);
   if (s.source === 'suggested' && s.minutes - goalMin >= Math.max(15, s.minutes * 0.4) && !state.sets.some(x => x.sessionId === s.id && x.done)) {
     h += `<div class="card focusoffer"><b>${goalMin > 0 ? `Your open goals only fill about ${goalMin} of your ${s.minutes} minutes.` : 'Nothing left from your goals here.'}</b>
-      <p class="meta">${s.blocks.length ? 'The rest is from your library (see How this was built). Or pick a focused workout instead; ' : 'Want a full workout instead? '}it uses your whole library and still counts toward any goal it matches.</p>${focusButtons()}</div>`;
+      <p class="meta">${s.blocks.length ? 'The rest is from your library (see How this was built). Or pick a focused workout instead; ' : 'Want a full workout instead? '}it uses your whole library and still counts toward any goal it matches.</p>${focusButtons(L.leanOf(s))}</div>`;
   }
   // Each superset partner renders right after the block it's paired with.
   const ordered = [];

@@ -424,6 +424,7 @@ label.btn.fnpick { width: 100%; min-height: 56px; font-size: 18px; margin-top: 1
 /* ---------- focused workouts ---------- */
 .focusgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .focusgrid button { min-height: 48px; }
+.focusgrid button.lean { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .focusoffer { border-color: var(--accent); }
 .focusoffer .focusgrid { margin-top: 10px; }
 .badge.focus { color: var(--accent); }

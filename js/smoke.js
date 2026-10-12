@@ -303,8 +303,10 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
   click('[data-k=minutes][data-v="60"]');
   click('[data-k=lean][data-v=lower]');
   check('lean picked', q('[data-k=lean][data-v=lower]').classList.contains('on'));
+  check('focused workouts for the lean come first', q('[data-act=focus]').dataset.r === 'lower' && qa('[data-act=focus].lean').every(b => b.dataset.r === 'lower') && qa('[data-act=focus].lean').length === 2);
   click('[data-act=suggest]');
   check('thin suggestion offers a focused workout', !!q('.focusoffer [data-act=focus]'), text().slice(0, 300));
+  check('the offer leads with the lean too', q('.focusoffer [data-act=focus]').dataset.r === 'lower' && q('.focusoffer [data-act=focus]').classList.contains('lean'));
   check('and fills the hour from the library anyway', qa('section.block').length >= 5 && Number(/est (\d+) min/.exec(text())?.[1]) >= 50 && /leaning lower/.test(text()), text().slice(0, 300));
   check('says how the rest was filled', qa('details.why').some(d => /rest is from your library, leaning lower-body/.test(d.textContent)));
   click('.focusoffer [data-act=focus][data-r=upper]');
