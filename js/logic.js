@@ -315,28 +315,6 @@ export function readinessSummary(state, ci, t = Date.now()) {
   return { fresh: !tired, tired, heavy: [...recentHeavyRegions(state, t)] };
 }
 
-// ---------- daily jumps ----------
-// Some jumping every day (Settings), alternating intense, low-rep T2 days (box, depth, broad jumps) with high-volume,
-// low-intensity T3 days (rapid hops, jump lunges). T2 only when fresh for lower-body power and not an easy day.
-// Nothing if you've already jumped today.
-export const isJump = e => !!e?.explosive && e.metric !== 'load_reps' && e.region === 'lower';
-export function dailyJumpPlan(state, ci, t = Date.now()) {
-  if (state.settings.dailyJumps === false) return null;
-  const today = startOfDay(t);
-  let last = null, lastAt = -1;
-  for (const s of state.sets) {
-    if (!s.done || s.warmup || s.loggedAt >= t || !isJump(byId(state.exercises, s.exerciseId))) continue;
-    if (s.loggedAt >= today) return null;
-    if (s.loggedAt > lastAt) { lastAt = s.loggedAt; last = s.tier; }
-  }
-  const rd = powerReadiness(state, ci, { region: 'lower' }, t);
-  if (last !== 'T2' && rd.fresh && ci.intent !== 'easy') {
-    return { tier: 'T2', why: `daily jumps, intense and low reps${last ? ' (last time was volume)' : ''}` };
-  }
-  const reason = last === 'T2' ? 'last time was intense' : ci.intent === 'easy' ? 'easy day' : rd.reasons.join('; ');
-  return { tier: 'T3', why: `daily jumps, high volume and low intensity (${reason})` };
-}
-
 export function scoreSlots(state, ci, t = Date.now()) {
   const loc = byId(state.locations, ci.locationId);
   const credit = creditWeek(state, t);
@@ -439,12 +417,6 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
   const scored = scoreSlots(state, ci, t);
   const top = scored[0]?.score || 0;
   let budget = ci.minutes;
-  // Daily jumps: picked first and their time kept aside; dropped if the goals bring jumps of their own.
-  const plan = dailyJumpPlan(state, ci, t);
-  const jk = plan && libraryKit(state, ci, t, budget, excludeFamilies);
-  const jump = jk?.dailyJump(plan) ? { block: jk.blocks[0], note: jk.notes[0] } : null;
-  // T3 jumps go in a superset, where a partner costs half its minutes.
-  if (jump) budget -= blocksMinutes(state, [jump.block]) * (jump.block.tier === 'T3' ? 0.5 : 1);
   const blocks = [];
   const count = { T1: 0, T2: 0, T3: 0, TECH: 0 };
   const famUsed = new Set(excludeFamilies); // e.g. T1 weighted dips and T3 dips both open: do them on different days
@@ -466,21 +438,15 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
       count[tier]++;
     }
   }
-  const goalMinutes = Math.round(blocksMinutes(state, blocks));
-  let notes = [];
-  if (jump && !blocks.some(b => isJump(byId(state.exercises, b.exerciseId)))) {
-    blocks.push(jump.block);
-    famUsed.add(byId(state.exercises, jump.block.exerciseId).familyId);
-    notes.push(jump.note);
-  }
   sortBlocks(state, blocks); // stable, so tier order holds within a rank
   pairT3s(state, blocks);
+  const goalMinutes = Math.round(blocksMinutes(state, blocks));
   // Goals (nearly) done: use the rest of the time anyway.
-  const left = ci.minutes - blocksMinutes(state, blocks);
-  if (fill && left >= 5) {
-    const f = fillTime(state, ci, t, blocks, left, [...famUsed], goalMinutes);
+  let notes = [];
+  if (fill && ci.minutes - goalMinutes >= 5) {
+    const f = fillTime(state, ci, t, blocks, ci.minutes - goalMinutes, [...famUsed]);
     blocks.push(...f.blocks);
-    notes = [...notes, ...f.notes];
+    notes = f.notes;
     sortBlocks(state, blocks);
     pairT3s(state, blocks);
     stretchToFit(state, blocks, ci.minutes);
@@ -738,18 +704,6 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
       const c = p === 'back' ? (of('hinge').some(x => LOWER_BACK.test(x.name)) ? of('hinge').filter(x => LOWER_BACK.test(x.name)) : of('hinge')) : of(p);
       return c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0] ?? null;
     },
-    // Today's jumps (dailyJumpPlan): short hard jumps for T2, repeatable ones (sets of 8+ allowed) for T3,
-    // the ones you do first, then the one done least recently, so the jumps rotate.
-    dailyJump(plan) {
-      const c = state.exercises.filter(e => isJump(e) && usable(e) && !k.blocks.some(b => b.exerciseId === e.id));
-      const fits = plan.tier === 'T2' ? (e => !e.maxReps || e.maxReps <= 5) : (e => !e.maxReps || e.maxReps >= 8);
-      const pool = c.some(fits) ? c.filter(fits) : c;
-      const e = pool.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0];
-      if (!e) return false;
-      // A T2 day is 12-20 contacts, like the jumps goal, when no goal sets it.
-      const dose = plan.tier === 'T2' && !slotFor(state, e, 'T2') ? { repMin: 12, repMax: 20 } : null;
-      return k.add(e, plan.tier, plan.why, dose);
-    },
     // Go round the rotation until the time is used (or nothing else fits), then again reusing families.
     // `limit` caps how many this call adds.
     accessories(rotation, maxBlocks, limit = Infinity) {
@@ -807,10 +761,6 @@ export function buildFocus(state, ci, { region, explosive = false, accessoriesOn
     }
   }
 
-  // Daily jumps, when the workout doesn't already start with them.
-  const plan = !accessoriesOnly && dailyJumpPlan(state, ci, t);
-  if (plan && !k.blocks.some(b => isJump(byId(state.exercises, b.exerciseId)))) k.dailyJump(plan);
-
   if (!accessoriesOnly && !led) {
     // Main lift: the pattern trained heavy least recently. Second lift: the other pattern, moderate.
     const heavyHere = regionConflict(region, recentHeavyRegions(state, t));
@@ -845,14 +795,14 @@ function settle(state, k, minutes, rotation, stretch = true) {
 
 // Tops up a goal-driven suggestion from the library so the whole time block is used: a T2 lift (unless it's
 // an easy day or there's already plenty of T2), then T3s, leaning toward the day's region if one was picked.
-function fillTime(state, ci, t, blocks, budget, famUsed, goalMinutes = ci.minutes - budget) {
+function fillTime(state, ci, t, blocks, budget, famUsed) {
   const lean = leanOf(ci);
   const k = libraryKit(state, ci, t, budget, famUsed, blocks.map(b => b.exerciseId));
-  const intro = `Your open goals fill ${goalMinutes} of your ${ci.minutes} minutes, so the rest is from your library${lean ? `, leaning ${lean}-body` : ''}:`;
+  const intro = `Your open goals fill ${ci.minutes - budget} of your ${ci.minutes} minutes, so the rest is from your library${lean ? `, leaning ${lean}-body` : ''}:`;
   const mains = lean ? FOCUS_MAIN[lean] : [...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower];
-  // Up to two T2 lifts in the session (goal ones count; jumps don't), each from a different pattern, least recently trained heavy first.
-  const t2Lifts = () => [...blocks, ...k.blocks].filter(b => b.tier === 'T2' && !byId(state.exercises, b.exerciseId)?.explosive).length;
-  while (ci.intent !== 'easy' && k.budget >= 15 && t2Lifts() < 2 && k.strength(mains, 'to fill the time'));
+  // Up to two T2 lifts in the session (goal ones count), each from a different pattern, least recently trained heavy first.
+  while (ci.intent !== 'easy' && k.budget >= 15 && blocks.filter(b => b.tier === 'T2').length + k.count('T2') < 2
+    && k.strength(mains, 'to fill the time'));
   k.accessories(lean ? FOCUS_T3[lean] : FOCUS_T3.either, MAX_BLOCKS - blocks.length);
   // A lean is a bias, not a limit: once that half of the library runs out, the rest of the time still gets used.
   if (lean) k.accessories(FOCUS_T3.either, MAX_BLOCKS - blocks.length);

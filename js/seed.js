@@ -197,7 +197,6 @@ export function seed() {
       increment: 5,
       kettlebells: [30, 40, 45, 53], // loads for kettlebell exercises snap to these
       recovery: { t1AfterT1: true },
-      dailyJumps: true, // some jumping every session: intense T2 and high-volume T3 days in turn
       lastExportAt: null,
       timer: { autoStart: true, sound: true, vibrate: true, warn10: true, keepAwake: true, notify: false, prep: 5 },
     },

@@ -453,7 +453,7 @@ test('with suggested goals, a tired day does technique cleans instead of heavy o
   const nextWeek = Date.now() + 7 * DAY; // this week's goals are already done in this history
   const r = L.buildSuggestion(s, ci({ fatigue: 4 }), nextWeek);
   ok(r.blocks.some(b => b.tier === 'TECH' && b.exerciseId === 'ex-power-clean'), 'technique cleans');
-  ok(!r.blocks.some(b => (b.tier === 'T1' || b.tier === 'T2') && s.exercises.find(e => e.id === b.exerciseId).explosive), 'no explosive power work (daily jumps are T3 volume)');
+  ok(!r.blocks.some(b => b.tier !== 'TECH' && s.exercises.find(e => e.id === b.exerciseId).explosive), 'no explosive power work');
   const fresh = L.buildSuggestion(s, ci(), nextWeek);
   eq(fresh.blocks[0].exerciseId, 'ex-power-clean', 'fresh: power cleans first');
 });
@@ -739,12 +739,9 @@ test('focused workouts: upper and lower from the whole library, explosive first 
   ok(lower.blocks.some(b => b.tier === 'T3') && lower.blocks.filter(b => b.tier === 'T3').every(b => b.pairOf || lower.blocks.some(x => x.pairOf === b.id)), 'T3s grouped');
   ok(lower.minutesUsed <= 60, 'fits the time');
   const upper = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper' });
-  const isJump = b => L.isJump(s.exercises.find(e => e.id === b.exerciseId));
-  eq(upper.blocks.filter(isJump).length, 1, `the daily jumps: ${names(upper)}`);
-  const lifts = upper.blocks.filter(b => !isJump(b));
-  ok(lifts.every(b => ['push', 'pull', 'core'].includes(pat(b.exerciseId))), `upper only, apart from the jumps: ${names(upper)}`);
-  ok(new Set(lifts.filter(b => b.tier !== 'T3').map(b => pat(b.exerciseId))).size === 2, 'push and pull main lifts');
-  ok(!lifts.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), 'no other explosive work unless asked');
+  ok(upper.blocks.every(b => ['push', 'pull', 'core'].includes(pat(b.exerciseId))), `upper only: ${names(upper)}`);
+  ok(new Set(upper.blocks.filter(b => b.tier !== 'T3').map(b => pat(b.exerciseId))).size === 2, 'push and pull main lifts');
+  ok(!upper.blocks.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), 'no explosive work unless asked');
   // Jerks lead upper-body explosive days; with them archived, cleans (whole body) lead instead.
   const upx = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper', explosive: true });
   eq(upx.blocks[0].exerciseId, 'gs-split-jerk');
@@ -758,39 +755,6 @@ test('focused workouts: upper and lower from the whole library, explosive first 
   // Accessories only (for + Time), nothing from families already in the workout.
   const more = L.buildFocus(s, ci({ minutes: 20 }), { region: 'lower', accessoriesOnly: true }, Date.now(), { excludeFamilies: ['fam-hams'] });
   ok(more.blocks.length && more.blocks.every(b => b.tier === 'T3' && s.exercises.find(e => e.id === b.exerciseId).familyId !== 'fam-hams'), names(more).join(', '));
-});
-test('daily jumps alternate intense T2 and high-volume T3, once a day', () => {
-  const s = seed();
-  const t = Date.now();
-  const log = (id, tier, at) => { for (let i = 0; i < 4; i++) s.sets.push({ id: L.uid(), sessionId: `j${at}`, blockId: `j${at}`, exerciseId: id, tier, reps: 8, done: true, loggedAt: at + i }); };
-  eq(L.dailyJumpPlan(s, ci(), t).tier, 'T2', 'no jumps yet, fresh: intense');
-  log('ex-jump-lunge', 'T3', L.startOfDay(t) - DAY + 9 * 3600e3);
-  eq(L.dailyJumpPlan(s, ci(), t).tier, 'T2', 'volume yesterday: intense today');
-  eq(L.dailyJumpPlan(s, ci({ fatigue: 5 }), t).tier, 'T3', 'tired: volume');
-  eq(L.dailyJumpPlan(s, ci({ intent: 'easy' }), t).tier, 'T3', 'easy day: volume');
-  log('ex-box-jump', 'T2', L.startOfDay(t) - DAY + 18 * 3600e3);
-  eq(L.dailyJumpPlan(s, ci(), t).tier, 'T3', 'intense last time: volume today');
-  log('ex-jump-lunge', 'T3', Math.max(L.startOfDay(t), t - 3600e3));
-  eq(L.dailyJumpPlan(s, ci(), t), null, 'already jumped today');
-  s.settings.dailyJumps = false;
-  eq(L.dailyJumpPlan(s, ci(), L.startOfDay(t) + 3 * DAY), null, 'switched off');
-});
-test('a suggestion and a focused workout each get one jump block, by the plan', () => {
-  const s = seed();
-  s.slots = s.slots.filter(sl => sl.familyId !== 'fam-jumps'); // no jumps goal: the daily jump is the only source
-  const ex = id => s.exercises.find(e => e.id === id);
-  for (const [label, r] of [['suggestion', L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy' }))],
-    ['upper focus', L.buildFocus(s, ci({ minutes: 45, intent: 'easy' }), { region: 'upper' })]]) {
-    const jumps = r.blocks.filter(b => L.isJump(ex(b.exerciseId)));
-    eq(jumps.length, 1, label);
-    eq(jumps[0].tier, 'T3', `${label}: easy day jumps are volume work`);
-    ok(!ex(jumps[0].exerciseId).maxReps || ex(jumps[0].exerciseId).maxReps >= 8, `${label}: a repeatable jump, ${ex(jumps[0].exerciseId).name}`);
-  }
-  const fresh = L.buildSuggestion(s, ci({ minutes: 60 }));
-  const j = fresh.blocks.find(b => L.isJump(ex(b.exerciseId)));
-  ok(j && j.tier === 'T2' && ex(j.exerciseId).maxReps <= 5, `fresh: an intense jump at T2, ${j && ex(j.exerciseId).name}`);
-  const sc = s.schemes.find(x => x.id === j.schemeId);
-  ok(sc.sets * sc.reps >= 12 && sc.sets * sc.reps <= 20, `12-20 contacts: ${sc.name}`);
 });
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
