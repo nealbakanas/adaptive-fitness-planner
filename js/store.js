@@ -233,6 +233,15 @@ export function migrate(s) {
     }
     s.version = 14;
   }
+  if (s.version < 15) {
+    // v15: tested 1-rep maxes with the day they were tested. An old "starting max" becomes an undated one, which still
+    // counts only until you've logged sets, as before.
+    for (const e of s.exercises) {
+      if (e.testedMax === undefined) e.testedMax = e.startMax ? { load: e.startMax, at: null } : null;
+      e.startMax = null;
+    }
+    s.version = 15;
+  }
   return s;
 }
 

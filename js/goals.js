@@ -3,7 +3,7 @@
 import * as L from './logic.js';
 
 const DAY = 864e5;
-const BLOCKS_PER_WORKOUT = 3; // about what fits in a 45-minute workout
+const MINUTES_PER_GOAL = 15; // a goal session with its share of warm-up and changeover; about 3 in a 45-minute workout
 const CHEST = /bench|incline|chest|fly/i;
 const SHOULDERS = /overhead|shoulder|military|lateral/i;
 // Display order, and the order goals are kept when the week is too full (last kept longest).
@@ -39,6 +39,43 @@ function familyStats(state, now, days) {
   return { byFam, workouts: workouts.size };
 }
 
+// ---------- the week's budget ----------
+
+// Minutes a goal session of a tier usually takes: the middle of your schemes for it plus warm-up. T3s go in supersets,
+// where every second one costs half, so they average three quarters.
+export function tierCost(state, tier) {
+  const ms = L.schemeOptions(state, tier).map(s => s.minutes || 0).sort((a, b) => a - b);
+  const mid = ms.length ? ms[ms.length >> 1] : 8;
+  return (mid + L.WARMUP[tier]) * (tier === 'T3' ? 0.75 : 1);
+}
+
+// Your usual week: what you set (Week tab), else your workouts and check-in minutes over the last 4 weeks, else 3 × 45.
+export function usualWeek(state, now = Date.now()) {
+  const set = state.settings.week || {};
+  const recent = (state.sessions || []).filter(s => s.firstSetAt && s.checkinAt >= now - 28 * DAY && s.checkinAt < now);
+  const mins = recent.map(s => Number(s.minutes)).filter(m => m > 0).sort((a, b) => a - b);
+  const hist = { workouts: recent.length ? Math.round(recent.length / 4 * 2) / 2 : null, minutes: mins.length ? mins[mins.length >> 1] : null };
+  return {
+    workouts: set.workouts || hist.workouts || 3, minutes: set.minutes || hist.minutes || 45,
+    fromHistory: { workouts: !set.workouts && hist.workouts != null, minutes: !set.minutes && hist.minutes != null }, hist,
+  };
+}
+
+// How your weekly goals fit the time you train: minutes they take, room left (as T2 or T3 sessions), and the GZCL guide
+// per workout (1 T1, 1-2 T2, 2-4 T3) scaled to your week. Leftover time is filled from your library anyway, so goals are
+// the minimum you want guaranteed, not the whole week.
+export function weekBudget(state, now = Date.now()) {
+  const wk = usualWeek(state, now);
+  const total = wk.workouts * wk.minutes;
+  const cost = Object.fromEntries(L.TIERS.map(t => [t, tierCost(state, t)]));
+  const count = Object.fromEntries(L.TIERS.map(t => [t, state.slots.filter(sl => sl.tier === t).reduce((n, sl) => n + (sl.quota || 0), 0)]));
+  const used = L.TIERS.reduce((m, t) => m + count[t] * cost[t], 0);
+  const room = total - used;
+  const w = wk.workouts;
+  const guide = { T1: [Math.min(2, Math.ceil(w)), Math.ceil(w)], T2: [Math.round(w), Math.round(2 * w)], T3: [Math.round(2 * w), Math.round(4 * w)] };
+  return { ...wk, total, cost, count, used, room, addT2: Math.max(0, Math.floor(room / cost.T2)), addT3: Math.max(0, Math.floor(room / cost.T3)), guide };
+}
+
 const mostUsed = (state, f) => L.byId(state.exercises, [...f.uses].sort((a, b) => b[1].size - a[1].size)[0][0]);
 
 // What to suggest, with a reason for each. Rows are editable before they become goals.
@@ -48,10 +85,13 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
   if (st.workouts < 8) { days = 182; st = familyStats(state, now, days); } // too thin: look back six months
   const weeks = Math.round(days / 7);
   const perWeek = st.workouts / weeks;
-  const result = { rows: [], weeks, workouts: st.workouts, perWeek, capacity: 0, heavyCap: 0 };
+  const result = { rows: [], weeks, workouts: st.workouts, perWeek, minutes: usualWeek(state, now).minutes, capacity: 0, heavyCap: 0 };
   if (st.workouts < 4) return result;
 
-  const capacity = Math.max(3, Math.round(perWeek * BLOCKS_PER_WORKOUT));
+  // Goal sessions that fit your usual week (set on the Week tab, else your recent check-ins), about one per 15 minutes.
+  const wk = usualWeek(state, now);
+  const workouts = state.settings.week?.workouts || perWeek;
+  const capacity = Math.max(3, Math.round(workouts * wk.minutes / MINUTES_PER_GOAL));
   const heavyCap = Math.max(1, Math.round(perWeek)); // GZCL: one heavy (T1) lift per workout
   const minDays = Math.max(3, Math.round(weeks / 4)); // trained at least every few weeks
   const quotaOf = n => Math.min(3, Math.max(1, Math.round(n / weeks)));
