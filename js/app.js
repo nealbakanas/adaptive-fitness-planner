@@ -4,6 +4,7 @@ import * as FN from './fitnotes.js';
 import * as G from './goals.js';
 import * as M from './mobility.js';
 import * as P from './programs.js';
+import * as O from './onboard.js';
 
 const appEl = document.getElementById('app');
 const navEl = document.getElementById('nav');
@@ -558,6 +559,13 @@ document.addEventListener('visibilitychange', () => {
 // ---------- views ----------
 
 function render() {
+  if (ui.onboard) {
+    navEl.hidden = true;
+    appEl.innerHTML = globalBanners() + viewOnboard(ui.onboard);
+    renderSheet();
+    return;
+  }
+  navEl.hidden = false;
   navEl.innerHTML = TABS.map(([k, t]) => `<button data-act="nav" data-tab="${k}" class="${ui.tab === k ? 'on' : ''}">${t}</button>`).join('');
   const views = { today: viewToday, week: viewWeek, library: viewLibrary, plans: viewPlans, more: viewSettings };
   appEl.innerHTML = globalBanners() + views[ui.tab]();
@@ -577,6 +585,7 @@ function globalBanners() {
     h += `<div class="banner bad">${esc(loadProblem.message)}${loadProblem.raw ? ' <button class="link" data-act="copyRaw">Copy the saved data</button>' : ''}
       <button class="link" data-act="startFresh">Start fresh</button></div>`;
   }
+  if (ui.setupUndo) h += `<div class="banner">Setup saved: new goals, locations and maxes. <button class="link" data-act="setupUndo">Undo</button></div>`;
   if (lastSaveError) {
     h += `<div class="banner bad">Your latest changes aren't saved: ${esc(lastSaveError)}. <button class="link" data-act="copyBackup">Copy a backup</button></div>`;
   }
@@ -944,6 +953,82 @@ function viewMobRoutine(r) {
       <button data-act="mobRoutineCancel">Cancel</button><button class="primary" data-act="mobRoutineSave">Save routine</button></div>`;
 }
 
+// ---------- onboarding ----------
+// A short setup that turns a few choices into weekly goals (js/onboard.js). New installs see it first; Settings → Set up again.
+const OB_TITLES = { welcome: 'Welcome', you: 'About you', where: 'Where you train', week: 'Your week', heavy: 'Heavy lifts (T1)',
+  support: 'Support work (T2)', pump: 'Accessories (T3)', maxes: '1-rep maxes', review: 'Your weekly goals' };
+
+const obStepper = (kind, id, n) => `<div class="stepper small"><button data-act="obQuota" data-k="${kind}" data-id="${id}" data-d="-1" aria-label="Fewer">−</button><span>${n}</span><button data-act="obQuota" data-k="${kind}" data-id="${id}" data-d="1" aria-label="More">+</button></div>`;
+const obChip = (kind, id, label, on) => `<button class="chip ${on ? 'on' : ''}" data-act="obToggle" data-k="${kind}" data-id="${id}">${esc(label)}</button>`;
+// The picks of one kind with times a week for each.
+const obPicked = (kind, picks, nameOf) => Object.keys(picks).length
+  ? `<div class="card flush">${Object.entries(picks).map(([id, n]) => `<div class="frow"><span class="grow"><span class="name">${esc(nameOf(id))}</span><span class="meta">times a week</span></span>${obStepper(kind, id, n)}</div>`).join('')}</div>`
+  : '';
+
+function viewOnboard(d) {
+  const step = O.STEPS[d.step];
+  const n = O.STEPS.length - 1;
+  const exName = id => exOf(id)?.name ?? '?';
+  const famName = id => famOf(id)?.name ?? '?';
+  let body = '';
+  if (step === 'welcome') {
+    body = `<p>A few questions and the app sets up your weekly goals: 2–3 heavy lifts, support lifts and jumps, and accessory work, sized to the time you have.</p>
+      <p class="meta">About two minutes. You can change anything later, and nothing you've logged is touched.</p>
+      <button class="primary big" data-act="obNext">Start</button>
+      <div class="actions"><button data-act="obImport">Import from FitNotes first</button><button data-act="obSkip">${state.settings.onboarded ? 'Cancel' : 'Skip: use the starter setup'}</button></div>`;
+  } else if (step === 'you') {
+    body = `<div class="menu">
+        ${frow('Units', `<div class="seg">${['lb', 'kg'].map(u => `<button class="${d.unit === u ? 'on' : ''}" data-act="obSet" data-k="unit" data-v="${u}">${u}</button>`).join('')}</div>`)}
+        ${frow(`Bodyweight (${d.unit})`, `<input class="num" inputmode="decimal" data-ob="bodyweight" value="${esc(d.bodyweight ?? '')}">`, 'For weighted pull-ups and dips')}
+      </div>`;
+  } else if (step === 'where') {
+    body = `<p class="meta">Name each place you train and tap the gear there. Suggestions only use exercises your gear allows.</p>` +
+      d.locations.map((l, i) => `<div class="card">
+        <input class="titleinput" data-ob="loc.${i}.name" value="${esc(l.name)}" aria-label="Location name">
+        <div class="chips">${state.equipment.map(eq => `<button class="chip ${l.equipment.includes(eq) ? 'on' : ''}" data-act="obEq" data-i="${i}" data-eq="${esc(eq)}">${esc(eq)}</button>`).join('')}</div>
+        ${d.locations.length > 1 ? `<button class="link" data-act="obLocDel" data-i="${i}">Remove this location</button>` : ''}</div>`).join('') +
+      `<button class="addblock" data-act="obLocAdd">+ Add location</button>`;
+  } else if (step === 'week') {
+    body = `<div class="menu">
+        ${frow('Workouts a week', `<input class="num" inputmode="numeric" data-ob="week.workouts" value="${esc(d.week.workouts)}">`)}
+        ${frow('Minutes each', `<input class="num" inputmode="numeric" data-ob="week.minutes" value="${esc(d.week.minutes)}">`, 'A typical session')}
+      </div><p class="meta">Used to size your goals. Any time your goals don't use is filled from your library.</p>`;
+  } else if (step === 'heavy' || step === 'support') {
+    const kind = step === 'heavy' ? 't1' : 't2';
+    const other = step === 'heavy' ? d.t2 : d.t1;
+    const groups = O.strengthChoices(state, d);
+    body = (step === 'heavy'
+      ? `<p class="meta">Pick 2–3 lifts to take heavy (sets of 1–3) and stick with for a few weeks. ${Object.keys(d.t1).length} picked.</p>`
+      : `<p class="meta">Moderate lifts that complement your heavy ones (sets of 5–8). Pick any number; the review shows what fits.</p>`) +
+      groups.map(([label, list]) => `<div class="label">${label}</div><div class="chips">${list.filter(e => !(e.id in other)).map(e => obChip(kind, e.id, e.name, e.id in d[kind])).join('')}</div>`).join('') +
+      (step === 'support' ? `<div class="label">Power work (jumps, Olympic lifts)</div><div class="chips">${O.powerChoices(state, d).map(f => obChip('power', f.id, f.name, f.id in d.power)).join('')}</div>` : '') +
+      obPicked(kind, d[kind], exName) + (step === 'support' ? obPicked('power', d.power, famName) : '');
+  } else if (step === 'pump') {
+    body = `<p class="meta">Accessory areas for pump and conditioning, done in supersets. The app picks the exercises and rotates them.</p>
+      <div class="chips">${O.pumpChoices(state, d).map(f => obChip('pump', f.id, f.name, f.id in d.pump)).join('')}</div>` + obPicked('pump', d.pump, famName);
+  } else if (step === 'maxes') {
+    const ids = [...Object.keys(d.t1), ...Object.keys(d.t2)];
+    body = ids.length
+      ? `<p class="meta">Optional: a 1RM you've tested sets your heavy and moderate loads (${d.unit}). Leave blank and the app learns from your sets.</p>
+        <div class="menu">${ids.map(id => frow(`${esc(exName(id))}${exOf(id)?.bodyweight ? ' <span class="hint">added load</span>' : ''}`,
+          `<input class="num" inputmode="decimal" data-ob="max.${id}" value="${esc(d.maxes[id] ?? '')}" placeholder="1RM">`)).join('')}</div>`
+      : `<p class="muted">No heavy or support lifts picked, so nothing to enter.</p>`;
+  } else if (step === 'review') {
+    const slots = O.buildSlots(state, d);
+    const b = O.draftBudget(state, d);
+    const label = sl => sl.exerciseId ? exName(sl.exerciseId) : famName(sl.familyId);
+    body = `<div class="card flush">${slots.map(sl => `<div class="slotrow"><span class="tier ${sl.tier}">${sl.tier}</span><span class="grow"><span class="name">${esc(label(sl))}</span></span><b>${sl.quota}/wk</b></div>`).join('') || '<p class="muted pad">No goals picked.</p>'}</div>
+      <div class="card"><p>${b.room >= 0
+        ? `These take about <b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes a week (${b.workouts} × ${b.minutes}). Room for about ${b.addT2} more T2 or ${b.addT3} more T3; the rest of each workout is filled from your library.`
+        : `These need about <b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> more than the ${round(b.total)} you have. Go back and lower a few, accessories first, or some will slip each week.`}</p></div>
+      <button class="primary big" data-act="obFinish">Save these goals</button>
+      <p class="meta">Replaces your weekly goals and locations. Your history stays, and you can undo right after.</p>`;
+  }
+  const nav = step === 'welcome' || step === 'review' ? (step === 'review' ? `<div class="actions"><button data-act="obBack">Back</button></div>` : '')
+    : `<div class="actions"><button data-act="obBack">Back</button><button class="primary" data-act="obNext">Next</button></div>`;
+  return `<header class="top"><div><h1>${OB_TITLES[step]}</h1>${d.step ? `<div class="sub">Step ${d.step} of ${n}</div>` : ''}</div></header>${body}${nav}`;
+}
+
 // How the weekly goals fit the time you train, and how many more T2 or T3 sessions would.
 function weekBudgetCard() {
   const b = G.weekBudget(state);
@@ -1228,7 +1313,9 @@ function viewSettingsMenu() {
     </div>
     <div class="label">Programming</div>
     <div class="menu">${SETTINGS_PAGES.slice(3, 6).map(([k, t]) => menuRow(k, t, summary[k])).join('')}</div>
-    <div class="menu">${menuRow('data', 'Backup and data', summary.data)}</div>`;
+    <div class="menu">${menuRow('data', 'Backup and data', summary.data)}
+      <button class="menurow" data-act="setupAgain"><span class="grow"><span class="name">Set up again</span>
+        <span class="meta">Walk through locations, your week, lifts and maxes; replaces your goals</span></span><span class="chev">›</span></button></div>`;
 }
 
 const menuRow = (k, t, sub) => `<button class="menurow" data-act="setPage" data-p="${k}"><span class="grow"><span class="name">${esc(t)}</span>
@@ -2661,6 +2748,42 @@ const actions = {
     save(); render();
   },
 
+  setupAgain: () => { ui.onboard = O.startDraft(state); ui.onboard.step = 1; render(); window.scrollTo(0, 0); },
+  obNext: () => { readObInputs(); ui.onboard.step = Math.min(O.STEPS.length - 1, ui.onboard.step + 1); render(); window.scrollTo(0, 0); },
+  obBack: () => { readObInputs(); ui.onboard.step = Math.max(0, ui.onboard.step - 1); render(); window.scrollTo(0, 0); },
+  obSkip: () => { if (!state.settings.onboarded) { state.settings.onboarded = true; save(); } ui.onboard = null; render(); },
+  obImport: () => { state.settings.onboarded = true; save(); ui.onboard = null; ui.tab = 'more'; actions.setPage({ p: 'fitnotes' }); },
+  obSet: d => { readObInputs(); ui.onboard[d.k] = d.v; render(); },
+  obToggle: d => {
+    readObInputs();
+    const picks = ui.onboard[d.k];
+    if (d.id in picks) delete picks[d.id];
+    else picks[d.id] = d.k === 'power' ? 2 : d.k === 'pump' ? 2 : 1;
+    render();
+  },
+  obQuota: d => { readObInputs(); const picks = ui.onboard[d.k]; picks[d.id] = Math.min(7, Math.max(1, picks[d.id] + Number(d.d))); render(); },
+  obEq: d => {
+    readObInputs();
+    const l = ui.onboard.locations[Number(d.i)];
+    l.equipment = l.equipment.includes(d.eq) ? l.equipment.filter(x => x !== d.eq) : [...l.equipment, d.eq];
+    render();
+  },
+  obLocAdd: () => { readObInputs(); ui.onboard.locations.push({ id: L.uid(), name: 'New location', equipment: [] }); render(); },
+  obLocDel: d => { readObInputs(); ui.onboard.locations.splice(Number(d.i), 1); render(); },
+  obFinish: () => {
+    keepCopy('before-setup');
+    O.applyDraft(state, ui.onboard);
+    ui.onboard = null; ui.setupUndo = true; ui.tab = 'today';
+    save(); render(); window.scrollTo(0, 0);
+    toast('All set. Check in when you train.');
+  },
+  setupUndo: () => {
+    const before = readCopy('before-setup');
+    if (before) replaceState(before);
+    dropCopy('before-setup');
+    ui.setupUndo = false;
+    render(); toast('Your previous setup is back');
+  },
   maxSet: d => openSheet({ type: 'max', id: d.id }),
   maxSave: d => {
     setTestedMax(exOf(d.id), sheetEl.querySelector('#mx-load').value);
@@ -2906,6 +3029,19 @@ document.addEventListener('click', e => {
   if (fn) { e.preventDefault(); fn(el.dataset, el); }
 });
 
+// Copies the onboarding step's typed values into the draft.
+function readObInputs() {
+  const d = ui.onboard;
+  if (!d) return;
+  for (const el of appEl.querySelectorAll('[data-ob]')) {
+    const k = el.dataset.ob, v = el.value.trim();
+    if (k === 'bodyweight') d.bodyweight = v === '' ? null : Number(v);
+    else if (k.startsWith('week.')) d.week[k.slice(5)] = v === '' ? null : Number(v);
+    else if (k.startsWith('loc.')) d.locations[Number(k.split('.')[1])].name = el.value;
+    else if (k.startsWith('max.')) { const id = k.slice(4); if (v === '') delete d.maxes[id]; else d.maxes[id] = Number(v); }
+  }
+}
+
 function setPath(obj, path, val) {
   const parts = path.split('.');
   let o = obj;
@@ -3138,4 +3274,5 @@ closeStale();
 // Drop a timer left over from an earlier visit.
 if (state.timer && ((!currentSession() && !currentMobility()) || Date.now() - state.timer.endsAt > 10 * 60e3)) state.timer = null;
 save();
+if (O.isNewUser(state)) ui.onboard = O.startDraft(state);
 render();
