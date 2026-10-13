@@ -1,6 +1,6 @@
 # Garage Strength: Movement Library
 
-Exercises from the [Movement Library playlist](https://www.youtube.com/playlist?list=PLuV8B5eKhJBxZLxBmmu5TvZ50eKDS-qLd) (fetched 2026-10-13), grouped by category. 246 exercises from 255 videos; repeat uploads of the same exercise are merged. Data: `data/garage-strength-library.json`. *App family* is the closest family in `js/seed.js`, if any. Equipment is guessed from the name only, so blank means unknown or none.
+Exercises from the [Movement Library playlist](https://www.youtube.com/playlist?list=PLuV8B5eKhJBxZLxBmmu5TvZ50eKDS-qLd) (fetched 2026-10-13), grouped by category. 247 exercises from 256 videos; repeat uploads of the same exercise are merged. Data: `data/garage-strength-library.json`. *App family* is the closest family in `js/seed.js`, if any. Equipment is guessed from the name only, so blank means unknown or none.
 
 | Category | Count | App family |
 |---|---|---|
@@ -20,7 +20,7 @@ Exercises from the [Movement Library playlist](https://www.youtube.com/playlist?
 | [Vertical pull](#vertical-pull) | 2 | fam-vpull |
 | [Rows](#rows) | 12 | fam-upperback |
 | [Biceps](#biceps) | 12 | fam-arms |
-| [Triceps](#triceps) | 8 | fam-arms |
+| [Triceps](#triceps) | 9 | fam-arms |
 | [Forearms & grip](#forearms-grip) | 7 | — |
 | [Shoulders & upper back](#shoulders-upper-back) | 19 | fam-upperback |
 | [Hips & glutes](#hips-glutes) | 9 | — |
@@ -295,6 +295,7 @@ Exercises from the [Movement Library playlist](https://www.youtube.com/playlist?
 | Chest Supported Tricep Extension |  | [56s](https://www.youtube.com/watch?v=CGQC1n6eiU8) |
 | Incline French Press | barbell | [10s](https://www.youtube.com/watch?v=Yj5qLUwEvcc) |
 | Lean Away Tricep Extension |  | [13s](https://www.youtube.com/watch?v=P_dAyJFqkIw) |
+| Miracle Gro |  | [226s](https://www.youtube.com/watch?v=Nwycg8vHULs) |
 | Rolling Tricep Push-Ups |  | [23s](https://www.youtube.com/watch?v=9wu_LIiosZE) |
 | Seated Barbell Extension | barbell | [7s](https://www.youtube.com/watch?v=veXj1DCo-VE) |
 | Triple Triceps |  | [44s](https://www.youtube.com/watch?v=DJvtmLfP_T0) |

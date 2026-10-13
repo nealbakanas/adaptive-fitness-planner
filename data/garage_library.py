@@ -3,7 +3,7 @@
 import json, re, sys
 d = json.load(open(sys.argv[1]))
 
-SKIP = {'-Ayp2W8tmfc', 'Nwycg8vHULs'}  # "UNBROKEN Example", "Dane's Platform: Miracle Gro" — not single exercises
+SKIP = {'-Ayp2W8tmfc'}  # "UNBROKEN Example" — not a single exercise
 
 # Title fixes: strip prefixes, the category suffixes on the short clips, and typos.
 SUFFIX = r'\s*(unilateral squat|hip hinge|pressing|overhead press|power jerks|PJ|\| movement library|1)\s*$'
@@ -17,7 +17,7 @@ FIX = {'Seated Barbell Extenision': 'Seated Barbell Extension', 'Dowel zombie sq
        'Single Leg RDL w DB': 'Single leg RDL with DB', 'Dowel power Jerk': 'Dowel power jerk',
        'BB Pressing bench': 'Bench Press', 'Ecc reclining rows chest to bar': 'Eccentric reclining rows, chest to bar',
        'BN Jerk': 'Behind-the-neck jerk', 'Pause in the Hole Snatch': 'Pause in the Hole Snatch',
-       'Single Leg IsoMax': 'Single Leg Iso Max',
+       'Single Leg IsoMax': 'Single Leg Iso Max', "Dane's Platform: Miracle Gro": 'Miracle Gro',
        'Half kneeling DB': 'Half kneeling DB overhead press', 'Standing DB military': 'Standing DB military press',
        'Chun Push Press in Training': 'Chun Push Press', 'Behind Neck Jerk': 'Behind-the-neck jerk',
        'Banded Lat Swings Knees Back': 'Banded Lat Swings, Knees Back', 'BB bench press': 'Bench Press'}
@@ -81,7 +81,7 @@ OVERRIDE = {  # names the rules get wrong
  'Plate Side Step Ups': 'Single-leg squat & lunge', 'Gorilla Push-ups': 'Horizontal press & push-ups',
  'Dips': 'Horizontal press & push-ups', 'Banded Press in Split': 'Overhead press',
  'Dowel press in split': 'Jerk & push press', 'Hamstring Pulls': 'Hamstrings & glute-ham',
- 'Loaded Banded Knees Back': 'Hips & glutes', 'Banded Marches': 'Hips & glutes',
+ 'Loaded Banded Knees Back': 'Hips & glutes', 'Miracle Gro': 'Triceps', 'Banded Marches': 'Hips & glutes',
  'Fat Grip Reverse Wrist Curls': 'Forearms & grip', 'Jules Complex': 'Squat', 'Dips': 'Dip',
  'Half kneeling DB overhead press': 'Overhead press', 'Banded Lat Swings, Knees Back': 'Mobility & breathing',
 }
