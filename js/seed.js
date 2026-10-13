@@ -1,12 +1,15 @@
 // Seed data: real lifts from the PRD plus placeholder T3 work. Everything is editable in-app.
 
 import { mobilitySeed } from './mobility.js';
+import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo } from './library.js';
 
 export const EQUIPMENT = [
   'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell',
   'dip-belt', 'pullup-bar', 'rings', 'dip-station', 'bands', 'ab-wheel', 'box',
   'hyper-pro', 'leg-developer', // Freak Athlete Hyper Pro and its leg extension / leg curl attachment
 ];
+// Everything the library knows about, including gear only the Garage Strength exercises use (not at any location to start).
+export const ALL_EQUIPMENT = [...EQUIPMENT, ...GS_EQUIPMENT];
 
 // Movements that need the Hyper Pro itself (a back extension, GHR or leg curl can't be done without it).
 export const HYPER_PRO_ONLY = ['ex-back-ext', 'ex-back-ext-90', 'ex-reverse-hyper', 'ex-ghr', 'ex-ghd-situp', 'ex-sorensen',
@@ -19,8 +22,9 @@ export const defaultAnytime = (equipment, bodyweight = false) => !bodyweight && 
 // Region matters for explosive work: heavy work in a region makes explosive work there technique, not power.
 const FAMILY_REGION = { 'fam-squat': 'lower', 'fam-vpull': 'upper', 'fam-dip': 'upper', 'fam-clean': 'full', 'fam-incline': 'upper',
   'fam-upperback': 'upper', 'fam-arms': 'upper', 'fam-core': 'full', 'fam-jumps': 'lower',
-  'fam-hams': 'lower', 'fam-hinge': 'lower', 'fam-quads': 'lower', 'fam-calves': 'lower' };
-const EXPLOSIVE_FAMILIES = ['fam-clean', 'fam-jumps'];
+  'fam-hams': 'lower', 'fam-hinge': 'lower', 'fam-quads': 'lower', 'fam-calves': 'lower',
+  ...Object.fromEntries(GS_FAMILIES.map(f => [f.id, f.region])) };
+const EXPLOSIVE_FAMILIES = ['fam-clean', 'fam-jumps', ...GS_FAMILIES.filter(f => f.explosive).map(f => f.id)];
 
 function ex(id, name, familyId, rank, metric, equipment, opts = {}) {
   return {
@@ -30,6 +34,11 @@ function ex(id, name, familyId, rank, metric, equipment, opts = {}) {
     bodyweight: false, youtube: '', start: null, cues: '', startMax: null, maxReps: null, restSec: null,
     ...opts,
   };
+}
+
+// One Garage Strength row (js/library.js) as an exercise.
+export function gsExercise([id, name, familyId, metric, equipment, video, opts = {}], rank) {
+  return ex(id, name, familyId, rank, metric, [...equipment], { youtube: gsVideo(video), ...opts });
 }
 
 export function seed() {
@@ -47,6 +56,7 @@ export function seed() {
     { id: 'fam-hinge', name: 'Hinge', defaultExerciseId: 'ex-back-ext' },
     { id: 'fam-quads', name: 'Quads', defaultExerciseId: 'ex-leg-ext' },
     { id: 'fam-calves', name: 'Calves', defaultExerciseId: 'ex-calf-raise' },
+    ...GS_FAMILIES.map(({ id, name, defaultExerciseId }) => ({ id, name, defaultExerciseId })),
   ];
 
   // Rank runs harder (1) to easier within each family.
@@ -121,6 +131,12 @@ export function seed() {
     ex('ex-ghd-situp', 'GHD sit-up', 'fam-core', 5, 'reps', ['hyper-pro']),
     ex('ex-trap3', 'Trap 3 raise', 'fam-upperback', 4, 'load_reps', ['hyper-pro']),
   ];
+  for (const e of exercises) if (GS_VIDEOS[e.id]) e.youtube = gsVideo(GS_VIDEOS[e.id]);
+  // Garage Strength Movement Library, ranked after the starter exercises in each family.
+  for (const row of GS_EXERCISES) {
+    const rank = Math.max(0, ...exercises.filter(e => e.familyId === row[2]).map(e => e.rank)) + 1;
+    exercises.push(gsExercise(row, rank));
+  }
 
   const sc = (id, sets, reps, restSec, minutes, tiers) =>
     ({ id, name: `${sets}×${reps}`, sets, reps, restSec, minutes, tiers });
@@ -153,6 +169,9 @@ export function seed() {
     // T3 for hard bodyweight moves capped at a few reps a set (Nordics, glute-ham raises).
     sc('s-t3-4x8', 4, 8, 60, 7, ['T3']),
     sc('s-t3-6x5', 6, 5, 60, 8, ['T3']),
+    // T2 in sets of 2-3 on a minute's rest: power work (cleans, snatches) and tired days. Last, so ties keep the older picks.
+    sc('s-t2-10x2', 10, 2, 60, 12, ['T2']),
+    sc('s-t2-10x3', 10, 3, 60, 13, ['T2']),
   ];
 
   const slots = [
@@ -173,7 +192,7 @@ export function seed() {
   ];
 
   return {
-    version: 11,
+    version: 13,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
@@ -186,7 +205,7 @@ export function seed() {
     },
     locations: [
       { id: 'loc-office', name: 'Office', equipment: ['pullup-bar', 'rings', 'dip-belt', 'kettlebell', 'ab-wheel'] },
-      { id: 'loc-basement', name: 'Basement', equipment: [...EQUIPMENT] },
+      { id: 'loc-basement', name: 'Basement', equipment: [...EQUIPMENT] }, // not the Garage Strength extras (dowel, cable, ...)
     ],
     tiers: {
       // GZCL: T1 85-100% in sets of 1-3 for 10-15 reps, T2 65-85% in sets of 5-8 for 20-30 reps, T3 10+ reps a set for 30+ total.
@@ -196,7 +215,7 @@ export function seed() {
       // Technique: quality reps at a light-to-moderate load. The load range is a target, any load counts.
       TECH: { repMin: 8, repMax: 16, intMin: 0.5, intMax: 0.7 },
     },
-    equipment: [...EQUIPMENT], // grows as you add gear in the app
+    equipment: [...ALL_EQUIPMENT], // grows as you add gear in the app
     families, exercises, schemes, slots,
     mobility: mobilitySeed(), // separate from strength: { exercises, routines, sessions }
     plans: [],

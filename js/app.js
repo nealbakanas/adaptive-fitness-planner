@@ -1260,7 +1260,7 @@ function settingsLocations() {
 function settingsTiers() {
   const desc = {
     T1: 'Heavy sets of 1–3 on main lifts (GZCL: 85–100%, 10–15 reps)',
-    T2: 'Sets of 5–8 on supporting lifts (GZCL: 65–85%, 20–30 reps)',
+    T2: 'Sets of 5–8 on supporting lifts, or 10 × 2–3 on a minute\'s rest for power work and tired days (GZCL: 65–85%, 20–30 reps)',
     T3: 'Accessory work, 10+ reps a set (GZCL: 30+ reps total)',
     TECH: 'Technique: quality explosive reps when tired or after a heavy day',
   };
@@ -1502,7 +1502,7 @@ function renderSheet() {
 
 const TIER_DESC = {
   T1: 'Heavy: sets of 1–3 at 85%+ of your max, 10–15 reps total.',
-  T2: 'Moderate: sets of 5–8 at 65–85%, 20–30 reps total.',
+  T2: 'Moderate: sets of 5–8 at 65–85%, 20–30 reps total. Power work and tired days: 10 × 2–3 on a minute\'s rest.',
   T3: 'Accessory: 10+ reps a set, 30+ total. Any load counts.',
   TECH: 'Technique: crisp, low-volume explosive work when tired or after heavy days. Has its own goal.',
 };
@@ -1689,7 +1689,7 @@ function sheetMobEx(sh) {
     <div class="field"><label>Log each set with</label>${box('me-t-reps', d.track.reps, 'Reps')}${box('me-t-hold', d.track.hold, 'Hold time')}${box('me-t-load', d.track.load, 'Load')}
       <input id="me-t-extra" value="${esc(d.track.extra)}" placeholder="Anything else, e.g. Depth or Deficit (cm)"></div>
     <div class="field"><label>Cues</label><textarea id="me-cues" rows="2">${esc(d.cues)}</textarea></div>
-    <div class="field"><label>Video search <span class="hint">opens YouTube results</span></label><input id="me-video" value="${esc(d.video)}" placeholder="e.g. kneesovertoesguy elephant walk"></div>
+    <div class="field"><label>Video <span class="hint">a YouTube search phrase or a link</span></label><input id="me-video" value="${esc(d.video)}" placeholder="e.g. kneesovertoesguy elephant walk"></div>
     <div class="field"><label>History notes</label><textarea id="me-notes" rows="2">${esc(d.notes)}</textarea></div>
     ${sh.isNew ? '' : box('me-arch', d.archived, 'Archived <span class="hint">kept for history, left out of pickers</span>')}
     <div class="actions">${!sh.isNew && !used ? '<button class="danger" data-act="mobExDelete">Delete</button>' : ''}${used ? `<button data-act="histOpen" data-q="${esc(d.name)}">History</button>` : ''}<button class="primary" data-act="mobExSave">Save</button></div>`;
@@ -2146,8 +2146,8 @@ const actions = {
     const extra = Number(d.v);
     const excludeFamilies = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
     const res = s.source === 'focus'
-      ? L.buildFocus(state, { ...s, minutes: extra }, { region: s.focusRegion, accessoriesOnly: true }, Date.now(), { excludeFamilies })
-      : L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies });
+      ? L.buildFocus(state, { ...s, minutes: extra }, { region: s.focusRegion, accessoriesOnly: true }, Date.now(), { excludeFamilies, sessionBlocks: s.blocks })
+      : L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies, sessionBlocks: s.blocks });
     s.minutes += extra;
     if (res.notes?.length) s.focusNotes = [...(s.focusNotes || []), ...res.notes];
     s.blocks.push(...res.blocks);

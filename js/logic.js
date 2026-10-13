@@ -380,6 +380,8 @@ function recentSchemes(state, exerciseId, n) {
 }
 
 export const overRepCap = (ex, sc) => !!ex?.maxReps && sc.reps > ex.maxReps;
+// Ten sets of 2-3 on a short rest: for power work (explosive lifts) and tired days, not a fresh day's strength work.
+const powerSets = sc => sc.sets >= 10 && sc.reps <= 3;
 
 // Time and the exercise's rep cap are hard filters; dose fit, energy, variety and chunkability are soft weights.
 export function pickScheme(state, tier, ex, budget, ci, dose = null) {
@@ -388,6 +390,7 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
   let best = null, bestScore = -Infinity;
   for (const sc of schemeOptions(state, tier)) {
     if (sc.minutes > budget || overRepCap(ex, sc)) continue;
+    if (tier === 'T2' && powerSets(sc) && !ex.explosive && e > 2.5) continue;
     let s = 0;
     if (doseFit(state, tier, sc, dose)) s += 3;
     if (e <= 2.5) s += tier === 'T3' ? sc.sets * 0.1 : (6 - sc.reps) * 0.3; // low energy: low reps, many sets (T3: more, shorter sets)
@@ -413,7 +416,8 @@ const blockRank = (state, b) => {
 
 // Build one session: T1, then T2, technique and T3 until the time budget runs out, then fill any time left.
 // `fill` (on by default) tops the session up from the library when the goals don't use all the time.
-export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [], fill = true } = {}) {
+// `sessionBlocks`: the workout so far, when this fills extra time (+ Time), so its lifts count.
+export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [], fill = true, sessionBlocks = [] } = {}) {
   const scored = scoreSlots(state, ci, t);
   const top = scored[0]?.score || 0;
   let budget = ci.minutes;
@@ -444,12 +448,12 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
   // Goals (nearly) done: use the rest of the time anyway.
   let notes = [];
   if (fill && ci.minutes - goalMinutes >= 5) {
-    const f = fillTime(state, ci, t, blocks, ci.minutes - goalMinutes, [...famUsed]);
+    const f = fillTime(state, ci, t, blocks, ci.minutes - goalMinutes, [...famUsed], sessionBlocks);
     blocks.push(...f.blocks);
     notes = f.notes;
     sortBlocks(state, blocks);
     pairT3s(state, blocks);
-    stretchToFit(state, blocks, ci.minutes);
+    stretchToFit(state, blocks, ci.minutes, ci);
   }
   return { blocks, scored, notes, goalMinutes, minutesUsed: Math.round(blocksMinutes(state, blocks)), ready: readinessSummary(state, ci, t) };
 }
@@ -464,6 +468,7 @@ const PATTERNS = [
   ['knee', /reverse nordic|sissy/i],
   ['hinge', /reverse hyper|sorensen|deadlift|\brdls?\b|romanian|good ?morning|back extension|hyperextension|hip thrust|glute|nordic|hamstring|\bghr\b|leg curl|swing|hinge|(block|rack|deficit) pulls?\b/i],
   ['full', /clean|snatch|jerk|thruster|burpee/i],
+  ['push', /overhead press|military press/i], // before squat words: "banded press in split" is a press
   ['knee', /squat|lunge|split|step[- ]?up|leg press|leg extension|pistol|jump|bound|\bhops?\b|skater/i],
   ['pull', /\btrap\b|pull[- ]?ups?|chin[- ]?ups?|\brows?\b|pulldown|face pull|pull[- ]?apart|rear[- ]?delt|curl|shrug|vertical pull|upper back|\blats?\b/i],
   ['push', /\bdips?\b|press|push[- ]?ups?|bench|incline|tricep|telle|extension|skull|push ?down|raise|\bfly\b|chest|shoulder/i],
@@ -530,8 +535,12 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
   const loc = byId(state.locations, ci.locationId);
   // A T1/T2 goal's own lift is a main lift, not something to squeeze into a rest; its easier variations are fair game.
   const skip = new Set(excludeFamilies);
-  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2')
-    .map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
+  const goalLift = sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId;
+  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(goalLift));
+  // Heavy-goal lifts: support work picks a different lift for the pattern when there is one, so it complements them.
+  const t1Lifts = new Set(state.slots.filter(sl => sl.tier === 'T1').map(goalLift));
+  // Families with a heavy or moderate goal hold the main lifts (squats before leg extensions, chin-ups before curls).
+  const goalFamilies = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId));
   const since = Date.now() - 84 * DAY;
   const lately = state.sets.filter(x => x.done && !x.warmup && x.loggedAt >= since);
   const recent = new Set(lately.map(x => x.exerciseId));
@@ -575,7 +584,8 @@ const FOCUS_T3 = {
 export const FOCUS_REGIONS = Object.keys(FOCUS_MAIN);
 const LOWER_BACK = /reverse hyper|sorensen|back extension|hyperextension|good ?morning/i;
 const PATTERN_LABEL = { push: 'pushing', pull: 'pulling', knee: 'squat pattern', hinge: 'hinge', back: 'lower back', calf: 'calves', core: 'core' };
-const MAX_BLOCKS = 10;
+// About one exercise per 5 minutes (a superset partner counts half, so all-accessory days need that many), never fewer than 10.
+const maxBlocks = minutes => Math.max(10, Math.round(minutes / 5));
 const tierOrder = tier => BUILD_ORDER.indexOf(tier);
 // Explosive work keeps the order it was picked in (jumps before cleans); the rest goes in tier order.
 const sortBlocks = (state, blocks) => blocks.sort((a, b) => blockRank(state, a) - blockRank(state, b)
@@ -587,8 +597,11 @@ export function blocksMinutes(state, blocks) {
 }
 
 // When the library runs out before the time does: more sets on the T2 and T3 work (3×15 → 4×12, 3×10 → 5×5),
-// the cheapest step that fits first. Explosive and T1 work keep their schemes. Mutates the blocks.
-export function stretchToFit(state, blocks, minutes) {
+// the cheapest step that fits first. Explosive and T1 work keep their schemes. On a tired day (with the check-in
+// given) a step never raises the reps per set, so 6×4 can become 10×2 but not 5×5; on other days it never moves a
+// strength lift into ten sets of 2-3. Mutates the blocks.
+export function stretchToFit(state, blocks, minutes, ci = null) {
+  const tired = !!ci && energy(ci) <= 2.5;
   for (;;) {
     const left = minutes - blocksMinutes(state, blocks);
     let best = null;
@@ -598,6 +611,7 @@ export function stretchToFit(state, blocks, minutes) {
       const dose = slotDose(state, byId(state.slots, b.slotId), b.tier);
       for (const sc of schemeOptions(state, b.tier)) {
         if (sc.minutes <= cur.minutes || overRepCap(ex, sc) || !doseFit(state, b.tier, sc, dose)) continue;
+        if (tired ? sc.reps > cur.reps : powerSets(sc)) continue;
         if (b.tier === 'T3' && (sc.reps > 15 || (sc.reps < 8 && !ex.maxReps))) continue; // sets of 8-15, as in pickScheme
         const cost = (sc.minutes - cur.minutes) * (b.pairOf ? 0.5 : 1);
         if (cost <= left && (!best || cost < best.cost)) best = { b, sc, cost };
@@ -606,6 +620,27 @@ export function stretchToFit(state, blocks, minutes) {
     if (!best) return blocks;
     best.b.schemeId = best.sc.id;
   }
+}
+
+// Groups the T3s from scratch, so adding blocks one at a time can't strand a T3 outside every superset.
+function regroup(state, blocks) {
+  for (const b of blocks) delete b.pairOf;
+  sortBlocks(state, blocks);
+  return pairT3s(state, blocks);
+}
+
+// While the workout runs over (a T3 that ended up outside a superset costs its full time), drop the last T3 from
+// `removable` (library picks) and regroup. Mutates `blocks` and `removable`; returns the dropped blocks.
+function trimToFit(state, blocks, minutes, removable) {
+  const dropped = [];
+  while (regroup(state, blocks) && blocksMinutes(state, blocks) > minutes + 1e-9) {
+    const i = removable.findLastIndex(b => b.tier === 'T3');
+    if (i < 0) break;
+    const [gone] = removable.splice(i, 1);
+    if (blocks !== removable) blocks.splice(blocks.indexOf(gone), 1);
+    dropped.push(gone);
+  }
+  return dropped;
 }
 
 // The day's lean (upper or lower), or null for either.
@@ -618,33 +653,49 @@ export function bodyRegion(state, e) {
 }
 
 // Picks from the whole library at the location, spending `minutes`. Collects blocks and notes.
-function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
+// `taken`: exercises already in the workout (goal picks, the session so far), never picked again.
+function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken = []) {
   const loc = byId(state.locations, ci.locationId);
   const famUsed = new Set(excludeFamilies);
   const pattern = e => movementPattern(state, e);
-  // When each exercise and pattern was last trained (pattern: heavy or moderate work only).
-  const exLast = new Map(), patLast = new Map();
+  // When each exercise and pattern was last trained (pattern: heavy or moderate work only; patLastT1: heavy only).
+  const exLast = new Map(), patLast = new Map(), patLastT1 = new Map();
   for (const s of state.sets) {
     if (!s.done || s.warmup || s.loggedAt >= t) continue;
     const e = byId(state.exercises, s.exerciseId);
     if (!e) continue;
     exLast.set(e.id, Math.max(exLast.get(e.id) ?? 0, s.loggedAt));
     if (s.tier === 'T1' || s.tier === 'T2') patLast.set(pattern(e), Math.max(patLast.get(pattern(e)) ?? 0, s.loggedAt));
+    if (s.tier === 'T1') patLastT1.set(pattern(e), Math.max(patLastT1.get(pattern(e)) ?? 0, s.loggedAt));
   }
   const lately = e => (exLast.get(e.id) ?? 0) >= t - 182 * DAY; // something you actually do
   const isDefault = e => byId(state.families, e.familyId)?.defaultExerciseId === e.id;
   const usable = e => !e.archived && !famUsed.has(e.familyId) && isAvailable(e, loc);
   // A T1/T2 goal's own lift is a main lift, not accessory filler (as in suggestPair).
-  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2')
-    .map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
+  const goalLift = sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId;
+  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(goalLift));
+  // Heavy-goal lifts: support work picks a different lift for the pattern when there is one, so it complements them.
+  const t1Lifts = new Set(state.slots.filter(sl => sl.tier === 'T1').map(goalLift));
+  // Families with a heavy or moderate goal hold the main lifts (squats before leg extensions, chin-ups before curls).
+  const goalFamilies = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId));
+  // Your chosen lifts stay the core of the work: heavy (T1) work only uses your T1 goals' lifts, the one each goal would
+  // use here, when you have T1 goals; support (T2) work tries your T2 goals' lifts first. Swap still offers the rest.
+  const hasT1Goals = state.slots.some(sl => sl.tier === 'T1');
+  const t1Core = new Set(state.slots.filter(sl => sl.tier === 'T1').map(sl => pickExercise(state, sl.familyId, loc, 'T1', sl.exerciseId)?.id).filter(Boolean));
+  const t2Chosen = new Set(state.slots.filter(sl => sl.tier === 'T2').map(goalLift));
+  // Power work (jumps, cleans) leads with a family you have any goal for.
+  const anyGoalFamilies = new Set(state.slots.map(sl => sl.familyId));
   // Once every family is in use: another move from a family this workout already uses, if it's a different
   // movement (triceps after curls). Families from the goals or the session so far stay off limits.
   const famPatterns = new Map();
-  const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId)
+  // Last resort while time is left: any exercise not in the workout yet, from any family (a second core or upper-back move).
+  const takenIds = new Set(taken);
+  const spare = e => !e.archived && isAvailable(e, loc) && !takenIds.has(e.id) && !k.blocks.some(b => b.exerciseId === e.id);
+  const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId) && !takenIds.has(e.id)
     && !famPatterns.get(e.familyId).has(pattern(e)) && !k.blocks.some(b => b.exerciseId === e.id);
   const k = {
-    blocks: [], notes: [], budget: minutes, lately, isDefault,
-    // Patterns in the workout so far, so a second lift balances the first instead of repeating it.
+    blocks: [], notes: [], budget: minutes, lately, isDefault, turn: 0,
+    // Patterns that already have a strength lift (T1/T2, not jumps or cleans), so the next lift goes somewhere else.
     present: new Set(present.map(id => pattern(byId(state.exercises, id)))),
     count: tier => k.blocks.filter(b => b.tier === tier).length,
     add(e, tier, why, dose = null) {
@@ -656,7 +707,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
       k.blocks.push({ id: uid(), tier, slotId: slot?.id ?? null, exerciseId: e.id, schemeId: sc.id, swaps: [] });
       famUsed.add(e.familyId);
       famPatterns.set(e.familyId, (famPatterns.get(e.familyId) ?? new Set()).add(pattern(e)));
-      k.present.add(pattern(e));
+      if ((tier === 'T1' || tier === 'T2') && !e.explosive) k.present.add(pattern(e));
       k.budget -= (sc.minutes + WARMUP[tier]) * share;
       k.notes.push(`${tier} ${e.name}: ${why}`);
       return true;
@@ -667,44 +718,59 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
         && (!famUsed.has(e.familyId) || e.familyId === sameFamily) && !k.blocks.some(b => b.exerciseId === e.id)
         && (region === 'any' || e.region === region || e.region === 'full')
         && (load == null || (e.metric === 'load_reps') === load))
-        .sort((a, b) => (b.region === region) - (a.region === region) || lately(b) - lately(a) || isDefault(b) - isDefault(a) || a.rank - b.rank);
+        .sort((a, b) => anyGoalFamilies.has(b.familyId) - anyGoalFamilies.has(a.familyId) || (b.region === region) - (a.region === region)
+          || lately(b) - lately(a) || isDefault(b) - isDefault(a) || a.rank - b.rank);
     },
-    // A loaded lift for a movement pattern: one you do, with a max (T1 insists when any has one), the family's usual one.
-    main(p, tier) {
+    // A loaded lift for a movement pattern. T1: one of your T1 goals' lifts when you have T1 goals, else one with a max
+    // (T1 insists when any has one; `needMax` always). T2: your T2 goals' lifts first, and not a T1 goal's own lift when
+    // another fits. Then lifts from goal families, ones you do, with a max, the family's usual one.
+    main(p, tier, needMax = false) {
       let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && pattern(e) === p);
-      if (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null)) c = c.filter(e => estimatedMax(state, e.id) != null);
-      return c.sort((a, b) => lately(b) - lately(a) || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null)
-        || isDefault(b) - isDefault(a) || a.rank - b.rank)[0] ?? null;
+      if (tier === 'T1' && hasT1Goals) c = c.filter(e => t1Core.has(e.id));
+      else if (needMax || (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null))) c = c.filter(e => estimatedMax(state, e.id) != null);
+      const t1Goal = e => tier === 'T2' && t1Lifts.has(e.id);
+      const chosen = e => tier === 'T2' && t2Chosen.has(e.id);
+      return c.sort((a, b) => t1Goal(a) - t1Goal(b) || chosen(b) - chosen(a) || goalFamilies.has(b.familyId) - goalFamilies.has(a.familyId) || lately(b) - lately(a)
+        || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null) || isDefault(b) - isDefault(a) || a.rank - b.rank)[0] ?? null;
     },
-    // A lift from the patterns given: one not in the workout yet, trained heavy least recently.
-    strength(patterns, why, tier = 'T2') {
-      const order = [...patterns].sort((a, b) => k.present.has(a) - k.present.has(b) || (patLast.get(a) ?? 0) - (patLast.get(b) ?? 0));
+    // A lift from the patterns given that don't have a strength lift in the workout yet, trained heavy least recently.
+    // For a T1 lift, "heavy" means T1: T2 work in a pattern doesn't make it look recently trained.
+    strength(patterns, why, tier = 'T2', { needMax = false } = {}) {
+      const t1Ago = p => (tier === 'T1' ? patLastT1.get(p) ?? 0 : 0);
+      const order = patterns.filter(p => !k.present.has(p))
+        .sort((a, b) => t1Ago(a) - t1Ago(b) || (patLast.get(a) ?? 0) - (patLast.get(b) ?? 0));
       for (const p of order) {
-        const e = k.main(p, tier);
+        const e = k.main(p, tier, needMax);
         if (e && k.add(e, tier, `${PATTERN_LABEL[p]}, ${why}`)) return true;
       }
       return false;
     },
-    // No barbell setups; the ones you do but haven't done for longest first.
-    accessory(p, relaxed = false) {
-      const base = state.exercises.filter(x => (relaxed ? reusable(x) : usable(x)) && !x.explosive && !mainLifts.has(x.id)
-        && !(x.equipment || []).some(q => q === 'barbell' || q === 'rack'));
+    // No barbell setups or weighted pull-ups and dips (dip belt: those are main lifts); the ones you do but haven't done for longest first.
+    // `level`: 0 a family not used yet, 1 a different movement in a family this workout added, 2 anything not in the workout.
+    accessory(p, level = 0) {
+      const fits = [usable, reusable, spare][level];
+      const base = state.exercises.filter(x => fits(x) && !x.explosive && !mainLifts.has(x.id)
+        && !(x.equipment || []).some(q => q === 'barbell' || q === 'rack' || q === 'dip-belt'));
       const of = q => base.filter(x => pattern(x) === q);
       const c = p === 'back' ? (of('hinge').some(x => LOWER_BACK.test(x.name)) ? of('hinge').filter(x => LOWER_BACK.test(x.name)) : of('hinge')) : of(p);
       return c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0] ?? null;
     },
-    // Go round the rotation until the time is used (or nothing else fits), then again reusing families.
-    // `limit` caps how many this call adds.
-    accessories(rotation, maxBlocks, limit = Infinity) {
-      const stop = Math.min(maxBlocks, k.blocks.length + limit);
-      for (const relaxed of [false, true]) {
-        for (let i = 0, misses = 0; k.budget >= 5 && k.blocks.length < stop && misses < rotation.length; i++) {
-          const p = rotation[i % rotation.length];
-          const e = k.accessory(p, relaxed);
-          if (e && k.add(e, 'T3', p === 'core' ? 'core' : `${PATTERN_LABEL[p]} accessory${k.lately(e) ? ', not done for a while' : ''}`)) misses = 0;
+    // Go round the rotation until the time is used (or nothing else fits), at each of `levels` in turn (see accessory).
+    // `limit` caps how many this call adds; returns how many it added.
+    // The rotation carries on where the last call stopped, so one-at-a-time calls alternate (pull, push, pull, core...).
+    accessories(rotation, maxBlocks, limit = Infinity, levels = [0, 1]) {
+      const stop = Math.min(maxBlocks, k.blocks.length + limit), n = k.blocks.length;
+      for (const level of levels) {
+        for (let misses = 0; k.budget >= 5 && k.blocks.length < stop && misses < rotation.length; k.turn++) {
+          const p = rotation[k.turn % rotation.length];
+          const e = k.accessory(p, level);
+          const why = () => level === 2 ? `another ${p === 'core' ? 'core' : PATTERN_LABEL[p]} accessory to fill the time`
+            : p === 'core' ? 'core' : `${PATTERN_LABEL[p]} accessory${k.lately(e) ? ', not done for a while' : ''}`;
+          if (e && k.add(e, 'T3', why())) misses = 0;
           else misses++;
         }
       }
+      return k.blocks.length - n;
     },
   };
   return k;
@@ -723,15 +789,16 @@ function explosiveLower(state, ci, t, k) {
   if (clean) {
     k.add(clean, 'T1', 'clean variation for power');
     // A second clean variation if it still leaves room for a few accessories.
-    const second = k.explosives('full', { load: true, sameFamily: clean.familyId })[0];
+    const second = k.explosives('full', { load: true, sameFamily: clean.familyId }).find(e => e.familyId === clean.familyId);
     // Power reps (sets of 1-3, 10-20 in all), not a 5×5: it's speed work after the main clean.
     if (second && ci.intent !== 'easy' && k.budget >= 30) k.add(second, 'T2', 'second clean variation, lighter', { repMin: 10, repMax: 20 });
   }
   return k.blocks.length > 0;
 }
 
-export function buildFocus(state, ci, { region, explosive = false, accessoriesOnly = false }, t = Date.now(), { excludeFamilies = [] } = {}) {
-  const k = libraryKit(state, ci, t, ci.minutes, excludeFamilies);
+// `sessionBlocks`: the workout so far, when this adds accessories for extra time (+ Time), so none is picked twice.
+export function buildFocus(state, ci, { region, explosive = false, accessoriesOnly = false }, t = Date.now(), { excludeFamilies = [], sessionBlocks = [] } = {}) {
+  const k = libraryKit(state, ci, t, ci.minutes, excludeFamilies, [], sessionBlocks.map(b => b.exerciseId));
   const tired = energy(ci) <= 2.5;
   const easy = ci.intent === 'easy';
   // Explosive lower days are led by jumps and cleans; they stand in for the heavy lifts.
@@ -755,44 +822,79 @@ export function buildFocus(state, ci, { region, explosive = false, accessoriesOn
     const heavyHere = regionConflict(region, recentHeavyRegions(state, t));
     const mainTier = tired || easy || heavyHere ? 'T2' : 'T1';
     if (mainTier === 'T2') k.notes.push(`Main lift at T2, not T1: ${tired ? 'low energy' : easy ? 'easy day' : `heavy ${region}-body work since yesterday`}.`);
-    if (!k.strength(FOCUS_MAIN[region], 'main lift, trained heavy least recently', mainTier)) k.notes.push(`No loaded ${region}-body lift here, so accessories fill in.`);
+    // Heavy work is one of your T1 lifts; when none fits this half or this place, the main lift is moderate instead.
+    const main = k.strength(FOCUS_MAIN[region], 'main lift, trained heavy least recently', mainTier)
+      || (mainTier === 'T1' && k.strength(FOCUS_MAIN[region], `main lift at T2: none of your T1 lifts is a ${region}-body lift you can do here`));
+    if (!main) k.notes.push(`No loaded ${region}-body lift here, so accessories fill in.`);
     if (!easy) k.strength(FOCUS_MAIN[region], 'to balance it');
   }
 
   // Accessories, then more T2 work if there's still time, then accessories again. After jumps and cleans,
   // a couple of accessories (lower back, legs, core) come before any T2 lift.
-  k.accessories(FOCUS_T3[region], MAX_BLOCKS, led ? 3 : Infinity);
-  if (!accessoriesOnly && !easy && k.budget >= 10 && k.blocks.length < MAX_BLOCKS) k.strength(FOCUS_MAIN[region], 'to fill the time');
-  k.accessories(FOCUS_T3[region], MAX_BLOCKS);
-  settle(state, k, ci.minutes, FOCUS_T3[region], !accessoriesOnly);
+  const cap = maxBlocks(ci.minutes);
+  k.accessories(FOCUS_T3[region], cap, led ? 3 : Infinity);
+  if (!accessoriesOnly && !easy && k.budget >= 10 && k.blocks.length < cap) k.strength(FOCUS_MAIN[region], 'to fill the time');
+  k.accessories(FOCUS_T3[region], cap);
+  settle(state, k, ci, FOCUS_T3[region], !accessoriesOnly);
   return { blocks: k.blocks, notes: k.notes, minutesUsed: Math.round(blocksMinutes(state, k.blocks)), ready: readinessSummary(state, ci, t) };
 }
 
+// Removes a dropped block's line from "How this was built".
+const dropNote = (state, k, b) => { const head = `${b.tier} ${byId(state.exercises, b.exerciseId)?.name}:`; k.notes = k.notes.filter(n => !n.startsWith(head)); };
+
 // Groups the T3s, then uses any time the grouping freed up (partners take half their minutes) for more
 // accessories, then more sets. Mutates k.blocks.
-function settle(state, k, minutes, rotation, stretch = true) {
+function settle(state, k, ci, rotation, stretch = true) {
+  const minutes = ci.minutes;
   for (;;) {
-    sortBlocks(state, k.blocks);
-    pairT3s(state, k.blocks);
+    regroup(state, k.blocks);
     const n = k.blocks.length;
     k.budget = minutes - blocksMinutes(state, k.blocks);
-    k.accessories(rotation, MAX_BLOCKS, 1);
+    // One more accessory: a new family or movement first, else another exercise from one already in.
+    if (!k.accessories(rotation, maxBlocks(minutes), 1)) k.accessories(rotation, maxBlocks(minutes), 1, [2]);
     if (k.blocks.length === n) break;
   }
-  if (stretch) stretchToFit(state, k.blocks, minutes);
+  for (const b of trimToFit(state, k.blocks, minutes, k.blocks)) dropNote(state, k, b);
+  if (stretch) stretchToFit(state, k.blocks, minutes, ci);
 }
 
-// Tops up a goal-driven suggestion from the library so the whole time block is used: a T2 lift (unless it's
-// an easy day or there's already plenty of T2), then T3s, leaning toward the day's region if one was picked.
-function fillTime(state, ci, t, blocks, budget, famUsed) {
+// Tops up a goal-driven suggestion from the library so the whole time block is used: on a heavy day with no heavy
+// lift yet, a T1 lift; then T2 lifts up to two (not on an easy day); then T3s, leaning toward the day's region if one was picked.
+function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
   const lean = leanOf(ci);
-  const k = libraryKit(state, ci, t, budget, famUsed, blocks.map(b => b.exerciseId));
+  const isStrength = b => (b.tier === 'T1' || b.tier === 'T2') && !byId(state.exercises, b.exerciseId)?.explosive;
+  const k = libraryKit(state, ci, t, budget, famUsed, [...sessionBlocks, ...blocks].filter(isStrength).map(b => b.exerciseId),
+    [...sessionBlocks, ...blocks].map(b => b.exerciseId));
   const intro = `Your open goals fill ${ci.minutes - budget} of your ${ci.minutes} minutes, so the rest is from your library${lean ? `, leaning ${lean}-body` : ''}:`;
-  const mains = lean ? FOCUS_MAIN[lean] : [...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower];
-  if (ci.intent !== 'easy' && budget >= 15 && blocks.filter(b => b.tier === 'T2').length < 2) k.strength(mains, 'to fill the time');
-  k.accessories(lean ? FOCUS_T3[lean] : FOCUS_T3.either, MAX_BLOCKS - blocks.length);
+  // The half you lean toward first; the other half only once that one has a strength lift in each pattern.
+  const halves = lean ? [FOCUS_MAIN[lean], FOCUS_MAIN[lean === 'upper' ? 'lower' : 'upper']] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]];
+  const pick = (tier, why, opts = {}, ok = () => true) => halves.some(ps => k.strength(ps.filter(ok), why, tier, opts));
+  const strengthIn = tier => [...sessionBlocks, ...blocks, ...k.blocks].filter(b => b.tier === tier && isStrength(b)).length;
+  // Heavy day, not tired, no heavy lift in the session yet: one T1 lift you've loaded (it has an estimated max), from a
+  // pattern whose half of the body hasn't had heavy work since yesterday.
+  if (ci.intent === 'heavy' && energy(ci) > 2.5 && !strengthIn('T1') && k.budget >= 15) {
+    const heavy = recentHeavyRegions(state, t);
+    pick('T1', 'heavy day, no heavy work there since yesterday', { needMax: true }, p => !regionConflict(PATTERN_REGION[p], heavy));
+  }
+  // Up to two T2 strength lifts in the session (goal ones count; jumps and cleans are power work and don't),
+  // each from a pattern with no strength lift yet, least recently trained heavy first.
+  while (ci.intent !== 'easy' && k.budget >= 15 && strengthIn('T2') < 2 && pick('T2', 'to fill the time'));
+  const all = () => [...blocks, ...k.blocks];
+  const room = maxBlocks(ci.minutes) - blocks.length;
   // A lean is a bias, not a limit: once that half of the library runs out, the rest of the time still gets used.
-  if (lean) k.accessories(FOCUS_T3.either, MAX_BLOCKS - blocks.length);
+  const rotations = lean ? [FOCUS_T3[lean], FOCUS_T3.either] : [FOCUS_T3.either];
+  for (const r of rotations) k.accessories(r, room);
+  // Grouping T3s into supersets frees time (a partner counts half): group them, then add one more while one fits.
+  for (;;) {
+    const merged = regroup(state, all());
+    k.budget = ci.minutes - blocksMinutes(state, merged);
+    const n = k.blocks.length;
+    // A new family or movement from either rotation first, else another exercise from a family already in.
+    for (const level of [[0, 1], [2]]) for (const r of rotations) if (k.blocks.length === n) k.accessories(r, room, 1, level);
+    if (k.blocks.length === n) break;
+  }
+  // Never over the time: a T3 that ends up outside a superset costs its full minutes.
+  for (const b of trimToFit(state, all(), ci.minutes, k.blocks)) dropNote(state, k, b);
   return { blocks: k.blocks, notes: k.blocks.length ? [intro, ...k.notes] : [] };
 }
 

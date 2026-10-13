@@ -1,9 +1,9 @@
 // Offline support and rest-timer notifications.
 
-const CACHE = 'afp-v2';
+const CACHE = 'afp-v3';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json',
-  'js/app.js', 'js/logic.js', 'js/store.js', 'js/seed.js', 'js/fitnotes.js', 'js/goals.js', 'js/mobility.js', 'js/programs.js',
+  'js/app.js', 'js/logic.js', 'js/store.js', 'js/seed.js', 'js/fitnotes.js', 'js/goals.js', 'js/mobility.js', 'js/programs.js', 'js/library.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 const NETWORK_TIMEOUT = 2500; // slow gym signal: fall back to cache after this

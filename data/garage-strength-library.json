@@ -1,0 +1,4561 @@
+{
+ "source": "https://www.youtube.com/playlist?list=PLuV8B5eKhJBxZLxBmmu5TvZ50eKDS-qLd",
+ "playlist": "Movement Library",
+ "channel": "Garage Strength",
+ "fetched": "2026-10-13",
+ "exercises": [
+  {
+   "name": "Banded Lat Swings, Knees Back",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=IAqdlwJJV2Q",
+     "seconds": 18,
+     "title": "Movement Library: Banded Lat Swings Knees Back"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Barefoot PVC Rolling",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=TmcX016ayJE",
+     "seconds": 45,
+     "title": "Movement Library: Barefoot PVC Rolling"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Charleston Openers",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=rKFK9XnIxqU",
+     "seconds": 22,
+     "title": "Movement Library: Charleston Openers"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Lat Swings",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=904YrQyZvOc",
+     "seconds": 17,
+     "title": "Movement Library: Lat Swings"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Lying Breathing Drill",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=yHDcqLKyF64",
+     "seconds": 166,
+     "title": "Movement Library: Lying Breathing Drill"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Open the Road",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=S11iXM96lkA",
+     "seconds": 18,
+     "title": "Movement Library: Open the Road"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "PVC Pipe Walks",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=dhVSLnM2XXY",
+     "seconds": 10,
+     "title": "Movement Library: PVC Pipe Walks"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Calf Raises",
+   "category": "Feet, shins & calves",
+   "appFamily": "fam-calves",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=07SyxYTZa5I",
+     "seconds": 9,
+     "title": "Movement Library: Calf Raises"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Tibialis Curl",
+   "category": "Feet, shins & calves",
+   "appFamily": "fam-calves",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=4p4_NQa9vsY",
+     "seconds": 13,
+     "title": "Movement Library: Tibialis Curl"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Towel Toe Curls",
+   "category": "Feet, shins & calves",
+   "appFamily": "fam-calves",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=jisD3s1pVuA",
+     "seconds": 21,
+     "title": "Movement Library: Towel Toe Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Clean Pull Big Shrug",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=UXRJ6AMYNwc",
+     "seconds": 13,
+     "title": "Movement Library: Clean Pull Big Shrug"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dimas Clean Pulls",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=nm20c5udiag",
+     "seconds": 36,
+     "title": "Movement Library: Dimas Clean Pulls"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Floating Snatch Pulls",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=8kMmHDCmC-Y",
+     "seconds": 28,
+     "title": "Movement Library: Floating Snatch Pulls"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Pull",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=gYUehJ7_E0U",
+     "seconds": 30,
+     "title": "Movement Library: Snatch Pull"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Pull Pause Extension",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=ZUAhxCKmg_4",
+     "seconds": 25,
+     "title": "Movement Library: Snatch Pull Pause Extension"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Pull to Target",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=hpOsh0ux34Q",
+     "seconds": 47,
+     "title": "Movement Library: Snatch Pull to Target"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Taipei Pulls",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=dEXcD31uzog",
+     "seconds": 18,
+     "title": "Movement Library: Taipei Pulls"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Targeted Clean Pull",
+   "category": "Olympic pulls",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=o53BzeW3XWQ",
+     "seconds": 50,
+     "title": "Movement Library:Targeted Clean Pull"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "3/4 Pull Low Hang Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=lfKRIZZKtEY",
+     "seconds": 9,
+     "title": "Movement Library: 3/4 Pull Low Hang Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chun Snatches",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=six_hkjtAII",
+     "seconds": 26,
+     "title": "Movement Library: Chun Snatches"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Close Grip Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=-a62YVWxLUw",
+     "seconds": 156,
+     "title": "Improve Shoulder Mobility and Stability with Close Grip Snatch | Movement Library"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Full Snatch Off of 2 Boxes",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell",
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=n37I0gxSJ4U",
+     "seconds": 160,
+     "title": "How To Full Snatch Off of 2 Boxes | Movement Library"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "High Hang Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=ms5PYXSDBfk",
+     "seconds": 210,
+     "title": "Improve Power Output with the High Hang Snatch | Movement Library"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Low Hang Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=0Ryzf_wiKxw",
+     "seconds": 16,
+     "title": "Movement Library: Low Hang Snatch"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Muscle Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=T90cLdM51Uw",
+     "seconds": 171,
+     "title": "Learn to Keep Ground Contact with the Muscle Snatch  | Movement Library"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "No Brush Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JGmDuOuQCRI",
+     "seconds": 174,
+     "title": "How To No Brush Snatch | Movement Library"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=m9Hxap7vttM",
+     "seconds": 17,
+     "title": "Movement Library: No Brush Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "No Feet Low Hang Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=RtoBQmmYMD8",
+     "seconds": 15,
+     "title": "Movement Library: No Feet Low Hang Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "No Feet Snatches",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=pOjQmNrV0aM",
+     "seconds": 9,
+     "title": "Movement Library: No Feet Snatches"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "No Feet, Pause at Knee Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=t_J8p2VbI9s",
+     "seconds": 6,
+     "title": "Movement Library: No Feet, Pause at Knee Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Pause at Knee Power Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=xfv2v1XfTrE",
+     "seconds": 184,
+     "title": "How To Pause at Knee Power Snatch | Movement Library"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Pause at the Knee Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=J1wnHCPqbaU",
+     "seconds": 7,
+     "title": "Movement Library: Pause at the Knee Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Pause in the Hole Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=iW7c32wLk6k",
+     "seconds": 5,
+     "title": "Movement Library: Pause in the Hole Snatch"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=KucBxByVLKI",
+     "seconds": 10,
+     "title": "Movement Library: Pause in the Hole Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Seated Muscle Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=fh2Uo4Eci6g",
+     "seconds": 12,
+     "title": "Movement Library: Seated Muscle Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Balance/Snatch",
+   "category": "Snatch variations",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=U9Xbkh-6eI8",
+     "seconds": 21,
+     "title": "Movement Library: Snatch Balance/Snatch"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dead Stop Cleans",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=HvigPhsg3WU",
+     "seconds": 18,
+     "title": "Movement Library: Dead Stop Cleans"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dead Stop Power Clean and Jerk",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=YRb9q_JMuwM",
+     "seconds": 10,
+     "title": "Movement Library: Dead Stop Power Clean and Jerk"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Full clean",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Tg1WNFcZVBw",
+     "seconds": 6,
+     "title": "Full clean"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Hang full clean",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=SoCm4VuRgIg",
+     "seconds": 6,
+     "title": "Hang full clean"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Japanese Cleans",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JxdyW3DPIcQ",
+     "seconds": 14,
+     "title": "Movement Library: Japanese Cleans"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "No Feet Power Clean",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=gLPYRaIdt0M",
+     "seconds": 12,
+     "title": "Movement Library: No Feet Power Clean"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Power Clean on Podium",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=QkhR-vefMAM",
+     "seconds": 19,
+     "title": "Movement Library: Power Clean on Podium"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Tall Clean",
+   "category": "Clean variations",
+   "appFamily": "fam-clean",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=72U_AURjghc",
+     "seconds": 13,
+     "title": "Movement Library: Tall Clean"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "BB Power jerk",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=_JmQMsKmfa0",
+     "seconds": 5,
+     "title": "BB Power jerk Power Jerks"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "BB Split jerk",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=s-2kBRvc8Ls",
+     "seconds": 6,
+     "title": "BB Split jerk"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Behind-the-neck jerk",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=NGAdMUNzeFQ",
+     "seconds": 275,
+     "title": "How To Behind Neck Jerk | Movement Library"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=vT2jHmAB3uY",
+     "seconds": 6,
+     "title": "BN Jerk"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chun Push Press",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=FUssSepg-FA",
+     "seconds": 190,
+     "title": "How to Implement the Chun Push Press in Training  | Movement Library"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dowel power jerk",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=S6O5cEDITac",
+     "seconds": 4,
+     "title": "Dowel power Jerk  PJ"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dowel power Jerk pause in catch",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=2cwCjo4B3v4",
+     "seconds": 4,
+     "title": "Dowel power Jerk pause in catch Power Jerks"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dowel press in split",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=s7TjT0gMKRs",
+     "seconds": 5,
+     "title": "Dowel press in split"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dowel Push press drop in split",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GkWRnbtYqiY",
+     "seconds": 5,
+     "title": "Dowel Push press drop in split"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dowel Push press hold on toes",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=xvT7YnUbEsY",
+     "seconds": 6,
+     "title": "Dowel Push press hold on toes Power Jerks"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dowel split jerk",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GrNvWtx242s",
+     "seconds": 6,
+     "title": "Dowel split jerk"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Establish foot positioning for split",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=niBVYASWIKI",
+     "seconds": 8,
+     "title": "Establish foot positioning for split"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Front rack Push press",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=3eYn4vl04NA",
+     "seconds": 5,
+     "title": "Front rack Push press overhead press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Push Press",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Z_wVyWlkgKI",
+     "seconds": 33,
+     "title": "Movement Library: Push Press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Push Press From Boxes",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell",
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Q_ww_EtN8qg",
+     "seconds": 17,
+     "title": "Movement Library: Push Press From Boxes"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Grip Push Press",
+   "category": "Jerk & push press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=k9r_Yh3OU_g",
+     "seconds": 8,
+     "title": "Movement Library: Snatch Grip Push Press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Press in Split",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=pTgUuaDXMJI",
+     "seconds": 30,
+     "title": "Movement Library: Banded Press in Split"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Scott Press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=nW5DITo-54g",
+     "seconds": 14,
+     "title": "Movement Library: Banded Scott Press"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Curl and Press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=KPSabgseTQM",
+     "seconds": 10,
+     "title": "Movement Library: Curl and Press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "DB Z Press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=MzQo-QrqP-g",
+     "seconds": 6,
+     "title": "DB Z Press overhead press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Half kneeling DB overhead press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=j9i9e6FdBWQ",
+     "seconds": 6,
+     "title": "Half kneeling DB overhead press  1"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=bE3YoEcCUqU",
+     "seconds": 6,
+     "title": "Half kneeling DB overhead press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=t3NwkB4PTj8",
+     "seconds": 8,
+     "title": "Movement Library: Snatch Press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Standing DB military press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=BIa7j44mWEU",
+     "seconds": 6,
+     "title": "Standing DB military overhead press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Standing OVH Press with bands",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=eAGqBR2BJVg",
+     "seconds": 8,
+     "title": "Standing OVH Press with bands overhead press"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "T-Press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=62wt_RrWMZY",
+     "seconds": 22,
+     "title": "Movement Library: T-Press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Z Press",
+   "category": "Overhead press",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JCex8U3yZBM",
+     "seconds": 10,
+     "title": "Movement Library: Z Press"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "2-1 Side Jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=bO64CptkB_0",
+     "seconds": 20,
+     "title": "Movement Library: 2-1 Side Jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Banded Cossack Jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Pa46VgH4Kwc",
+     "seconds": 19,
+     "title": "Movement Library: Banded Cossack Jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Banded Side Jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=0yoS6x2MBcA",
+     "seconds": 27,
+     "title": "Movement Library: Banded Side Jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Box jump land above 90 degrees",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=PGxvXKwUJiY",
+     "seconds": 10,
+     "title": "Box jump land above 90 degrees"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Box Jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=F_R0ybyHbak",
+     "seconds": 9,
+     "title": "Movement Library: Box Jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Broad jumps stick landing for 2 sec",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=AygB9PqyUMA",
+     "seconds": 5,
+     "title": "Broad jumps stick landing for 2 sec"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Champion Strides",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JlazHjORsEY",
+     "seconds": 7,
+     "title": "Movement Library: Champion Strides"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Depth drop off 12\", pause 2 s in the power position",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=m5znivWMXoM",
+     "seconds": 14,
+     "title": "Depth drop off 12  pause for 2 secs in the power position"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Depth Drop over Hurdle",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "hurdle"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=HiTU7BFKuf8",
+     "seconds": 18,
+     "title": "Movement Library: Depth Drop over Hurdle"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Double Leg Bounds",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=m_OGuYluLks",
+     "seconds": 11,
+     "title": "Movement Library: Double Leg Bounds"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Gwiz jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=7Qf9xvJc1XI",
+     "seconds": 7,
+     "title": "Gwiz jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Jump Lunge",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=cjDUL7UKUx8",
+     "seconds": 11,
+     "title": "Movement Library: Jump Lunge"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=DJjjdg61byg",
+     "seconds": 12,
+     "title": "Movement Library: Jump Lunges"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Jump step ups DRIVE UP",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=uK0j9TSKkUI",
+     "seconds": 8,
+     "title": "Jump step ups DRIVE UP"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Overspeed Single Leg Hops",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=2N3f0Ae1mxM",
+     "seconds": 9,
+     "title": "Movement Library: Overspeed Single Leg Hops"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Pause Jump lunges",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=9dTbItg84WI",
+     "seconds": 12,
+     "title": "Pause Jump lunges"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Rapid box jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=KBClW5UQ2-4",
+     "seconds": 10,
+     "title": "Rapid box jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Rapid broad jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=MT_hQPj9qgw",
+     "seconds": 8,
+     "title": "Rapid broad jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Rapid Jump Lunges",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=SEW4ae7zd7M",
+     "seconds": 8,
+     "title": "Rapid Jump Lunges"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Rotating Box Jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=pokp-zfiMng",
+     "seconds": 15,
+     "title": "Movement Library: Rotating Box Jumps"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=8V1TlKGaeyw",
+     "seconds": 13,
+     "title": "Movement Library: Rotating Box Jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Rotating Jump Lunges",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Ye5WfaLQXM0",
+     "seconds": 19,
+     "title": "Movement Library: Rotating Jump Lunges"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Rotating Jump Step-Ups",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JS6G3rePJc0",
+     "seconds": 12,
+     "title": "Movement Library: Rotating Jump Step UPS"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Side-to-Side Jump Step-ups",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=VqHBVRrhJJI",
+     "seconds": 6,
+     "title": "Movement Library: Side-to-Side Jump Step-ups"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Single leg jumps consecutively",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=WHtGQfX6ZTo",
+     "seconds": 6,
+     "title": "Single leg jumps consecutively"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Single leg RDL jumps",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=UIWxYQKNWC8",
+     "seconds": 15,
+     "title": "Single leg RDL jumps"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "SL hops over hurdles",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "hurdle"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=de2LUXttNm4",
+     "seconds": 5,
+     "title": "SL hops over hurdles"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "SL lateral hurdle hops",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "hurdle"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=VXyWN6jy4c4",
+     "seconds": 5,
+     "title": "SL lateral hurdle hops"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Slider Bounds",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [
+    "sliders"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=A8O9ZBOod2o",
+     "seconds": 7,
+     "title": "Movement Library: Slider Bounds"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Squat jumps rapid",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=TibMNTYvLwQ",
+     "seconds": 9,
+     "title": "Squat jumps rapid"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Squat jumps with pause in landing",
+   "category": "Jumps & plyometrics",
+   "appFamily": "fam-jumps",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=aucL1L23wvo",
+     "seconds": 10,
+     "title": "Squat jumps w  pause in landing"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Banded Back Extension",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=iih7hNhYse8",
+     "seconds": 11,
+     "title": "Movement Library: Banded Back Extension"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Good mornings",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=NHXFZnh0o9k",
+     "seconds": 4,
+     "title": "Banded Good mornings Hip Hinge"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Kettlebell Swing",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "kettlebell",
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=SreMZ87aba4",
+     "seconds": 17,
+     "title": "Movement Library: Banded Kettlebell Swing"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Bilateral Hamstring Perturbations",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GnhRSWc_mJU",
+     "seconds": 19,
+     "title": "Movement Library: Bilateral Hamstring Perturbations"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Butt taps",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=7TIalU1GuG8",
+     "seconds": 4,
+     "title": "Butt taps Hip Hinge"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Gwiz Glute Ham",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "glute-ham"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=R3CqnLGCZ10",
+     "seconds": 26,
+     "title": "Movement Library: Gwiz Glute Ham"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Hamstring Pulls",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=g5BKEKrcC1c",
+     "seconds": 13,
+     "title": "Garage Strength Movement Library: Hamstring Pulls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Homers",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=561T63FEJL8",
+     "seconds": 49,
+     "title": "Movement Library: Homers"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Jerk Box Good Mornings",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "barbell",
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=aZd2BWI19O4",
+     "seconds": 17,
+     "title": "Movement Library: Jerk Box Good Mornings"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Kettlebell Swings",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "kettlebell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=jWGi6usYqMA",
+     "seconds": 6,
+     "title": "Movement Library: Kettle-bell Swings"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Lasha Extension",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=7SfcpM0Wsqo",
+     "seconds": 11,
+     "title": "Movement Library: Lasha Extension"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Long Arm Glute Ham Raise",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "glute-ham"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=_FHabisEFmI",
+     "seconds": 14,
+     "title": "Movement Library: Long Arm Glute Ham Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "RDL with BB",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=4ahd9zBOIco",
+     "seconds": 4,
+     "title": "RDL with BB Hip Hinge"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Rear Leg Supported Single Leg Stiff Leg Dead",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=0hoAAYRfuKQ",
+     "seconds": 30,
+     "title": "Movement Library: Rear Leg Supported Single Leg Stiff Leg Dead"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Reverse Hyper",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=3-9bM4GmaEk",
+     "seconds": 7,
+     "title": "Movement Library: Reverse Hyper"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Rotating Glute Ham",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "glute-ham"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=rlOdm35QlaQ",
+     "seconds": 18,
+     "title": "Movement Library: Rotating Glute Ham"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Round Back Glute Ham Raise",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "glute-ham"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=IZbnl5I50yU",
+     "seconds": 22,
+     "title": "Movement Library: Round Back Glute Ham Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Single Leg Hamstring Perturbations",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=tfdv3iJSqa4",
+     "seconds": 27,
+     "title": "Movement Library: Single Leg Hamstring Perturbations"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Single leg RDL with DB",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GLJiukt5uu4",
+     "seconds": 4,
+     "title": "Single Leg RDL w  DB Hip Hinge"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Grip RDL",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=-Ncv6ey0n60",
+     "seconds": 13,
+     "title": "Movement Library: Snatch Grip RDL"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Sprinter Glute Ham",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "glute-ham"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=OOv9TgBx58Y",
+     "seconds": 20,
+     "title": "Movement Library: Sprinter Glute Ham"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Telle Extension",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=9yLhpo33pfI",
+     "seconds": 23,
+     "title": "Movement Library: Telle Extension"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Y’s on Glute Ham",
+   "category": "Hamstrings & glute-ham",
+   "appFamily": "fam-hams",
+   "equipment": [
+    "glute-ham"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=79oZvzyi1nI",
+     "seconds": 16,
+     "title": "Movement Library: Y’s on Glute Ham"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "3 way lunge",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=MAdQwACxBcE",
+     "seconds": 10,
+     "title": "3 way lunge unilateral squat"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Split Squat / Iso Lunge Hold",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=EeV82fDKfyo",
+     "seconds": 31,
+     "title": "Movement Library: Banded Split Squat/ISO Lunge Hold"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
+  },
+  {
+   "name": "BB single leg squat",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=tziWpCSdyWs",
+     "seconds": 3,
+     "title": "BB single leg squat unilateral Squat"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Cossack Squats",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=68RTAUOYQyc",
+     "seconds": 7,
+     "title": "Movement Library: Cossack Squats"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Deficit Split Squat",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=0jkK-3xIIOY",
+     "seconds": 8,
+     "title": "Movement Library: Deficit Split Squat"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Elevated Split Squat",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=xpINqbVv_5s",
+     "seconds": 10,
+     "title": "Movement Library: Elevated Split Squat"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Goblet single leg squat",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=FmBXmcXSw4I",
+     "seconds": 4,
+     "title": "Goblet single leg squat unilateral squat"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Lunges in place",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=6szX7LTcsq0",
+     "seconds": 7,
+     "title": "Lunges in place unilateral squat"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Plate Side Step Ups",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "box",
+    "plate"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JNcHyfbGD3g",
+     "seconds": 10,
+     "title": "Movement Library: Plate Side Step Ups"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Praying Mantis Lunge",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=n3sriTGuVpQ",
+     "seconds": 21,
+     "title": "Movement Library: Preying Mantis Lunge"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Single Leg Iso Max",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=nNGMoR2fuk0",
+     "seconds": 14,
+     "title": "Movement Library: Single Leg IsoMax"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
+  },
+  {
+   "name": "Single Leg Squat aka Bulgarian Single Legs",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Ser0f6Nrc-U",
+     "seconds": 25,
+     "title": "Movement Library: Single Leg Squat aka Bulgarian Single Legs"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Single leg squat BW",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=_H9k1hpDhkE",
+     "seconds": 4,
+     "title": "Single leg squat BW unilateral squat"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Skater Squat",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=CU8A7zp0eSA",
+     "seconds": 3,
+     "title": "Skater Squat unilateral Squat"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Split squat",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=F0-d9KgXFTc",
+     "seconds": 5,
+     "title": "Split squat unilateral squat"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Walking Lunges",
+   "category": "Single-leg squat & lunge",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=QwyJu-kw5xw",
+     "seconds": 6,
+     "title": "Walking Lunges unilateral Squat"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Air squat, heels elevated",
+   "category": "Squat",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=PqOLU7tSMAM",
+     "seconds": 5,
+     "title": "Air squat heals elevated"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Back Squat",
+   "category": "Squat",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Ni0oZl-F4UU",
+     "seconds": 6,
+     "title": "Back Squat"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dowel zombie squat",
+   "category": "Squat",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=oEf7FUL6TtY",
+     "seconds": 5,
+     "title": "Dowel zombie squad"
+    }
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Driver squat",
+   "category": "Squat",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=RuABnaFAZvU",
+     "seconds": 6,
+     "title": "Driver squat"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Goblet squat",
+   "category": "Squat",
+   "appFamily": "fam-squat",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=tECfibR7saE",
+     "seconds": 5,
+     "title": "Goblet squat"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Jules Complex",
+   "category": "Squat",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=nebGs6r5crU",
+     "seconds": 185,
+     "title": "Strengthen Glutes and Quads with the Jules Complex | Movement Library"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Zombie Squats",
+   "category": "Squat",
+   "appFamily": "fam-squat",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=a1EEq1GNs9I",
+     "seconds": 15,
+     "title": "Movement Library: Zombie Squats"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=Q8jnfjMgIP0",
+     "seconds": 5,
+     "title": "Zombie squat"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Band supported push up",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=R9pkcoxQcs8",
+     "seconds": 5,
+     "title": "Band supported push up Pressing"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "BB bench slow ECC, pause, drive",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=PoLYHzoCXMI",
+     "seconds": 8,
+     "title": "BB bench slow ECC, pause, drive Pressing"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Bench Press",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=LrZexOq4xwo",
+     "seconds": 9,
+     "title": "Movement Library: Bench Press"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=qwRQIUS_r7A",
+     "seconds": 6,
+     "title": "BB Pressing bench"
+    }
+   ],
+   "tier": "T1",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "DB bench, starting from the bottom, slow ECC",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [
+    "dumbbells",
+    "bench"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=wZ_eFxdp5zw",
+     "seconds": 7,
+     "title": "DB bench, starting from the bottom, slow ECC Pressing"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Feet Elevated Pipe Push Up",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [
+    "dowel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=9mnNeAzrgfE",
+     "seconds": 18,
+     "title": "Movement Library: Feet Elevated Pipe Push Up"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Gorilla Push-ups",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Eb7cuKN3qGs",
+     "seconds": 10,
+     "title": "Movement Library: Gorilla Push-ups"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Hands release push ups",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=FIk7yN-MnP8",
+     "seconds": 5,
+     "title": "Hands release push ups pressing"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Slider Push-ups",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [
+    "sliders"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=xJ_txyL7RY4",
+     "seconds": 6,
+     "title": "Movement Library: Slider Push-ups"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Slow eccentric push ups",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=qOWFG_9dwuU",
+     "seconds": 8,
+     "title": "Slow eccentric push ups Pressing"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Standing Flies",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=yqlUFoE9v0g",
+     "seconds": 11,
+     "title": "Movement Library: Standing Flies"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Standing press forward with bands",
+   "category": "Horizontal press & push-ups",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=jmnbfiO_0AA",
+     "seconds": 4,
+     "title": "Standing press forward with bands Pressing"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dips",
+   "category": "Dip",
+   "appFamily": "fam-dip",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=pVldpnTstkc",
+     "seconds": 6,
+     "title": "Movement Library: Dips"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest to Bar Chin Ups",
+   "category": "Vertical pull",
+   "appFamily": "fam-vpull",
+   "equipment": [
+    "pullup-bar"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Tc29FuHsnoI",
+     "seconds": 8,
+     "title": "Movement Library: Chest to Bar Chin Ups"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Softball Pull Ups",
+   "category": "Vertical pull",
+   "appFamily": "fam-vpull",
+   "equipment": [
+    "pullup-bar"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=qcN068YCjWk",
+     "seconds": 12,
+     "title": "Movement Library: Softball Pull Ups"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest Supported Arc Row",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=27WDO4h-BBg",
+     "seconds": 21,
+     "title": "Movement Library: Chest Supported Arc Row"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest Supported Row",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=RJFVDo7xamw",
+     "seconds": 6,
+     "title": "Movement Library: Chest Supported Row"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest to Bar Reclining Rows",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "rings"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=ebK0RAOcZB4",
+     "seconds": 22,
+     "title": "Movement Library: Chest to Bar Reclining Rows"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "DB Short Stroker Row",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=DpFxFMh8dyk",
+     "seconds": 11,
+     "title": "Movement Library: DB Short Stroker Row"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Duffin Rows",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=0Q7z8HKfMPw",
+     "seconds": 20,
+     "title": "Movement Library: Duffin Rows"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Eccentric reclining rows, chest to bar",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "rings"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=S649VeCduGQ",
+     "seconds": 15,
+     "title": "Ecc reclining rows chest to bar"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Hater Rows",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=VA_fld8RMKM",
+     "seconds": 24,
+     "title": "Movement Library: Hater Rows"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Reclining ring rows hand to armpit",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "rings"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=ZdCxmzPuHR4",
+     "seconds": 8,
+     "title": "Reclining ring rows hand to armpit"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Reclining ring rows pause 2 second",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "rings"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=VdXMmccr6lQ",
+     "seconds": 11,
+     "title": "Reclining ring rows pause 2 second"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Reclining rows chest to bar",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "rings"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=NAhEeIFw8mQ",
+     "seconds": 11,
+     "title": "Reclining rows chest to bar"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Reverse Grip Seated Row",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=IMVkuCt0aY4",
+     "seconds": 36,
+     "title": "Movement Library: Reverse Grip Seated Row"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Short Stroke Chest Row",
+   "category": "Rows",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GY65PtAvLOo",
+     "seconds": 10,
+     "title": "Movement Library: Short Stroke Chest Row"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=J344yYsxaU4",
+     "seconds": 30,
+     "title": "Movement Library: Banded Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Sitting/Lying Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=va-ZuailKuU",
+     "seconds": 30,
+     "title": "Movement Library: Banded Sitting/Lying Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Underhook Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=WpSDyOvWqIg",
+     "seconds": 14,
+     "title": "Movement Library: Banded Underhook Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest Supported Cable Hammer/Drag Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "dumbbells",
+    "cable"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=BSsPzTAWi_4",
+     "seconds": 40,
+     "title": "Movement Library: Chest Supported Cable Hammer/Drag Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Drag Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=gueR4w52lyk",
+     "seconds": 37,
+     "title": "Movement Library: Drag Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dumbbell Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=aQ6rt5koFig",
+     "seconds": 11,
+     "title": "Movement Library: Dumbbell Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Fat Grip Concentration Cable Curl",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "cable",
+    "fat-grip"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=oYq58Fhp3aM",
+     "seconds": 33,
+     "title": "Movement Library: Fat Grip Concentration Cable Curl"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Hoerbel Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Ia4PyLLROfM",
+     "seconds": 17,
+     "title": "Movement Library: Hoerbel Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "One Arm Fat Grip Preacher Curl",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "fat-grip"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=mdh3aPO2IPU",
+     "seconds": 37,
+     "title": "Movement Library: One Arm Fat Grip Preacher Curl"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Reverse Fat Bar Curl",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "fat-grip"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=kUlRX_DWq3E",
+     "seconds": 35,
+     "title": "Movement Library: Reverse Fat Bar Curl"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Slam Curls",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=K3cXrnbbvXE",
+     "seconds": 22,
+     "title": "Movement Library: Slam Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Standing Unsupported Concentration Curl",
+   "category": "Biceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "dumbbells"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=I432qt-RBYA",
+     "seconds": 60,
+     "title": "Movement Library: Standing Unsupported Concentration Curl"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Incline Tricep Extension",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=LZ7LOvUFjCA",
+     "seconds": 45,
+     "title": "Movement Library: Banded Incline Tricep Extension"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Tricep Pushdown Lying",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=SB55Ypd-d28",
+     "seconds": 37,
+     "title": "Movement Library: Banded Tricep Pushdown Lying"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest Supported Tricep Extension",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=CGQC1n6eiU8",
+     "seconds": 56,
+     "title": "Movement Library: Chest Supported Tricep Extension"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Incline French Press",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Yj5qLUwEvcc",
+     "seconds": 10,
+     "title": "Movement Library: Incline French Press"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Lean Away Tricep Extension",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=P_dAyJFqkIw",
+     "seconds": 13,
+     "title": "Movement Library: Lean Away Tricep Extension"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Miracle Gro",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Nwycg8vHULs",
+     "seconds": 226,
+     "title": "Dane's Platform: Miracle Gro"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Rolling Tricep Push-Ups",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=9wu_LIiosZE",
+     "seconds": 23,
+     "title": "Movement Library: Rolling Tricep Push UPS"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Seated Barbell Extension",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=veXj1DCo-VE",
+     "seconds": 7,
+     "title": "Movement Library: Seated Barbell Extenision"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Triple Triceps",
+   "category": "Triceps",
+   "appFamily": "fam-arms",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=DJvtmLfP_T0",
+     "seconds": 44,
+     "title": "Movement Library: Triple Triceps"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Forearm Rotations",
+   "category": "Forearms & grip",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GKdw3jQi1Fc",
+     "seconds": 13,
+     "title": "Movement Library: Banded Forearm Rotations"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Clamp Curls",
+   "category": "Forearms & grip",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GFocVMyUbIM",
+     "seconds": 30,
+     "title": "Movement Library: Clamp Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Fat Grip Reverse Wrist Curls",
+   "category": "Forearms & grip",
+   "appFamily": null,
+   "equipment": [
+    "fat-grip"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=xoZVgWeHxLQ",
+     "seconds": 16,
+     "title": "Movement Library: Fat Grip Reverse Wrist Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Forearm Roller",
+   "category": "Forearms & grip",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=SaIRX8rYZAo",
+     "seconds": 18,
+     "title": "Movement Library: Forearm Roller"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Pinch Curls",
+   "category": "Forearms & grip",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=abpTCW_SmjU",
+     "seconds": 21,
+     "title": "Movement Library: Pinch Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Single Arm Banded Forearm Rotation",
+   "category": "Forearms & grip",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=gf_nmlnOdlw",
+     "seconds": 16,
+     "title": "Movement Library: Single Arm Banded Forearm Rotation"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Wheel Curls",
+   "category": "Forearms & grip",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=ayTqH1Wtxgc",
+     "seconds": 26,
+     "title": "Movement Library: Wheel Curls"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Band Pull Aparts",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=y-zZr8j8xnY",
+     "seconds": 12,
+     "title": "Movement Library: Band Pull Aparts"
+    },
+    {
+     "url": "https://www.youtube.com/watch?v=Nn5F4Q9IwcU",
+     "seconds": 9,
+     "title": "Band Pull Aparts"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Blackbirds",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=csEMd7GItz8",
+     "seconds": 18,
+     "title": "Movement Library: Banded Blackbirds"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded External Rotation",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Pnx-u8U1jf0",
+     "seconds": 10,
+     "title": "Banded External Rotation"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Front Headlock Extension",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=jM1gf1WJ6b8",
+     "seconds": 17,
+     "title": "Movement Library: Banded Front Headlock Extension"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Behind Back Lateral Raises",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JNpX6_0fcj0",
+     "seconds": 20,
+     "title": "Movement Library: Behind Back Lateral Raises"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest Supported Barbell Raise",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=R3WO2Q9paRY",
+     "seconds": 17,
+     "title": "Movement Library: Chest Supported Barbell Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest Supported Deltoid Circles",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=SkqypOgJu9c",
+     "seconds": 22,
+     "title": "Movement Library: Chest Supported Deltoid Circles"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chest Supported Trap 3 Pinky Elevated",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=kR3naBm61UM",
+     "seconds": 19,
+     "title": "Movement Library: Chest Supported Trap 3 Pinky Elevated"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "External Rotation",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=eHPBzXYvfqs",
+     "seconds": 14,
+     "title": "Garage Strength Movements: External Rotation"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "High On Sides",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=iznEvPzGIRk",
+     "seconds": 8,
+     "title": "Garage Strength Movements: High On Sides"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Incline Y's",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=sEjzR5Slku4",
+     "seconds": 8,
+     "title": "Movement Library: Incline Y's"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Oscillating T's and Pause T's",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=pEvagna0X5g",
+     "seconds": 22,
+     "title": "Movement Library: Oscillating T's and Pause T's"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Push/Pull",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=GXc61cDxWPU",
+     "seconds": 10,
+     "title": "Movement Library: Push/Pull"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Side Lying Delt Raise",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=-90l3IHclbA",
+     "seconds": 23,
+     "title": "Movement Library: Side Lying Delt Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Snatch Grip External Rotation",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=o5CK8tOD2Ko",
+     "seconds": 18,
+     "title": "Movement Library: Snatch Grip External Rotation"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Trap Raise",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=r-_G5XBDto4",
+     "seconds": 13,
+     "title": "Movement Library: Trap Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "U to T",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Y422hO5e-f0",
+     "seconds": 16,
+     "title": "Movement Library: U to T"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "W's",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=NF7wxK5DT00",
+     "seconds": 12,
+     "title": "Garage Strength Movements: W's"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Weighted One Arm Bicycling",
+   "category": "Shoulders & upper back",
+   "appFamily": "fam-upperback",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=bpT4XvEb9A0",
+     "seconds": 35,
+     "title": "Movement Library: Weighted One Arm Bicycling"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Glides",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=khEAStpnRNk",
+     "seconds": 25,
+     "title": "Movement Library: Banded Glides"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Groin Slayer",
+   "category": "Hips & glutes",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=yAkvOd_bhew",
+     "seconds": 11,
+     "title": "Movement LIbrary: Banded Groin Slayer"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Leg Sweep",
+   "category": "Mobility & breathing",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=cyGzz3klzKU",
+     "seconds": 29,
+     "title": "Movement Library: Banded Leg Sweep"
+    }
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Marches",
+   "category": "Hips & glutes",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Qbq6bEcconw",
+     "seconds": 10,
+     "title": "Movement Library: Banded Marches"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Side Leg Raise",
+   "category": "Hips & glutes",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=UUsL5t6v9Y0",
+     "seconds": 8,
+     "title": "Movement Library: Banded Side Leg Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Glute Snakes",
+   "category": "Hips & glutes",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Ir-CfGXbzGo",
+     "seconds": 22,
+     "title": "Movement Library: Glute Snakes"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Loaded Banded Knees Back",
+   "category": "Hips & glutes",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Qp-Ic7EM00U",
+     "seconds": 14,
+     "title": "Movement Library: Loaded Banded Knees Back"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Side Band Walks",
+   "category": "Hips & glutes",
+   "appFamily": null,
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=08QpnUjvAcA",
+     "seconds": 7,
+     "title": "Movement Library: Side Band Walks"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Side Plank Glute Raise",
+   "category": "Hips & glutes",
+   "appFamily": null,
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=MI9FyNQ4CIE",
+     "seconds": 12,
+     "title": "Movement Library: Side Plank Glute Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Back Supported Leg Raise",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=XmKMJ8Gybgo",
+     "seconds": 16,
+     "title": "Movement Library: Back Supported Leg Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Ab Wheel",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "bands",
+    "ab-wheel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=iLOhDYLAMKE",
+     "seconds": 31,
+     "title": "Movement Library: Banded Ab Wheel"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Banded Twist Knee Down",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=-i9XefOwYQM",
+     "seconds": 24,
+     "title": "Movement Library: Banded Twist Knee Down"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Chinese Plate Twists",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "plate"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=Ou2BjDjizP8",
+     "seconds": 9,
+     "title": "Movement Library: Chinese Plate Twists"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Dane’s Speed Abs",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=EjywY0ldnaE",
+     "seconds": 37,
+     "title": "Movement Library: Dane’s Speed Abs"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Discus Hold",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=fy3LkJPD4ZY",
+     "seconds": 13,
+     "title": "Movement Library: Discus Hold"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
+  },
+  {
+   "name": "Double Banded Twist",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "bands"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=bgA4fA4G8pc",
+     "seconds": 15,
+     "title": "Movement Library: Double Banded Twist"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Ehab Abs",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=JDVisJUuzH4",
+     "seconds": 10,
+     "title": "Movement Library: Ehab Abs"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Hanging Side Leg Raise",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "pullup-bar"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=OuKovlrRtjg",
+     "seconds": 13,
+     "title": "Movement Library: Hanging Side Leg Raise"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Kneeling Side Med Ball Throws",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "med-ball"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=7vhv3GBJ7RM",
+     "seconds": 30,
+     "title": "Movement Library: Kneeling Side Med Ball Throws"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Leg Raise with Plate",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "plate"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=HqNUSOtMNqA",
+     "seconds": 22,
+     "title": "Movement Library: Leg Raise with Plate"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Lying Barbell Flexion",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=sHmVgr7uPqg",
+     "seconds": 26,
+     "title": "Movement Library: Lying Barbell Flexion"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Meadow Swings",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=7TaffhPPg7o",
+     "seconds": 13,
+     "title": "Movement Library: Meadow Swings"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "MedBall Gauntlet",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "med-ball"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=pMbolR3ZOH8",
+     "seconds": 27,
+     "title": "Movement Library: MedBall Gauntlet"
+    }
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
+  },
+  {
+   "name": "Pallof Russian Lunge",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=G2quxhDu_ns",
+     "seconds": 17,
+     "title": "Movement Library: Pallof Russian Lunge"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Pallof Split Squat",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=349A0jXGJ0s",
+     "seconds": 10,
+     "title": "Movement Library: Pallof Split Squat"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Pallof V-Ups",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=voI1xW4XcnU",
+     "seconds": 19,
+     "title": "Movement Library: Pallof V UPS"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Side Plank Rows",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=UtTo4iev9L0",
+     "seconds": 16,
+     "title": "Movement Library: Side Plank Rows"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Sliding Planks",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "sliders"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=G2uPO8Upe-U",
+     "seconds": 11,
+     "title": "Movement Library: Sliding Planks"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
+  },
+  {
+   "name": "Standing Ab Wheel",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "ab-wheel"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=vz2dvk2_LQc",
+     "seconds": 22,
+     "title": "Movement Library: Standing Ab Wheel"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Walking Barbell Twists",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "barbell"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=a5SPI1wPO3w",
+     "seconds": 29,
+     "title": "Movement Library: Walking Barbell Twists"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Weighted Crunches Butt Against Box",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "box"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=E6gQk4dc50U",
+     "seconds": 12,
+     "title": "Movement Library: Weighted Crunches Butt Against Box"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  },
+  {
+   "name": "Weighted Hanging Leg Raises",
+   "category": "Core",
+   "appFamily": "fam-core",
+   "equipment": [
+    "pullup-bar"
+   ],
+   "videos": [
+    {
+     "url": "https://www.youtube.com/watch?v=v7pHzmDfTh8",
+     "seconds": 22,
+     "title": "Movement Library: Weighted Hanging Leg Raises"
+    }
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
+  }
+ ]
+}

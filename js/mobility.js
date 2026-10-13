@@ -1,11 +1,14 @@
 // Mobility: its own exercises, routines and sessions, outside the strength framework (no tiers, goals or maxes).
 // Pure functions plus the starter library; app.js does the screens.
 
+import { GS_MOBILITY, gsVideo } from './library.js';
+
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 export const BODY_PARTS = ['Hamstrings', 'Hip flexors', 'Adductors', 'Glutes', 'Quads & knees', 'Calves & ankles', 'Spine', 'Thoracic', 'Shoulders', 'Lats'];
 
-export const videoSearch = q => (q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` : null);
+// A search phrase opens YouTube results; a link opens as is.
+export const videoSearch = q => (!q ? null : /^https?:\/\//i.test(q) ? q : `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
 
 // "3 × 10/side", "4 × 30–45s", "3 × 6 · 4s down / 2s hold"
 export function doseText(e) {
@@ -169,6 +172,10 @@ export function mobilitySeed() {
     { id: 'mobr-day3', name: 'Day 3: Bend Don\'t Break', items: ['mob-cobra', 'mob-bridge-pushup', 'mob-prayer-stretch', 'mob-reverse-hyper-hold'] },
     { id: 'mobr-day4', name: 'Day 4: Primal Roots', items: ['mob-bar-hang', 'mob-db-pullover', 'mob-seiza', 'mob-atg-stepup'] },
   ];
-  return { exercises, routines, sessions: [] };
+  return { exercises: [...exercises, ...gsMobilityExercises()], routines, sessions: [] };
 }
+
+// Mobility drills from the Garage Strength Movement Library, at 2 × 10 to start.
+export const gsMobilityExercises = () => GS_MOBILITY.map(([id, name, parts, video]) =>
+  mx(id, name, parts, { sets: 2, reps: 10 }, 45, { reps: true }, '', gsVideo(video)));
 
