@@ -677,6 +677,13 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
   const t1Lifts = new Set(state.slots.filter(sl => sl.tier === 'T1').map(goalLift));
   // Families with a heavy or moderate goal hold the main lifts (squats before leg extensions, chin-ups before curls).
   const goalFamilies = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId));
+  // Your chosen lifts stay the core of the work: heavy (T1) work only uses your T1 goals' lifts, the one each goal would
+  // use here, when you have T1 goals; support (T2) work tries your T2 goals' lifts first. Swap still offers the rest.
+  const hasT1Goals = state.slots.some(sl => sl.tier === 'T1');
+  const t1Core = new Set(state.slots.filter(sl => sl.tier === 'T1').map(sl => pickExercise(state, sl.familyId, loc, 'T1', sl.exerciseId)?.id).filter(Boolean));
+  const t2Chosen = new Set(state.slots.filter(sl => sl.tier === 'T2').map(goalLift));
+  // Power work (jumps, cleans) leads with a family you have any goal for.
+  const anyGoalFamilies = new Set(state.slots.map(sl => sl.familyId));
   // Once every family is in use: another move from a family this workout already uses, if it's a different
   // movement (triceps after curls). Families from the goals or the session so far stay off limits.
   const famPatterns = new Map();
@@ -707,15 +714,19 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
         && (!famUsed.has(e.familyId) || e.familyId === sameFamily) && !k.blocks.some(b => b.exerciseId === e.id)
         && (region === 'any' || e.region === region || e.region === 'full')
         && (load == null || (e.metric === 'load_reps') === load))
-        .sort((a, b) => (b.region === region) - (a.region === region) || lately(b) - lately(a) || isDefault(b) - isDefault(a) || a.rank - b.rank);
+        .sort((a, b) => anyGoalFamilies.has(b.familyId) - anyGoalFamilies.has(a.familyId) || (b.region === region) - (a.region === region)
+          || lately(b) - lately(a) || isDefault(b) - isDefault(a) || a.rank - b.rank);
     },
-    // A loaded lift for a movement pattern: one you do, with a max (T1 insists when any has one), the family's usual one.
-    // At T2, not a T1 goal's own lift when another fits. `needMax`: only lifts with an estimated max (heavy work you've loaded).
+    // A loaded lift for a movement pattern. T1: one of your T1 goals' lifts when you have T1 goals, else one with a max
+    // (T1 insists when any has one; `needMax` always). T2: your T2 goals' lifts first, and not a T1 goal's own lift when
+    // another fits. Then lifts from goal families, ones you do, with a max, the family's usual one.
     main(p, tier, needMax = false) {
       let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && pattern(e) === p);
-      if (needMax || (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null))) c = c.filter(e => estimatedMax(state, e.id) != null);
+      if (tier === 'T1' && hasT1Goals) c = c.filter(e => t1Core.has(e.id));
+      else if (needMax || (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null))) c = c.filter(e => estimatedMax(state, e.id) != null);
       const t1Goal = e => tier === 'T2' && t1Lifts.has(e.id);
-      return c.sort((a, b) => t1Goal(a) - t1Goal(b) || goalFamilies.has(b.familyId) - goalFamilies.has(a.familyId) || lately(b) - lately(a)
+      const chosen = e => tier === 'T2' && t2Chosen.has(e.id);
+      return c.sort((a, b) => t1Goal(a) - t1Goal(b) || chosen(b) - chosen(a) || goalFamilies.has(b.familyId) - goalFamilies.has(a.familyId) || lately(b) - lately(a)
         || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null) || isDefault(b) - isDefault(a) || a.rank - b.rank)[0] ?? null;
     },
     // A lift from the patterns given that don't have a strength lift in the workout yet, trained heavy least recently.
@@ -800,7 +811,10 @@ export function buildFocus(state, ci, { region, explosive = false, accessoriesOn
     const heavyHere = regionConflict(region, recentHeavyRegions(state, t));
     const mainTier = tired || easy || heavyHere ? 'T2' : 'T1';
     if (mainTier === 'T2') k.notes.push(`Main lift at T2, not T1: ${tired ? 'low energy' : easy ? 'easy day' : `heavy ${region}-body work since yesterday`}.`);
-    if (!k.strength(FOCUS_MAIN[region], 'main lift, trained heavy least recently', mainTier)) k.notes.push(`No loaded ${region}-body lift here, so accessories fill in.`);
+    // Heavy work is one of your T1 lifts; when none fits this half or this place, the main lift is moderate instead.
+    const main = k.strength(FOCUS_MAIN[region], 'main lift, trained heavy least recently', mainTier)
+      || (mainTier === 'T1' && k.strength(FOCUS_MAIN[region], `main lift at T2: none of your T1 lifts is a ${region}-body lift you can do here`));
+    if (!main) k.notes.push(`No loaded ${region}-body lift here, so accessories fill in.`);
     if (!easy) k.strength(FOCUS_MAIN[region], 'to balance it');
   }
 
