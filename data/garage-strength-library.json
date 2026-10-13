@@ -17,7 +17,11 @@
      "seconds": 18,
      "title": "Movement Library: Banded Lat Swings Knees Back"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Barefoot PVC Rolling",
@@ -32,7 +36,11 @@
      "seconds": 45,
      "title": "Movement Library: Barefoot PVC Rolling"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Charleston Openers",
@@ -45,7 +53,11 @@
      "seconds": 22,
      "title": "Movement Library: Charleston Openers"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Lat Swings",
@@ -58,7 +70,11 @@
      "seconds": 17,
      "title": "Movement Library: Lat Swings"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Lying Breathing Drill",
@@ -71,7 +87,11 @@
      "seconds": 166,
      "title": "Movement Library: Lying Breathing Drill"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Open the Road",
@@ -84,7 +104,11 @@
      "seconds": 18,
      "title": "Movement Library: Open the Road"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "PVC Pipe Walks",
@@ -99,7 +123,11 @@
      "seconds": 10,
      "title": "Movement Library: PVC Pipe Walks"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Calf Raises",
@@ -112,7 +140,11 @@
      "seconds": 9,
      "title": "Movement Library: Calf Raises"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Tibialis Curl",
@@ -125,7 +157,11 @@
      "seconds": 13,
      "title": "Movement Library: Tibialis Curl"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Towel Toe Curls",
@@ -138,7 +174,11 @@
      "seconds": 21,
      "title": "Movement Library: Towel Toe Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Clean Pull Big Shrug",
@@ -153,7 +193,11 @@
      "seconds": 13,
      "title": "Movement Library: Clean Pull Big Shrug"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dimas Clean Pulls",
@@ -168,7 +212,11 @@
      "seconds": 36,
      "title": "Movement Library: Dimas Clean Pulls"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Floating Snatch Pulls",
@@ -183,7 +231,11 @@
      "seconds": 28,
      "title": "Movement Library: Floating Snatch Pulls"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Pull",
@@ -198,7 +250,11 @@
      "seconds": 30,
      "title": "Movement Library: Snatch Pull"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Pull Pause Extension",
@@ -213,7 +269,11 @@
      "seconds": 25,
      "title": "Movement Library: Snatch Pull Pause Extension"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Pull to Target",
@@ -228,7 +288,11 @@
      "seconds": 47,
      "title": "Movement Library: Snatch Pull to Target"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Taipei Pulls",
@@ -241,7 +305,11 @@
      "seconds": 18,
      "title": "Movement Library: Taipei Pulls"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Targeted Clean Pull",
@@ -256,7 +324,11 @@
      "seconds": 50,
      "title": "Movement Library:Targeted Clean Pull"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "3/4 Pull Low Hang Snatch",
@@ -271,7 +343,11 @@
      "seconds": 9,
      "title": "Movement Library: 3/4 Pull Low Hang Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chun Snatches",
@@ -284,7 +360,11 @@
      "seconds": 26,
      "title": "Movement Library: Chun Snatches"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Close Grip Snatch",
@@ -299,7 +379,11 @@
      "seconds": 156,
      "title": "Improve Shoulder Mobility and Stability with Close Grip Snatch | Movement Library"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Full Snatch Off of 2 Boxes",
@@ -315,7 +399,11 @@
      "seconds": 160,
      "title": "How To Full Snatch Off of 2 Boxes | Movement Library"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "High Hang Snatch",
@@ -330,7 +418,11 @@
      "seconds": 210,
      "title": "Improve Power Output with the High Hang Snatch | Movement Library"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Low Hang Snatch",
@@ -345,7 +437,11 @@
      "seconds": 16,
      "title": "Movement Library: Low Hang Snatch"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Muscle Snatch",
@@ -360,7 +456,11 @@
      "seconds": 171,
      "title": "Learn to Keep Ground Contact with the Muscle Snatch  | Movement Library"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "No Brush Snatch",
@@ -380,7 +480,11 @@
      "seconds": 17,
      "title": "Movement Library: No Brush Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "No Feet Low Hang Snatch",
@@ -395,7 +499,11 @@
      "seconds": 15,
      "title": "Movement Library: No Feet Low Hang Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "No Feet Snatches",
@@ -408,7 +516,11 @@
      "seconds": 9,
      "title": "Movement Library: No Feet Snatches"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "No Feet, Pause at Knee Snatch",
@@ -423,7 +535,11 @@
      "seconds": 6,
      "title": "Movement Library: No Feet, Pause at Knee Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Pause at Knee Power Snatch",
@@ -438,7 +554,11 @@
      "seconds": 184,
      "title": "How To Pause at Knee Power Snatch | Movement Library"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Pause at the Knee Snatch",
@@ -453,7 +573,11 @@
      "seconds": 7,
      "title": "Movement Library: Pause at the Knee Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Pause in the Hole Snatch",
@@ -473,7 +597,11 @@
      "seconds": 10,
      "title": "Movement Library: Pause in the Hole Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Seated Muscle Snatch",
@@ -488,7 +616,11 @@
      "seconds": 12,
      "title": "Movement Library: Seated Muscle Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Balance/Snatch",
@@ -503,7 +635,11 @@
      "seconds": 21,
      "title": "Movement Library: Snatch Balance/Snatch"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dead Stop Cleans",
@@ -516,7 +652,11 @@
      "seconds": 18,
      "title": "Movement Library: Dead Stop Cleans"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dead Stop Power Clean and Jerk",
@@ -531,7 +671,11 @@
      "seconds": 10,
      "title": "Movement Library: Dead Stop Power Clean and Jerk"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Full clean",
@@ -546,7 +690,11 @@
      "seconds": 6,
      "title": "Full clean"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Hang full clean",
@@ -561,7 +709,11 @@
      "seconds": 6,
      "title": "Hang full clean"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Japanese Cleans",
@@ -574,7 +726,11 @@
      "seconds": 14,
      "title": "Movement Library: Japanese Cleans"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "No Feet Power Clean",
@@ -589,7 +745,11 @@
      "seconds": 12,
      "title": "Movement Library: No Feet Power Clean"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Power Clean on Podium",
@@ -604,7 +764,11 @@
      "seconds": 19,
      "title": "Movement Library: Power Clean on Podium"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Tall Clean",
@@ -619,7 +783,11 @@
      "seconds": 13,
      "title": "Movement Library: Tall Clean"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "BB Power jerk",
@@ -634,7 +802,11 @@
      "seconds": 5,
      "title": "BB Power jerk Power Jerks"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "BB Split jerk",
@@ -649,7 +821,11 @@
      "seconds": 6,
      "title": "BB Split jerk"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Behind-the-neck jerk",
@@ -669,7 +845,11 @@
      "seconds": 6,
      "title": "BN Jerk"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": "TECH",
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chun Push Press",
@@ -684,7 +864,11 @@
      "seconds": 190,
      "title": "How to Implement the Chun Push Press in Training  | Movement Library"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dowel power jerk",
@@ -699,7 +883,11 @@
      "seconds": 4,
      "title": "Dowel power Jerk  PJ"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dowel power Jerk pause in catch",
@@ -714,7 +902,11 @@
      "seconds": 4,
      "title": "Dowel power Jerk pause in catch Power Jerks"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dowel press in split",
@@ -729,7 +921,11 @@
      "seconds": 5,
      "title": "Dowel press in split"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dowel Push press drop in split",
@@ -744,7 +940,11 @@
      "seconds": 5,
      "title": "Dowel Push press drop in split"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dowel Push press hold on toes",
@@ -759,7 +959,11 @@
      "seconds": 6,
      "title": "Dowel Push press hold on toes Power Jerks"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dowel split jerk",
@@ -774,7 +978,11 @@
      "seconds": 6,
      "title": "Dowel split jerk"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Establish foot positioning for split",
@@ -787,7 +995,11 @@
      "seconds": 8,
      "title": "Establish foot positioning for split"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Front rack Push press",
@@ -802,7 +1014,11 @@
      "seconds": 5,
      "title": "Front rack Push press overhead press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Push Press",
@@ -817,7 +1033,11 @@
      "seconds": 33,
      "title": "Movement Library: Push Press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Push Press From Boxes",
@@ -833,7 +1053,11 @@
      "seconds": 17,
      "title": "Movement Library: Push Press From Boxes"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Grip Push Press",
@@ -848,7 +1072,11 @@
      "seconds": 8,
      "title": "Movement Library: Snatch Grip Push Press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Press in Split",
@@ -863,7 +1091,11 @@
      "seconds": 30,
      "title": "Movement Library: Banded Press in Split"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Scott Press",
@@ -878,7 +1110,11 @@
      "seconds": 14,
      "title": "Movement Library: Banded Scott Press"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Curl and Press",
@@ -891,7 +1127,11 @@
      "seconds": 10,
      "title": "Movement Library: Curl and Press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "DB Z Press",
@@ -906,7 +1146,11 @@
      "seconds": 6,
      "title": "DB Z Press overhead press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Half kneeling DB overhead press",
@@ -926,7 +1170,11 @@
      "seconds": 6,
      "title": "Half kneeling DB overhead press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Press",
@@ -941,7 +1189,11 @@
      "seconds": 8,
      "title": "Movement Library: Snatch Press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Standing DB military press",
@@ -956,7 +1208,11 @@
      "seconds": 6,
      "title": "Standing DB military overhead press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Standing OVH Press with bands",
@@ -971,7 +1227,11 @@
      "seconds": 8,
      "title": "Standing OVH Press with bands overhead press"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "T-Press",
@@ -986,7 +1246,11 @@
      "seconds": 22,
      "title": "Movement Library: T-Press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Z Press",
@@ -1001,7 +1265,11 @@
      "seconds": 10,
      "title": "Movement Library: Z Press"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "2-1 Side Jumps",
@@ -1014,7 +1282,11 @@
      "seconds": 20,
      "title": "Movement Library: 2-1 Side Jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Banded Cossack Jumps",
@@ -1029,7 +1301,11 @@
      "seconds": 19,
      "title": "Movement Library: Banded Cossack Jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Banded Side Jumps",
@@ -1044,7 +1320,11 @@
      "seconds": 27,
      "title": "Movement Library: Banded Side Jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Box jump land above 90 degrees",
@@ -1059,7 +1339,11 @@
      "seconds": 10,
      "title": "Box jump land above 90 degrees"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Box Jumps",
@@ -1074,7 +1358,11 @@
      "seconds": 9,
      "title": "Movement Library: Box Jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Broad jumps stick landing for 2 sec",
@@ -1087,7 +1375,11 @@
      "seconds": 5,
      "title": "Broad jumps stick landing for 2 sec"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Champion Strides",
@@ -1100,7 +1392,11 @@
      "seconds": 7,
      "title": "Movement Library: Champion Strides"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Depth drop off 12\", pause 2 s in the power position",
@@ -1113,7 +1409,11 @@
      "seconds": 14,
      "title": "Depth drop off 12  pause for 2 secs in the power position"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Depth Drop over Hurdle",
@@ -1128,7 +1428,11 @@
      "seconds": 18,
      "title": "Movement Library: Depth Drop over Hurdle"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Double Leg Bounds",
@@ -1141,7 +1445,11 @@
      "seconds": 11,
      "title": "Movement Library: Double Leg Bounds"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Gwiz jumps",
@@ -1154,7 +1462,11 @@
      "seconds": 7,
      "title": "Gwiz jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Jump Lunge",
@@ -1172,7 +1484,11 @@
      "seconds": 12,
      "title": "Movement Library: Jump Lunges"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Jump step ups DRIVE UP",
@@ -1187,7 +1503,11 @@
      "seconds": 8,
      "title": "Jump step ups DRIVE UP"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Overspeed Single Leg Hops",
@@ -1200,7 +1520,11 @@
      "seconds": 9,
      "title": "Movement Library: Overspeed Single Leg Hops"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Pause Jump lunges",
@@ -1213,7 +1537,11 @@
      "seconds": 12,
      "title": "Pause Jump lunges"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Rapid box jumps",
@@ -1228,7 +1556,11 @@
      "seconds": 10,
      "title": "Rapid box jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Rapid broad jumps",
@@ -1241,7 +1573,11 @@
      "seconds": 8,
      "title": "Rapid broad jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Rapid Jump Lunges",
@@ -1254,7 +1590,11 @@
      "seconds": 8,
      "title": "Rapid Jump Lunges"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Rotating Box Jumps",
@@ -1274,7 +1614,11 @@
      "seconds": 13,
      "title": "Movement Library: Rotating Box Jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Rotating Jump Lunges",
@@ -1287,7 +1631,11 @@
      "seconds": 19,
      "title": "Movement Library: Rotating Jump Lunges"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Rotating Jump Step-Ups",
@@ -1302,7 +1650,11 @@
      "seconds": 12,
      "title": "Movement Library: Rotating Jump Step UPS"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Side-to-Side Jump Step-ups",
@@ -1317,7 +1669,11 @@
      "seconds": 6,
      "title": "Movement Library: Side-to-Side Jump Step-ups"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Single leg jumps consecutively",
@@ -1330,7 +1686,11 @@
      "seconds": 6,
      "title": "Single leg jumps consecutively"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Single leg RDL jumps",
@@ -1345,7 +1705,11 @@
      "seconds": 15,
      "title": "Single leg RDL jumps"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "SL hops over hurdles",
@@ -1360,7 +1724,11 @@
      "seconds": 5,
      "title": "SL hops over hurdles"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "SL lateral hurdle hops",
@@ -1375,7 +1743,11 @@
      "seconds": 5,
      "title": "SL lateral hurdle hops"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Slider Bounds",
@@ -1390,7 +1762,11 @@
      "seconds": 7,
      "title": "Movement Library: Slider Bounds"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Squat jumps rapid",
@@ -1403,7 +1779,11 @@
      "seconds": 9,
      "title": "Squat jumps rapid"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Squat jumps with pause in landing",
@@ -1416,7 +1796,11 @@
      "seconds": 10,
      "title": "Squat jumps w  pause in landing"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Banded Back Extension",
@@ -1431,7 +1815,11 @@
      "seconds": 11,
      "title": "Movement Library: Banded Back Extension"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Good mornings",
@@ -1446,7 +1834,11 @@
      "seconds": 4,
      "title": "Banded Good mornings Hip Hinge"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Kettlebell Swing",
@@ -1462,7 +1854,11 @@
      "seconds": 17,
      "title": "Movement Library: Banded Kettlebell Swing"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Bilateral Hamstring Perturbations",
@@ -1475,7 +1871,11 @@
      "seconds": 19,
      "title": "Movement Library: Bilateral Hamstring Perturbations"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Butt taps",
@@ -1488,7 +1888,11 @@
      "seconds": 4,
      "title": "Butt taps Hip Hinge"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Gwiz Glute Ham",
@@ -1503,7 +1907,11 @@
      "seconds": 26,
      "title": "Movement Library: Gwiz Glute Ham"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Hamstring Pulls",
@@ -1516,7 +1924,11 @@
      "seconds": 13,
      "title": "Garage Strength Movement Library: Hamstring Pulls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Homers",
@@ -1529,7 +1941,11 @@
      "seconds": 49,
      "title": "Movement Library: Homers"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Jerk Box Good Mornings",
@@ -1545,7 +1961,11 @@
      "seconds": 17,
      "title": "Movement Library: Jerk Box Good Mornings"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Kettlebell Swings",
@@ -1560,7 +1980,11 @@
      "seconds": 6,
      "title": "Movement Library: Kettle-bell Swings"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Lasha Extension",
@@ -1573,7 +1997,11 @@
      "seconds": 11,
      "title": "Movement Library: Lasha Extension"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Long Arm Glute Ham Raise",
@@ -1588,7 +2016,11 @@
      "seconds": 14,
      "title": "Movement Library: Long Arm Glute Ham Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "RDL with BB",
@@ -1603,7 +2035,11 @@
      "seconds": 4,
      "title": "RDL with BB Hip Hinge"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Rear Leg Supported Single Leg Stiff Leg Dead",
@@ -1616,7 +2052,11 @@
      "seconds": 30,
      "title": "Movement Library: Rear Leg Supported Single Leg Stiff Leg Dead"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Reverse Hyper",
@@ -1629,7 +2069,11 @@
      "seconds": 7,
      "title": "Movement Library: Reverse Hyper"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Rotating Glute Ham",
@@ -1644,7 +2088,11 @@
      "seconds": 18,
      "title": "Movement Library: Rotating Glute Ham"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Round Back Glute Ham Raise",
@@ -1659,7 +2107,11 @@
      "seconds": 22,
      "title": "Movement Library: Round Back Glute Ham Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Single Leg Hamstring Perturbations",
@@ -1672,7 +2124,11 @@
      "seconds": 27,
      "title": "Movement Library: Single Leg Hamstring Perturbations"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Single leg RDL with DB",
@@ -1687,7 +2143,11 @@
      "seconds": 4,
      "title": "Single Leg RDL w  DB Hip Hinge"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Grip RDL",
@@ -1702,7 +2162,11 @@
      "seconds": 13,
      "title": "Movement Library: Snatch Grip RDL"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Sprinter Glute Ham",
@@ -1717,7 +2181,11 @@
      "seconds": 20,
      "title": "Movement Library: Sprinter Glute Ham"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Telle Extension",
@@ -1730,7 +2198,11 @@
      "seconds": 23,
      "title": "Movement Library: Telle Extension"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Y’s on Glute Ham",
@@ -1745,7 +2217,11 @@
      "seconds": 16,
      "title": "Movement Library: Y’s on Glute Ham"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "3 way lunge",
@@ -1758,7 +2234,11 @@
      "seconds": 10,
      "title": "3 way lunge unilateral squat"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Split Squat / Iso Lunge Hold",
@@ -1773,7 +2253,11 @@
      "seconds": 31,
      "title": "Movement Library: Banded Split Squat/ISO Lunge Hold"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
   },
   {
    "name": "BB single leg squat",
@@ -1788,7 +2272,11 @@
      "seconds": 3,
      "title": "BB single leg squat unilateral Squat"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Cossack Squats",
@@ -1801,7 +2289,11 @@
      "seconds": 7,
      "title": "Movement Library: Cossack Squats"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Deficit Split Squat",
@@ -1814,7 +2306,11 @@
      "seconds": 8,
      "title": "Movement Library: Deficit Split Squat"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Elevated Split Squat",
@@ -1827,7 +2323,11 @@
      "seconds": 10,
      "title": "Movement Library: Elevated Split Squat"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Goblet single leg squat",
@@ -1842,7 +2342,11 @@
      "seconds": 4,
      "title": "Goblet single leg squat unilateral squat"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Lunges in place",
@@ -1855,7 +2359,11 @@
      "seconds": 7,
      "title": "Lunges in place unilateral squat"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Plate Side Step Ups",
@@ -1871,7 +2379,11 @@
      "seconds": 10,
      "title": "Movement Library: Plate Side Step Ups"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Praying Mantis Lunge",
@@ -1884,7 +2396,11 @@
      "seconds": 21,
      "title": "Movement Library: Preying Mantis Lunge"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Single Leg Iso Max",
@@ -1897,7 +2413,11 @@
      "seconds": 14,
      "title": "Movement Library: Single Leg IsoMax"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
   },
   {
    "name": "Single Leg Squat aka Bulgarian Single Legs",
@@ -1910,7 +2430,11 @@
      "seconds": 25,
      "title": "Movement Library: Single Leg Squat aka Bulgarian Single Legs"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Single leg squat BW",
@@ -1923,7 +2447,11 @@
      "seconds": 4,
      "title": "Single leg squat BW unilateral squat"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Skater Squat",
@@ -1936,7 +2464,11 @@
      "seconds": 3,
      "title": "Skater Squat unilateral Squat"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Split squat",
@@ -1949,7 +2481,11 @@
      "seconds": 5,
      "title": "Split squat unilateral squat"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Walking Lunges",
@@ -1962,7 +2498,11 @@
      "seconds": 6,
      "title": "Walking Lunges unilateral Squat"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Air squat, heels elevated",
@@ -1975,7 +2515,11 @@
      "seconds": 5,
      "title": "Air squat heals elevated"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Back Squat",
@@ -1990,7 +2534,11 @@
      "seconds": 6,
      "title": "Back Squat"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dowel zombie squat",
@@ -2005,7 +2553,11 @@
      "seconds": 5,
      "title": "Dowel zombie squad"
     }
-   ]
+   ],
+   "tier": "TECH",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Driver squat",
@@ -2020,7 +2572,11 @@
      "seconds": 6,
      "title": "Driver squat"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Goblet squat",
@@ -2035,7 +2591,11 @@
      "seconds": 5,
      "title": "Goblet squat"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Jules Complex",
@@ -2048,7 +2608,11 @@
      "seconds": 185,
      "title": "Strengthen Glutes and Quads with the Jules Complex | Movement Library"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Zombie Squats",
@@ -2066,7 +2630,11 @@
      "seconds": 5,
      "title": "Zombie squat"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Band supported push up",
@@ -2081,7 +2649,11 @@
      "seconds": 5,
      "title": "Band supported push up Pressing"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "BB bench slow ECC, pause, drive",
@@ -2096,7 +2668,11 @@
      "seconds": 8,
      "title": "BB bench slow ECC, pause, drive Pressing"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Bench Press",
@@ -2116,7 +2692,11 @@
      "seconds": 6,
      "title": "BB Pressing bench"
     }
-   ]
+   ],
+   "tier": "T1",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "DB bench, starting from the bottom, slow ECC",
@@ -2132,7 +2712,11 @@
      "seconds": 7,
      "title": "DB bench, starting from the bottom, slow ECC Pressing"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Feet Elevated Pipe Push Up",
@@ -2147,7 +2731,11 @@
      "seconds": 18,
      "title": "Movement Library: Feet Elevated Pipe Push Up"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Gorilla Push-ups",
@@ -2160,7 +2748,11 @@
      "seconds": 10,
      "title": "Movement Library: Gorilla Push-ups"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Hands release push ups",
@@ -2173,7 +2765,11 @@
      "seconds": 5,
      "title": "Hands release push ups pressing"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Slider Push-ups",
@@ -2188,7 +2784,11 @@
      "seconds": 6,
      "title": "Movement Library: Slider Push-ups"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Slow eccentric push ups",
@@ -2201,7 +2801,11 @@
      "seconds": 8,
      "title": "Slow eccentric push ups Pressing"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Standing Flies",
@@ -2214,7 +2818,11 @@
      "seconds": 11,
      "title": "Movement Library: Standing Flies"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Standing press forward with bands",
@@ -2229,7 +2837,11 @@
      "seconds": 4,
      "title": "Standing press forward with bands Pressing"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dips",
@@ -2242,7 +2854,11 @@
      "seconds": 6,
      "title": "Movement Library: Dips"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest to Bar Chin Ups",
@@ -2257,7 +2873,11 @@
      "seconds": 8,
      "title": "Movement Library: Chest to Bar Chin Ups"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Softball Pull Ups",
@@ -2272,7 +2892,11 @@
      "seconds": 12,
      "title": "Movement Library: Softball Pull Ups"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest Supported Arc Row",
@@ -2285,7 +2909,11 @@
      "seconds": 21,
      "title": "Movement Library: Chest Supported Arc Row"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest Supported Row",
@@ -2298,7 +2926,11 @@
      "seconds": 6,
      "title": "Movement Library: Chest Supported Row"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest to Bar Reclining Rows",
@@ -2313,7 +2945,11 @@
      "seconds": 22,
      "title": "Movement Library: Chest to Bar Reclining Rows"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "DB Short Stroker Row",
@@ -2328,7 +2964,11 @@
      "seconds": 11,
      "title": "Movement Library: DB Short Stroker Row"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Duffin Rows",
@@ -2341,7 +2981,11 @@
      "seconds": 20,
      "title": "Movement Library: Duffin Rows"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Eccentric reclining rows, chest to bar",
@@ -2356,7 +3000,11 @@
      "seconds": 15,
      "title": "Ecc reclining rows chest to bar"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Hater Rows",
@@ -2369,7 +3017,11 @@
      "seconds": 24,
      "title": "Movement Library: Hater Rows"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Reclining ring rows hand to armpit",
@@ -2384,7 +3036,11 @@
      "seconds": 8,
      "title": "Reclining ring rows hand to armpit"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Reclining ring rows pause 2 second",
@@ -2399,7 +3055,11 @@
      "seconds": 11,
      "title": "Reclining ring rows pause 2 second"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Reclining rows chest to bar",
@@ -2414,7 +3074,11 @@
      "seconds": 11,
      "title": "Reclining rows chest to bar"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Reverse Grip Seated Row",
@@ -2427,7 +3091,11 @@
      "seconds": 36,
      "title": "Movement Library: Reverse Grip Seated Row"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Short Stroke Chest Row",
@@ -2440,7 +3108,11 @@
      "seconds": 10,
      "title": "Movement Library: Short Stroke Chest Row"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Curls",
@@ -2455,7 +3127,11 @@
      "seconds": 30,
      "title": "Movement Library: Banded Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Sitting/Lying Curls",
@@ -2470,7 +3146,11 @@
      "seconds": 30,
      "title": "Movement Library: Banded Sitting/Lying Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Underhook Curls",
@@ -2485,7 +3165,11 @@
      "seconds": 14,
      "title": "Movement Library: Banded Underhook Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest Supported Cable Hammer/Drag Curls",
@@ -2501,7 +3185,11 @@
      "seconds": 40,
      "title": "Movement Library: Chest Supported Cable Hammer/Drag Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Drag Curls",
@@ -2516,7 +3204,11 @@
      "seconds": 37,
      "title": "Movement Library: Drag Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dumbbell Curls",
@@ -2531,7 +3223,11 @@
      "seconds": 11,
      "title": "Movement Library: Dumbbell Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Fat Grip Concentration Cable Curl",
@@ -2547,7 +3243,11 @@
      "seconds": 33,
      "title": "Movement Library: Fat Grip Concentration Cable Curl"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Hoerbel Curls",
@@ -2562,7 +3262,11 @@
      "seconds": 17,
      "title": "Movement Library: Hoerbel Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "One Arm Fat Grip Preacher Curl",
@@ -2577,7 +3281,11 @@
      "seconds": 37,
      "title": "Movement Library: One Arm Fat Grip Preacher Curl"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Reverse Fat Bar Curl",
@@ -2592,7 +3300,11 @@
      "seconds": 35,
      "title": "Movement Library: Reverse Fat Bar Curl"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Slam Curls",
@@ -2607,7 +3319,11 @@
      "seconds": 22,
      "title": "Movement Library: Slam Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Standing Unsupported Concentration Curl",
@@ -2622,7 +3338,11 @@
      "seconds": 60,
      "title": "Movement Library: Standing Unsupported Concentration Curl"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Incline Tricep Extension",
@@ -2637,7 +3357,11 @@
      "seconds": 45,
      "title": "Movement Library: Banded Incline Tricep Extension"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Tricep Pushdown Lying",
@@ -2652,7 +3376,11 @@
      "seconds": 37,
      "title": "Movement Library: Banded Tricep Pushdown Lying"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest Supported Tricep Extension",
@@ -2665,7 +3393,11 @@
      "seconds": 56,
      "title": "Movement Library: Chest Supported Tricep Extension"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Incline French Press",
@@ -2680,7 +3412,11 @@
      "seconds": 10,
      "title": "Movement Library: Incline French Press"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Lean Away Tricep Extension",
@@ -2693,7 +3429,11 @@
      "seconds": 13,
      "title": "Movement Library: Lean Away Tricep Extension"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Miracle Gro",
@@ -2706,7 +3446,11 @@
      "seconds": 226,
      "title": "Dane's Platform: Miracle Gro"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Rolling Tricep Push-Ups",
@@ -2719,7 +3463,11 @@
      "seconds": 23,
      "title": "Movement Library: Rolling Tricep Push UPS"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Seated Barbell Extension",
@@ -2734,7 +3482,11 @@
      "seconds": 7,
      "title": "Movement Library: Seated Barbell Extenision"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Triple Triceps",
@@ -2747,7 +3499,11 @@
      "seconds": 44,
      "title": "Movement Library: Triple Triceps"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Forearm Rotations",
@@ -2762,7 +3518,11 @@
      "seconds": 13,
      "title": "Movement Library: Banded Forearm Rotations"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Clamp Curls",
@@ -2775,7 +3535,11 @@
      "seconds": 30,
      "title": "Movement Library: Clamp Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Fat Grip Reverse Wrist Curls",
@@ -2790,7 +3554,11 @@
      "seconds": 16,
      "title": "Movement Library: Fat Grip Reverse Wrist Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Forearm Roller",
@@ -2803,7 +3571,11 @@
      "seconds": 18,
      "title": "Movement Library: Forearm Roller"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Pinch Curls",
@@ -2816,7 +3588,11 @@
      "seconds": 21,
      "title": "Movement Library: Pinch Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Single Arm Banded Forearm Rotation",
@@ -2831,7 +3607,11 @@
      "seconds": 16,
      "title": "Movement Library: Single Arm Banded Forearm Rotation"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Wheel Curls",
@@ -2844,7 +3624,11 @@
      "seconds": 26,
      "title": "Movement Library: Wheel Curls"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Band Pull Aparts",
@@ -2864,7 +3648,11 @@
      "seconds": 9,
      "title": "Band Pull Aparts"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Blackbirds",
@@ -2879,7 +3667,11 @@
      "seconds": 18,
      "title": "Movement Library: Banded Blackbirds"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded External Rotation",
@@ -2894,7 +3686,11 @@
      "seconds": 10,
      "title": "Banded External Rotation"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Front Headlock Extension",
@@ -2909,7 +3705,11 @@
      "seconds": 17,
      "title": "Movement Library: Banded Front Headlock Extension"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Behind Back Lateral Raises",
@@ -2922,7 +3722,11 @@
      "seconds": 20,
      "title": "Movement Library: Behind Back Lateral Raises"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest Supported Barbell Raise",
@@ -2937,7 +3741,11 @@
      "seconds": 17,
      "title": "Movement Library: Chest Supported Barbell Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest Supported Deltoid Circles",
@@ -2950,7 +3758,11 @@
      "seconds": 22,
      "title": "Movement Library: Chest Supported Deltoid Circles"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chest Supported Trap 3 Pinky Elevated",
@@ -2963,7 +3775,11 @@
      "seconds": 19,
      "title": "Movement Library: Chest Supported Trap 3 Pinky Elevated"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "External Rotation",
@@ -2976,7 +3792,11 @@
      "seconds": 14,
      "title": "Garage Strength Movements: External Rotation"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "High On Sides",
@@ -2989,7 +3809,11 @@
      "seconds": 8,
      "title": "Garage Strength Movements: High On Sides"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Incline Y's",
@@ -3002,7 +3826,11 @@
      "seconds": 8,
      "title": "Movement Library: Incline Y's"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Oscillating T's and Pause T's",
@@ -3015,7 +3843,11 @@
      "seconds": 22,
      "title": "Movement Library: Oscillating T's and Pause T's"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Push/Pull",
@@ -3028,7 +3860,11 @@
      "seconds": 10,
      "title": "Movement Library: Push/Pull"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Side Lying Delt Raise",
@@ -3041,7 +3877,11 @@
      "seconds": 23,
      "title": "Movement Library: Side Lying Delt Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Snatch Grip External Rotation",
@@ -3056,7 +3896,11 @@
      "seconds": 18,
      "title": "Movement Library: Snatch Grip External Rotation"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Trap Raise",
@@ -3069,7 +3913,11 @@
      "seconds": 13,
      "title": "Movement Library: Trap Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "U to T",
@@ -3082,7 +3930,11 @@
      "seconds": 16,
      "title": "Movement Library: U to T"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "W's",
@@ -3095,7 +3947,11 @@
      "seconds": 12,
      "title": "Garage Strength Movements: W's"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Weighted One Arm Bicycling",
@@ -3108,11 +3964,15 @@
      "seconds": 35,
      "title": "Movement Library: Weighted One Arm Bicycling"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Glides",
-   "category": "Hips & glutes",
+   "category": "Mobility & breathing",
    "appFamily": null,
    "equipment": [
     "bands"
@@ -3123,7 +3983,11 @@
      "seconds": 25,
      "title": "Movement Library: Banded Glides"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Groin Slayer",
@@ -3138,11 +4002,15 @@
      "seconds": 11,
      "title": "Movement LIbrary: Banded Groin Slayer"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Leg Sweep",
-   "category": "Hips & glutes",
+   "category": "Mobility & breathing",
    "appFamily": null,
    "equipment": [
     "bands"
@@ -3153,7 +4021,11 @@
      "seconds": 29,
      "title": "Movement Library: Banded Leg Sweep"
     }
-   ]
+   ],
+   "tier": null,
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Marches",
@@ -3168,7 +4040,11 @@
      "seconds": 10,
      "title": "Movement Library: Banded Marches"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Side Leg Raise",
@@ -3183,7 +4059,11 @@
      "seconds": 8,
      "title": "Movement Library: Banded Side Leg Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Glute Snakes",
@@ -3196,7 +4076,11 @@
      "seconds": 22,
      "title": "Movement Library: Glute Snakes"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Loaded Banded Knees Back",
@@ -3211,7 +4095,11 @@
      "seconds": 14,
      "title": "Movement Library: Loaded Banded Knees Back"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Side Band Walks",
@@ -3226,7 +4114,11 @@
      "seconds": 7,
      "title": "Movement Library: Side Band Walks"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Side Plank Glute Raise",
@@ -3239,7 +4131,11 @@
      "seconds": 12,
      "title": "Movement Library: Side Plank Glute Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Back Supported Leg Raise",
@@ -3252,7 +4148,11 @@
      "seconds": 16,
      "title": "Movement Library: Back Supported Leg Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Ab Wheel",
@@ -3268,7 +4168,11 @@
      "seconds": 31,
      "title": "Movement Library: Banded Ab Wheel"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Banded Twist Knee Down",
@@ -3283,7 +4187,11 @@
      "seconds": 24,
      "title": "Movement Library: Banded Twist Knee Down"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Chinese Plate Twists",
@@ -3298,7 +4206,11 @@
      "seconds": 9,
      "title": "Movement Library: Chinese Plate Twists"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Dane’s Speed Abs",
@@ -3311,7 +4223,11 @@
      "seconds": 37,
      "title": "Movement Library: Dane’s Speed Abs"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Discus Hold",
@@ -3324,7 +4240,11 @@
      "seconds": 13,
      "title": "Movement Library: Discus Hold"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
   },
   {
    "name": "Double Banded Twist",
@@ -3339,7 +4259,11 @@
      "seconds": 15,
      "title": "Movement Library: Double Banded Twist"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Ehab Abs",
@@ -3352,7 +4276,11 @@
      "seconds": 10,
      "title": "Movement Library: Ehab Abs"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Hanging Side Leg Raise",
@@ -3367,7 +4295,11 @@
      "seconds": 13,
      "title": "Movement Library: Hanging Side Leg Raise"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Kneeling Side Med Ball Throws",
@@ -3382,7 +4314,11 @@
      "seconds": 30,
      "title": "Movement Library: Kneeling Side Med Ball Throws"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Leg Raise with Plate",
@@ -3397,7 +4333,11 @@
      "seconds": 22,
      "title": "Movement Library: Leg Raise with Plate"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Lying Barbell Flexion",
@@ -3412,7 +4352,11 @@
      "seconds": 26,
      "title": "Movement Library: Lying Barbell Flexion"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Meadow Swings",
@@ -3425,7 +4369,11 @@
      "seconds": 13,
      "title": "Movement Library: Meadow Swings"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "MedBall Gauntlet",
@@ -3440,7 +4388,11 @@
      "seconds": 27,
      "title": "Movement Library: MedBall Gauntlet"
     }
-   ]
+   ],
+   "tier": "T2",
+   "tiredTier": null,
+   "power": true,
+   "metric": null
   },
   {
    "name": "Pallof Russian Lunge",
@@ -3453,7 +4405,11 @@
      "seconds": 17,
      "title": "Movement Library: Pallof Russian Lunge"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Pallof Split Squat",
@@ -3466,7 +4422,11 @@
      "seconds": 10,
      "title": "Movement Library: Pallof Split Squat"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Pallof V-Ups",
@@ -3479,7 +4439,11 @@
      "seconds": 19,
      "title": "Movement Library: Pallof V UPS"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Side Plank Rows",
@@ -3492,7 +4456,11 @@
      "seconds": 16,
      "title": "Movement Library: Side Plank Rows"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Sliding Planks",
@@ -3507,7 +4475,11 @@
      "seconds": 11,
      "title": "Movement Library: Sliding Planks"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": "time"
   },
   {
    "name": "Standing Ab Wheel",
@@ -3522,7 +4494,11 @@
      "seconds": 22,
      "title": "Movement Library: Standing Ab Wheel"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Walking Barbell Twists",
@@ -3537,7 +4513,11 @@
      "seconds": 29,
      "title": "Movement Library: Walking Barbell Twists"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Weighted Crunches Butt Against Box",
@@ -3552,7 +4532,11 @@
      "seconds": 12,
      "title": "Movement Library: Weighted Crunches Butt Against Box"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   },
   {
    "name": "Weighted Hanging Leg Raises",
@@ -3567,7 +4551,11 @@
      "seconds": 22,
      "title": "Movement Library: Weighted Hanging Leg Raises"
     }
-   ]
+   ],
+   "tier": "T3",
+   "tiredTier": null,
+   "power": false,
+   "metric": null
   }
  ]
 }

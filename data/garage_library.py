@@ -123,3 +123,38 @@ json.dump({'source': 'https://www.youtube.com/playlist?list=PLuV8B5eKhJBxZLxBmmu
            'playlist': d.get('title'), 'channel': d.get('uploader'), 'fetched': '2026-10-13',
            'exercises': items}, open(sys.argv[2], 'w'), indent=1, ensure_ascii=False)
 for i in items: print(f"{i['category'][:24]:24} | {i['name']:50} | {','.join(i['equipment']):22} | {len(i['videos'])}")
+
+# Default tier, following the app's GZCL rules (README): explosive barbell lifts T1 fresh / TECH tired,
+# position drills TECH, jumps and throws T2 power, other loaded lifts T2, accessories T3, mobility none.
+T1 = {'High Hang Snatch', 'Low Hang Snatch', 'Pause at Knee Power Snatch', 'Full Snatch Off of 2 Boxes', 'Full clean',
+      'Hang full clean', 'Power Clean on Podium', 'Dead Stop Power Clean and Jerk', 'BB Power jerk', 'BB Split jerk',
+      'Behind-the-neck jerk', 'Bench Press', 'Back Squat'}
+T2 = {'Goblet squat', 'Driver squat', 'Jules Complex', 'BB single leg squat', 'Single Leg Squat aka Bulgarian Single Legs',
+      'Split squat', 'Deficit Split Squat', 'Elevated Split Squat', 'Goblet single leg squat', 'RDL with BB',
+      'Snatch Grip RDL', 'Single leg RDL with DB', 'Jerk Box Good Mornings', 'BB bench slow ECC, pause, drive',
+      'DB bench, starting from the bottom, slow ECC', 'Dips', 'Chest to Bar Chin Ups',
+      'Kneeling Side Med Ball Throws', 'MedBall Gauntlet'}
+T2_CATS = {'Olympic pulls', 'Overhead press', 'Jumps & plyometrics'}
+NONE = {'Banded Leg Sweep', 'Banded Glides'}
+BANDED_PRESS = {'Banded Press in Split', 'Banded Scott Press', 'Standing OVH Press with bands'}  # bands can't be loaded like a lift
+TIME = {'Single Leg Iso Max', 'Banded Split Squat / Iso Lunge Hold', 'Discus Hold', 'Sliding Planks'}
+
+def tier(e):
+    n, c = e['name'], e['category']
+    if c == 'Mobility & breathing' or n in NONE: return None
+    if n in T1: return 'T1'
+    if n in BANDED_PRESS: return 'T3'
+    if c in ('Snatch variations', 'Clean variations') or n.startswith('Dowel') or n == 'Establish foot positioning for split': return 'TECH'
+    if c == 'Jerk & push press' or c in T2_CATS or n in T2: return 'T2'
+    return 'T3'
+
+if __name__ == '__main__':
+    out = json.load(open(sys.argv[2]))
+    for e in out['exercises']:
+        t = tier(e)
+        e['tier'] = t
+        e['tiredTier'] = 'TECH' if t == 'T1' and e['category'] in ('Snatch variations', 'Clean variations', 'Jerk & push press') else None
+        e['power'] = e['category'] == 'Jumps & plyometrics' or e['name'] in ('Kneeling Side Med Ball Throws', 'MedBall Gauntlet')
+        e['metric'] = 'time' if e['name'] in TIME else None
+        if e['name'] in NONE: e['category'] = 'Mobility & breathing'; e['appFamily'] = None
+    json.dump(out, open(sys.argv[2], 'w'), indent=1, ensure_ascii=False)
