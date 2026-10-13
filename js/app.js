@@ -2146,7 +2146,7 @@ const actions = {
     const extra = Number(d.v);
     const excludeFamilies = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
     const res = s.source === 'focus'
-      ? L.buildFocus(state, { ...s, minutes: extra }, { region: s.focusRegion, accessoriesOnly: true }, Date.now(), { excludeFamilies })
+      ? L.buildFocus(state, { ...s, minutes: extra }, { region: s.focusRegion, accessoriesOnly: true }, Date.now(), { excludeFamilies, sessionBlocks: s.blocks })
       : L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies, sessionBlocks: s.blocks });
     s.minutes += extra;
     if (res.notes?.length) s.focusNotes = [...(s.focusNotes || []), ...res.notes];

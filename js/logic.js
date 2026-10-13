@@ -584,8 +584,8 @@ const FOCUS_T3 = {
 export const FOCUS_REGIONS = Object.keys(FOCUS_MAIN);
 const LOWER_BACK = /reverse hyper|sorensen|back extension|hyperextension|good ?morning/i;
 const PATTERN_LABEL = { push: 'pushing', pull: 'pulling', knee: 'squat pattern', hinge: 'hinge', back: 'lower back', calf: 'calves', core: 'core' };
-// About one exercise per 6 minutes, and never fewer than 10, so long sessions can be filled.
-const maxBlocks = minutes => Math.max(10, Math.round(minutes / 6));
+// About one exercise per 5 minutes (a superset partner counts half, so all-accessory days need that many), never fewer than 10.
+const maxBlocks = minutes => Math.max(10, Math.round(minutes / 5));
 const tierOrder = tier => BUILD_ORDER.indexOf(tier);
 // Explosive work keeps the order it was picked in (jumps before cleans); the rest goes in tier order.
 const sortBlocks = (state, blocks) => blocks.sort((a, b) => blockRank(state, a) - blockRank(state, b)
@@ -653,7 +653,8 @@ export function bodyRegion(state, e) {
 }
 
 // Picks from the whole library at the location, spending `minutes`. Collects blocks and notes.
-function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
+// `taken`: exercises already in the workout (goal picks, the session so far), never picked again.
+function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken = []) {
   const loc = byId(state.locations, ci.locationId);
   const famUsed = new Set(excludeFamilies);
   const pattern = e => movementPattern(state, e);
@@ -687,10 +688,13 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
   // Once every family is in use: another move from a family this workout already uses, if it's a different
   // movement (triceps after curls). Families from the goals or the session so far stay off limits.
   const famPatterns = new Map();
-  const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId)
+  // Last resort while time is left: any exercise not in the workout yet, from any family (a second core or upper-back move).
+  const takenIds = new Set(taken);
+  const spare = e => !e.archived && isAvailable(e, loc) && !takenIds.has(e.id) && !k.blocks.some(b => b.exerciseId === e.id);
+  const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId) && !takenIds.has(e.id)
     && !famPatterns.get(e.familyId).has(pattern(e)) && !k.blocks.some(b => b.exerciseId === e.id);
   const k = {
-    blocks: [], notes: [], budget: minutes, lately, isDefault,
+    blocks: [], notes: [], budget: minutes, lately, isDefault, turn: 0,
     // Patterns that already have a strength lift (T1/T2, not jumps or cleans), so the next lift goes somewhere else.
     present: new Set(present.map(id => pattern(byId(state.exercises, id)))),
     count: tier => k.blocks.filter(b => b.tier === tier).length,
@@ -742,25 +746,31 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
       return false;
     },
     // No barbell setups or weighted pull-ups and dips (dip belt: those are main lifts); the ones you do but haven't done for longest first.
-    accessory(p, relaxed = false) {
-      const base = state.exercises.filter(x => (relaxed ? reusable(x) : usable(x)) && !x.explosive && !mainLifts.has(x.id)
+    // `level`: 0 a family not used yet, 1 a different movement in a family this workout added, 2 anything not in the workout.
+    accessory(p, level = 0) {
+      const fits = [usable, reusable, spare][level];
+      const base = state.exercises.filter(x => fits(x) && !x.explosive && !mainLifts.has(x.id)
         && !(x.equipment || []).some(q => q === 'barbell' || q === 'rack' || q === 'dip-belt'));
       const of = q => base.filter(x => pattern(x) === q);
       const c = p === 'back' ? (of('hinge').some(x => LOWER_BACK.test(x.name)) ? of('hinge').filter(x => LOWER_BACK.test(x.name)) : of('hinge')) : of(p);
       return c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0] ?? null;
     },
-    // Go round the rotation until the time is used (or nothing else fits), then again reusing families.
-    // `limit` caps how many this call adds.
-    accessories(rotation, maxBlocks, limit = Infinity) {
-      const stop = Math.min(maxBlocks, k.blocks.length + limit);
-      for (const relaxed of [false, true]) {
-        for (let i = 0, misses = 0; k.budget >= 5 && k.blocks.length < stop && misses < rotation.length; i++) {
-          const p = rotation[i % rotation.length];
-          const e = k.accessory(p, relaxed);
-          if (e && k.add(e, 'T3', p === 'core' ? 'core' : `${PATTERN_LABEL[p]} accessory${k.lately(e) ? ', not done for a while' : ''}`)) misses = 0;
+    // Go round the rotation until the time is used (or nothing else fits), at each of `levels` in turn (see accessory).
+    // `limit` caps how many this call adds; returns how many it added.
+    // The rotation carries on where the last call stopped, so one-at-a-time calls alternate (pull, push, pull, core...).
+    accessories(rotation, maxBlocks, limit = Infinity, levels = [0, 1]) {
+      const stop = Math.min(maxBlocks, k.blocks.length + limit), n = k.blocks.length;
+      for (const level of levels) {
+        for (let misses = 0; k.budget >= 5 && k.blocks.length < stop && misses < rotation.length; k.turn++) {
+          const p = rotation[k.turn % rotation.length];
+          const e = k.accessory(p, level);
+          const why = () => level === 2 ? `another ${p === 'core' ? 'core' : PATTERN_LABEL[p]} accessory to fill the time`
+            : p === 'core' ? 'core' : `${PATTERN_LABEL[p]} accessory${k.lately(e) ? ', not done for a while' : ''}`;
+          if (e && k.add(e, 'T3', why())) misses = 0;
           else misses++;
         }
       }
+      return k.blocks.length - n;
     },
   };
   return k;
@@ -786,8 +796,9 @@ function explosiveLower(state, ci, t, k) {
   return k.blocks.length > 0;
 }
 
-export function buildFocus(state, ci, { region, explosive = false, accessoriesOnly = false }, t = Date.now(), { excludeFamilies = [] } = {}) {
-  const k = libraryKit(state, ci, t, ci.minutes, excludeFamilies);
+// `sessionBlocks`: the workout so far, when this adds accessories for extra time (+ Time), so none is picked twice.
+export function buildFocus(state, ci, { region, explosive = false, accessoriesOnly = false }, t = Date.now(), { excludeFamilies = [], sessionBlocks = [] } = {}) {
+  const k = libraryKit(state, ci, t, ci.minutes, excludeFamilies, [], sessionBlocks.map(b => b.exerciseId));
   const tired = energy(ci) <= 2.5;
   const easy = ci.intent === 'easy';
   // Explosive lower days are led by jumps and cleans; they stand in for the heavy lifts.
@@ -839,7 +850,8 @@ function settle(state, k, ci, rotation, stretch = true) {
     regroup(state, k.blocks);
     const n = k.blocks.length;
     k.budget = minutes - blocksMinutes(state, k.blocks);
-    k.accessories(rotation, maxBlocks(minutes), 1);
+    // One more accessory: a new family or movement first, else another exercise from one already in.
+    if (!k.accessories(rotation, maxBlocks(minutes), 1)) k.accessories(rotation, maxBlocks(minutes), 1, [2]);
     if (k.blocks.length === n) break;
   }
   for (const b of trimToFit(state, k.blocks, minutes, k.blocks)) dropNote(state, k, b);
@@ -851,7 +863,8 @@ function settle(state, k, ci, rotation, stretch = true) {
 function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
   const lean = leanOf(ci);
   const isStrength = b => (b.tier === 'T1' || b.tier === 'T2') && !byId(state.exercises, b.exerciseId)?.explosive;
-  const k = libraryKit(state, ci, t, budget, famUsed, [...sessionBlocks, ...blocks].filter(isStrength).map(b => b.exerciseId));
+  const k = libraryKit(state, ci, t, budget, famUsed, [...sessionBlocks, ...blocks].filter(isStrength).map(b => b.exerciseId),
+    [...sessionBlocks, ...blocks].map(b => b.exerciseId));
   const intro = `Your open goals fill ${ci.minutes - budget} of your ${ci.minutes} minutes, so the rest is from your library${lean ? `, leaning ${lean}-body` : ''}:`;
   // The half you lean toward first; the other half only once that one has a strength lift in each pattern.
   const halves = lean ? [FOCUS_MAIN[lean], FOCUS_MAIN[lean === 'upper' ? 'lower' : 'upper']] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]];
@@ -876,7 +889,8 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
     const merged = regroup(state, all());
     k.budget = ci.minutes - blocksMinutes(state, merged);
     const n = k.blocks.length;
-    for (const r of rotations) if (k.blocks.length === n) k.accessories(r, room, 1);
+    // A new family or movement from either rotation first, else another exercise from a family already in.
+    for (const level of [[0, 1], [2]]) for (const r of rotations) if (k.blocks.length === n) k.accessories(r, room, 1, level);
     if (k.blocks.length === n) break;
   }
   // Never over the time: a T3 that ends up outside a superset costs its full minutes.

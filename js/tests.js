@@ -899,6 +899,26 @@ test('extra heavy work sticks to your T1 goals\' lifts; support work tries your 
   const any = L.buildSuggestion(noT1, ci({ minutes: 75, fatigue: 2, intent: 'heavy' }), fri);
   ok(any.blocks.filter(b => b.tier === 'T1').every(b => L.estimatedMax(noT1, b.exerciseId) != null), 'without T1 goals, a heavy lift needs a max');
 });
+test('long sessions fill their time, with a second exercise from a family already in when new ones run out', () => {
+  const s = seed();
+  const ex = id => s.exercises.find(e => e.id === id);
+  for (const minutes of [60, 90]) {
+    for (const intent of ['easy', 'auto']) {
+      const r = L.buildSuggestion(s, ci({ minutes, intent, fatigue: 3 }));
+      ok(r.minutesUsed >= minutes - 8 && r.minutesUsed <= minutes, `${intent} ${minutes} min suggestion: ${r.minutesUsed}`);
+      ok(new Set(r.blocks.map(b => b.exerciseId)).size === r.blocks.length, 'no exercise twice');
+    }
+    for (const region of ['upper', 'lower']) {
+      const f = L.buildFocus(s, ci({ minutes, intent: 'easy', fatigue: 3 }), { region });
+      ok(f.minutesUsed >= minutes - 8 && L.blocksMinutes(s, f.blocks) <= minutes, `easy ${region} focus ${minutes} min: ${f.minutesUsed}`);
+    }
+  }
+  // + Time on a focused workout never repeats an exercise already in it.
+  const f = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper' });
+  const more = L.buildFocus(s, ci({ minutes: 30 }), { region: 'upper', accessoriesOnly: true }, Date.now(),
+    { excludeFamilies: f.blocks.map(b => ex(b.exerciseId).familyId), sessionBlocks: f.blocks });
+  ok(more.blocks.length && more.blocks.every(b => !f.blocks.some(x => x.exerciseId === b.exerciseId)), more.blocks.map(b => ex(b.exerciseId).name).join(', '));
+});
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
   const wk = L.weekBounds(s);
