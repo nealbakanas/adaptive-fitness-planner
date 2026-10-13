@@ -464,6 +464,7 @@ const PATTERNS = [
   ['knee', /reverse nordic|sissy/i],
   ['hinge', /reverse hyper|sorensen|deadlift|\brdls?\b|romanian|good ?morning|back extension|hyperextension|hip thrust|glute|nordic|hamstring|\bghr\b|leg curl|swing|hinge|(block|rack|deficit) pulls?\b/i],
   ['full', /clean|snatch|jerk|thruster|burpee/i],
+  ['push', /overhead press|military press/i], // before squat words: "banded press in split" is a press
   ['knee', /squat|lunge|split|step[- ]?up|leg press|leg extension|pistol|jump|bound|\bhops?\b|skater/i],
   ['pull', /\btrap\b|pull[- ]?ups?|chin[- ]?ups?|\brows?\b|pulldown|face pull|pull[- ]?apart|rear[- ]?delt|curl|shrug|vertical pull|upper back|\blats?\b/i],
   ['push', /\bdips?\b|press|push[- ]?ups?|bench|incline|tricep|telle|extension|skull|push ?down|raise|\bfly\b|chest|shoulder/i],
@@ -723,7 +724,7 @@ function explosiveLower(state, ci, t, k) {
   if (clean) {
     k.add(clean, 'T1', 'clean variation for power');
     // A second clean variation if it still leaves room for a few accessories.
-    const second = k.explosives('full', { load: true, sameFamily: clean.familyId })[0];
+    const second = k.explosives('full', { load: true, sameFamily: clean.familyId }).find(e => e.familyId === clean.familyId);
     // Power reps (sets of 1-3, 10-20 in all), not a 5×5: it's speed work after the main clean.
     if (second && ci.intent !== 'easy' && k.budget >= 30) k.add(second, 'T2', 'second clean variation, lighter', { repMin: 10, repMax: 20 });
   }

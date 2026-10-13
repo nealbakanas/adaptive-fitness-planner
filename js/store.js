@@ -1,5 +1,7 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
-import { seed, defaultAnytime, HYPER_PRO_ONLY } from './seed.js';
+import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise } from './seed.js';
+import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo } from './library.js';
+import { gsMobilityExercises } from './mobility.js';
 import { guessRegion, guessExplosive } from './logic.js';
 
 // Test pages set their own key so they never touch real data.
@@ -172,6 +174,45 @@ export function migrate(s) {
       if (e && e.maxReps == null) e.maxReps = base.exercises.find(x => x.id === id).maxReps;
     }
     s.version = 11;
+  }
+  if (s.version < 12) {
+    // v12: the Garage Strength Movement Library (js/library.js): six new families, ~230 exercises with their videos,
+    // and nine mobility drills. Families and exercises you already have by the same name are reused, not doubled:
+    // they only get the video if they don't have one. No goals are added, and the new gear isn't put at any location.
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const eq of GS_EQUIPMENT) if (!s.equipment.includes(eq)) s.equipment.push(eq);
+    const famIds = {}, added = [];
+    for (const fam of base.families) {
+      const have = s.families.find(f => f.id === fam.id || norm(f.name) === norm(fam.name));
+      if (have) { famIds[fam.id] = have.id; continue; }
+      if (!GS_FAMILIES.some(f => f.id === fam.id) && !GS_EXERCISES.some(r => r[2] === fam.id)) continue;
+      const f = { ...fam, defaultExerciseId: null };
+      s.families.push(f);
+      added.push([f, fam.defaultExerciseId]);
+      famIds[fam.id] = fam.id;
+    }
+    const giveVideo = (have, url) => { if (have && !/^https?:\/\//i.test(have.youtube || '')) { have.youtube = url; have.start = null; } };
+    for (const [id, video] of Object.entries(GS_VIDEOS)) {
+      const name = base.exercises.find(e => e.id === id)?.name;
+      giveVideo(s.exercises.find(e => e.id === id) ?? s.exercises.find(e => norm(e.name) === norm(name)), gsVideo(video));
+    }
+    for (const row of GS_EXERCISES) {
+      const [id, name, familyId] = row;
+      const have = s.exercises.find(e => e.id === id || norm(e.name) === norm(name));
+      if (have) { giveVideo(have, gsVideo(row[5])); continue; }
+      const fid = famIds[familyId];
+      if (!fid) continue;
+      const rank = Math.max(0, ...s.exercises.filter(e => e.familyId === fid).map(e => e.rank || 0)) + 1;
+      s.exercises.push({ ...gsExercise(row, rank), familyId: fid });
+    }
+    // A family this step added: its usual exercise is the seed's if it came in, else its first one.
+    for (const [f, def] of added) {
+      f.defaultExerciseId = s.exercises.find(e => e.id === def && e.familyId === f.id)?.id ?? s.exercises.find(e => e.familyId === f.id)?.id ?? null;
+    }
+    for (const m of gsMobilityExercises()) {
+      if (!s.mobility.exercises.some(e => e.id === m.id || norm(e.name) === norm(m.name))) s.mobility.exercises.push(m);
+    }
+    s.version = 12;
   }
   return s;
 }

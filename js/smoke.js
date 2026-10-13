@@ -166,13 +166,13 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
 
   click('[data-act=nav][data-tab=library]');
   click('[data-act=libMode][data-v=mobility]');
-  check('library mobility tab lists all 16', qa('[data-act=mobExEdit]').length === 16);
+  check('library mobility tab lists all 25', qa('[data-act=mobExEdit]').length === 25);
   click('[data-act=mobExNew]');
   q('#me-name').value = '90/90 hip switch';
   click('[data-act=mobExPart][data-v="Glutes"]');
   check('typed name survives picking a body part', q('#me-name').value === '90/90 hip switch');
   click('[data-act=mobExSave]');
-  check('new mobility exercise saved', qa('[data-act=mobExEdit]').length === 17 && /90\/90 hip switch/.test(text()));
+  check('new mobility exercise saved', qa('[data-act=mobExEdit]').length === 26 && /90\/90 hip switch/.test(text()));
   click('[data-act=libMode][data-v=strength]');
 
   click('[data-act=nav][data-tab=plans]');

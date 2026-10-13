@@ -211,7 +211,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 11);
+  eq(m.version, 12);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -230,7 +230,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 11);
+  eq(m.version, 12);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -502,7 +502,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 11);
+  eq(m.version, 12);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -606,9 +606,9 @@ test('T3s superset with each other; main lifts stay free; an odd T3 makes a gian
 });
 
 // ---------- mobility ----------
-test('mobility starter library: your 4 routines and 16 exercises, outside the strength library', () => {
+test('mobility starter library: your 4 routines, 16 exercises and 9 Garage Strength drills, outside the strength library', () => {
   const s = seed();
-  eq([s.mobility.routines.length, s.mobility.exercises.length], [4, 16]);
+  eq([s.mobility.routines.length, s.mobility.exercises.length], [4, 25]);
   ok(s.mobility.routines.every(r => r.items.length === 4 && r.items.every(id => s.mobility.exercises.some(e => e.id === id))), 'routines resolve');
   ok(s.mobility.exercises.every(e => e.parts.length && e.parts.every(p => M.BODY_PARTS.includes(p))), 'body parts');
   ok(!s.exercises.some(e => e.id.startsWith('mob-')), 'not in the strength library');
@@ -664,11 +664,11 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 11);
+  eq(m.version, 12);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
-  eq(again.mobility.exercises.length, 16, 'idempotent');
+  eq(again.mobility.exercises.length, 25, 'idempotent (16 plus the 9 Garage Strength drills)');
 });
 
 test('deficit RDL is a hamstring exercise with a weekly T2 goal', () => {
@@ -691,7 +691,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 11);
+  eq(m.version, 12);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -742,9 +742,12 @@ test('focused workouts: upper and lower from the whole library, explosive first 
   ok(upper.blocks.every(b => ['push', 'pull', 'core'].includes(pat(b.exerciseId))), `upper only: ${names(upper)}`);
   ok(new Set(upper.blocks.filter(b => b.tier !== 'T3').map(b => pat(b.exerciseId))).size === 2, 'push and pull main lifts');
   ok(!upper.blocks.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), 'no explosive work unless asked');
-  // No upper-body explosive lift in the starter library: cleans (whole body) lead instead.
+  // Jerks lead upper-body explosive days; with them archived, cleans (whole body) lead instead.
   const upx = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper', explosive: true });
-  eq(upx.blocks[0].exerciseId, 'ex-power-clean');
+  eq(upx.blocks[0].exerciseId, 'gs-split-jerk');
+  const noJerks = structuredClone(s);
+  for (const e of noJerks.exercises) if (e.familyId === 'fam-jerk') e.archived = true;
+  eq(L.buildFocus(noJerks, ci({ minutes: 60 }), { region: 'upper', explosive: true }).blocks[0].exerciseId, 'ex-power-clean');
   // Tired: explosive work becomes technique and the main lift drops to T2.
   const tired = L.buildFocus(s, ci({ minutes: 60, fatigue: 5 }), { region: 'lower', explosive: true });
   eq(tired.blocks[0].tier, 'TECH');
@@ -854,7 +857,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 11);
+  eq(m.version, 12);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
