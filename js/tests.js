@@ -211,7 +211,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 14);
+  eq(m.version, 15);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -230,7 +230,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 14);
+  eq(m.version, 15);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -502,7 +502,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 14);
+  eq(m.version, 15);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -664,7 +664,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 14);
+  eq(m.version, 15);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -691,7 +691,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 14);
+  eq(m.version, 15);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -960,6 +960,55 @@ test('automatic T1/T2 picks never use accessories (no T2 clamp curls); a goal yo
   eq([m.exercises.find(e => e.id === 'gs-clamp-curls').role, m.exercises.find(e => e.id === 'ex-db-curl').role, m.exercises.find(e => e.id === 'mine').role, m.exercises.find(e => e.id === 'gs-clamp-curls').pattern],
     ['accessory', 'main', 'accessory', null]);
 });
+test('a tested 1RM sets T1/T2 loads for 16 weeks; stronger sets still win; an old or undated one only fills in', () => {
+  const s = seed();
+  const sq = s.exercises.find(e => e.id === 'ex-back-squat');
+  eq(L.estimatedMax(s, sq.id), null, 'nothing yet');
+  sq.testedMax = { load: 350, at: Date.now() - 7 * DAY };
+  eq(L.estimatedMax(s, sq.id), 350);
+  eq(L.maxSource(s, sq.id), 'tested');
+  done(s, sq.id, 'T2', 8, 3, 2, 225); // lighter T2 work (e1RM ~285) doesn't drag it down
+  eq(L.estimatedMax(s, sq.id), 350, 'tested max is a floor');
+  done(s, sq.id, 'T1', 3, 5, 1, 345); // e1RM ~380: stronger sets win
+  ok(L.estimatedMax(s, sq.id) > 370 && L.maxSource(s, sq.id) === 'sets', String(L.estimatedMax(s, sq.id)));
+  const t1 = s.schemes.find(x => x.id === 's-t1-5x3');
+  const old = seed(); const osq = old.exercises.find(e => e.id === 'ex-back-squat');
+  osq.testedMax = { load: 400, at: Date.now() - 20 * 7 * DAY };
+  eq(L.estimatedMax(old, osq.id), 400, 'old one fills in with no sets');
+  done(old, osq.id, 'T1', 3, 5, 1, 300);
+  ok(L.estimatedMax(old, osq.id) < 400, 'older than 16 weeks: your sets decide');
+  ok(L.targetLoad(s, sq, 'T1', t1) > 300, 'T1 loads come from it');
+  // Weighted bodyweight lifts: the max is added load, bodyweight on top.
+  const wp = s.exercises.find(e => e.id === 'ex-wpullup');
+  wp.testedMax = { load: 90, at: Date.now() };
+  eq(L.estimatedMax(s, wp.id), null, 'needs your bodyweight');
+  s.settings.bodyweight = 200;
+  eq(L.estimatedMax(s, wp.id), 290);
+  // v15 turns an old starting max into an undated tested one.
+  const v14 = seed(); v14.version = 14;
+  for (const e of v14.exercises) delete e.testedMax;
+  v14.exercises.find(e => e.id === 'ex-front-squat').startMax = 275;
+  const m = migrate(v14);
+  eq([m.exercises.find(e => e.id === 'ex-front-squat').testedMax, m.exercises.find(e => e.id === 'ex-front-squat').startMax], [{ load: 275, at: null }, null]);
+  eq(L.estimatedMax(m, 'ex-front-squat'), 275);
+});
+test('the week budget: minutes your goals take, room for more T2/T3, from your settings or check-ins', () => {
+  const s = seed();
+  const b = G.weekBudget(s);
+  eq([b.workouts, b.minutes, b.total], [3, 45, 135], 'a starting guess with no history');
+  eq(b.count, { T1: 2, T2: 6, T3: 6, TECH: 2 });
+  ok(Math.abs(b.used - (2 * b.cost.T1 + 6 * b.cost.T2 + 6 * b.cost.T3 + 2 * b.cost.TECH)) < 1e-9);
+  s.settings.week = { workouts: 5, minutes: 60 };
+  const b2 = G.weekBudget(s);
+  eq(b2.total, 300);
+  ok(b2.addT2 === Math.floor(b2.room / b2.cost.T2) && b2.addT3 > b2.addT2 && b2.addT2 > 10, JSON.stringify(b2));
+  eq(b2.guide, { T1: [2, 5], T2: [5, 10], T3: [10, 20] });
+  // From check-ins: 8 workouts in 4 weeks, 60 minutes each.
+  const h = seed();
+  for (let i = 0; i < 8; i++) h.sessions.push({ id: `w${i}`, checkinAt: Date.now() - (i * 3 + 1) * DAY, firstSetAt: Date.now() - (i * 3 + 1) * DAY + 60e3, minutes: 60, blocks: [] });
+  const b3 = G.weekBudget(h);
+  eq([b3.workouts, b3.minutes, b3.fromHistory.workouts], [2, 60, true]);
+});
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
   const wk = L.weekBounds(s);
@@ -1087,7 +1136,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 14);
+  eq(m.version, 15);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');

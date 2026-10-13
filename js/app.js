@@ -782,7 +782,7 @@ function viewBlock(s, b, credit, idea = null) {
   let info = [];
   if (ex.metric === 'load_reps' && pct) info.push(`${round(pct * 100)}% of e1RM`);
   if (max) info.push(`e1RM ${round(max)}${ex.bodyweight ? ' total' : ''}`);
-  else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push('no max yet: enter a load');
+  else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`no max yet: enter a load or <button class="link" data-act="maxSet" data-id="${ex.id}">set your 1RM</button>`);
   const restBtn = `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ rest ${clock(effectiveRest(b))}${b.restSec != null ? ' (set today)' : ex.restSec != null ? ' (exercise)' : ''}</button>`;
 
   let dose = '';
@@ -944,6 +944,25 @@ function viewMobRoutine(r) {
       <button data-act="mobRoutineCancel">Cancel</button><button class="primary" data-act="mobRoutineSave">Save routine</button></div>`;
 }
 
+// How the weekly goals fit the time you train, and how many more T2 or T3 sessions would.
+function weekBudgetCard() {
+  const b = G.weekBudget(state);
+  const src = k => b.fromHistory[k] ? 'from your last 4 weeks' : state.settings.week?.[k] ? 'you set this' : 'a starting guess';
+  const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
+  const rows = [['T1', 'Heavy'], ['T2', 'Moderate'], ['T3', 'Accessory'], ['TECH', 'Technique']].filter(([t]) => t !== 'TECH' || b.count.TECH)
+    .map(([t, label]) => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${label}</span>
+      <span class="meta">~${round(b.cost[t])} min each${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
+  const verdict = b.room >= 0
+    ? `Your goals take about <b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes. Room for about <b>${b.addT2} more T2</b> or <b>${b.addT3} more T3</b> sessions a week (or a mix).`
+    : `Your goals need about <b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> more than the ${round(b.total)} you train. Some will slip to next week: lower a quota or two, accessories first.`;
+  return `<div class="card"><h3>Week budget</h3>
+    <div class="frow"><span class="grow"><span class="name">Workouts a week</span><span class="meta">${src('workouts')}</span></span>${numIn('settings.week.workouts', state.settings.week?.workouts ?? '', `placeholder="${b.workouts}" data-rerender`)}</div>
+    <div class="frow"><span class="grow"><span class="name">Minutes each</span><span class="meta">${src('minutes')}</span></span>${numIn('settings.week.minutes', state.settings.week?.minutes ?? '', `placeholder="${b.minutes}" data-rerender`)}</div>
+    ${rows}
+    <p>${verdict}</p>
+    <p class="meta">Guide = GZCL per workout (1 T1, 1–2 T2, 2–4 T3) for ${b.workouts} workouts. Time your goals don't use is filled from your library anyway, so goals are the minimum you want guaranteed each week.</p></div>`;
+}
+
 function viewWeek() {
   if (ui.history) return viewHistory(ui.history);
   if (ui.goalSuggest) return viewGoalSuggest(ui.goalSuggest);
@@ -966,6 +985,7 @@ function viewWeek() {
       <span class="grow"><span class="name">${esc(name)}</span><span class="meta">${esc(sub)}</span></span>
       <span class="pips">${pips}</span></button>`;
   }).join('') || '<p class="muted pad">No weekly goals yet. Add one to get suggestions.</p>'}</div>`;
+  h += weekBudgetCard();
 
   const wk = L.sessionStats(state, c.start, c.end), all = L.sessionStats(state);
   const secs = v => v == null ? '—' : `${round(v)}s`;
@@ -1173,6 +1193,7 @@ const SETTINGS_PAGES = [
   ['you', 'You and training'],
   ['timer', 'Rest timer'],
   ['locations', 'Locations and equipment'],
+  ['maxes', '1-rep maxes'],
   ['tiers', 'Tier doses'],
   ['schemes', 'Schemes'],
   ['data', 'Backup and data'],
@@ -1183,7 +1204,7 @@ function viewSettings() {
   const page = ui.setPage;
   if (!page) return viewSettingsMenu();
   const title = SETTINGS_PAGES.find(p => p[0] === page)[1];
-  const body = { you: settingsYou, timer: settingsTimer, locations: settingsLocations, tiers: settingsTiers, schemes: settingsSchemes, data: settingsData, fitnotes: settingsFitnotes }[page]();
+  const body = { you: settingsYou, maxes: settingsMaxes, timer: settingsTimer, locations: settingsLocations, tiers: settingsTiers, schemes: settingsSchemes, data: settingsData, fitnotes: settingsFitnotes }[page]();
   return `<header class="top sub"><button class="back" data-act="setPage" data-p="">‹ Settings</button></header><h1 class="pagetitle">${title}</h1>${body}`;
 }
 
@@ -1196,6 +1217,7 @@ function viewSettingsMenu() {
     locations: state.locations.map(l => l.name).join(', '),
     tiers: `T1 ${t1.repMin}–${t1.repMax} reps at ${round(t1.intMin * 100)}%+ · T2 · T3`,
     schemes: `${state.schemes.length} schemes`,
+    maxes: (() => { const n = state.exercises.filter(e => e.testedMax?.load > 0).length; return n ? `${n} entered · used for T1 and T2 loads` : 'Enter your tested maxes for T1 and T2 loads'; })(),
     data: `Last backup: ${st.lastExportAt ? new Date(st.lastExportAt).toLocaleDateString() : 'never'}`,
   };
   return `<header class="top"><h1>Settings</h1></header>
@@ -1205,7 +1227,7 @@ function viewSettingsMenu() {
         <span class="meta">${state.slots.length} goals · edit on the Week tab</span></span><span class="chev">›</span></button>
     </div>
     <div class="label">Programming</div>
-    <div class="menu">${SETTINGS_PAGES.slice(3, 5).map(([k, t]) => menuRow(k, t, summary[k])).join('')}</div>
+    <div class="menu">${SETTINGS_PAGES.slice(3, 6).map(([k, t]) => menuRow(k, t, summary[k])).join('')}</div>
     <div class="menu">${menuRow('data', 'Backup and data', summary.data)}</div>`;
 }
 
@@ -1256,6 +1278,24 @@ function settingsLocations() {
       <div class="chips">${state.equipment.map(eq => `<label class="chip ${l.equipment.includes(eq) ? 'on' : ''}"><input type="checkbox" data-loceq="${l.id}|${esc(eq)}" ${l.equipment.includes(eq) ? 'checked' : ''}>${esc(eq)}</label>`).join('')}
         <input class="chipinput" data-eqnew="loc:${l.id}" placeholder="+ New" aria-label="Add equipment" enterkeyhint="done"></div>
     </div>`).join('') + `<button class="addblock" data-act="locAdd">+ Add location</button>`;
+}
+
+// Your T1 goals' lifts, then T2 goals' lifts, then other main lifts and power exercises you've done in the last 12 weeks.
+function settingsMaxes() {
+  const goalLift = sl => sl.exerciseId ?? famOf(sl.familyId)?.defaultExerciseId;
+  const loaded = e => e && e.metric === 'load_reps' && !e.archived;
+  const groups = [['Your T1 lifts', 'T1'], ['Your T2 lifts', 'T2']].map(([label, tier]) =>
+    [label, [...new Set(state.slots.filter(sl => sl.tier === tier).map(goalLift))].map(exOf).filter(loaded)]);
+  const listed = new Set(groups.flatMap(([, list]) => list.map(e => e.id)));
+  const since = Date.now() - 84 * 864e5;
+  const recent = [...new Set(state.sets.filter(s => s.done && s.loggedAt >= since).map(s => s.exerciseId))].map(exOf)
+    .filter(e => loaded(e) && !listed.has(e.id) && ['main', 'power'].includes(e.role ?? L.guessRole(e.name, e.metric, e.explosive)));
+  groups.push(['Other lifts you do', recent.sort((a, b) => a.name.localeCompare(b.name))]);
+  const row = e => `<label class="frow"><span class="grow"><span class="name">${esc(e.name)}${e.bodyweight ? ' <span class="hint">added load</span>' : ''}</span>
+      <span class="meta">${esc(maxLine(e) || 'No max yet')}</span></span>
+      <input class="num" inputmode="decimal" data-max="${e.id}" value="${esc(e.testedMax?.load ?? '')}" placeholder="1RM"></label>`;
+  return `<p class="meta pad">Type a 1RM you've tested (${unit()}). T1 and T2 loads are worked out from it for ${L.TESTED_MAX_WEEKS} weeks, and stronger logged sets still raise it. Leave blank to go by your sets.</p>` +
+    groups.filter(([, list]) => list.length).map(([label, list]) => `<div class="label">${label}</div><div class="menu">${list.map(row).join('')}</div>`).join('');
 }
 
 function settingsTiers() {
@@ -1425,7 +1465,7 @@ function viewGoalSuggest(g) {
     <p class="meta pad">From your last ${g.weeks} weeks: ${g.workouts} workouts, about ${g.perWeek.toFixed(1)} a week. Explosive work comes first and lifts use GZCL tiers,
       with about one heavy (T1) lift per workout. Untick anything you don't want, or tap a goal to change it.</p>
     <div class="card"><div class="kv ${total > g.capacity ? 'over' : ''}"><span>Goal sessions a week</span><b>${total}</b></div>
-      <div class="kv"><span>What about ${g.perWeek.toFixed(1)} workouts of ~45 min fit</span><b>about ${g.capacity}</b></div></div>
+      <div class="kv"><span>What about ${(state.settings.week?.workouts || g.perWeek).toFixed(1)} workouts of ~${g.minutes} min fit</span><b>about ${g.capacity}</b></div></div>
     <div class="menu">${g.rows.map(r => gsRow(r, g)).join('')}</div>
     <button class="primary big" data-act="gsApply" data-mode="replace">Replace my goals with these</button>
     <div class="actions"><button data-act="gsApply" data-mode="add">Add to my goals</button><button data-act="gsCancel">Cancel</button></div>`;
@@ -1491,7 +1531,7 @@ function renderSheet() {
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, pasteImport: sheetPasteImport,
-    addEx: sheetAddEx, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx }[s.type](s);
+    addEx: sheetAddEx, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
   sheetEl.hidden = false;
   if (ui.sheetFocus) {
@@ -1837,6 +1877,34 @@ function sheetQuickAdd(sh) {
     <button class="primary big" data-act="qaSave">${label}</button>`;
 }
 
+// "e1RM 346 from your sets" / "1RM 350 you tested Oct 13" for an exercise, or ''.
+const shortDay = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+function maxLine(e) {
+  const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
+  if (!max) return '';
+  const tm = e.testedMax;
+  const total = e.bodyweight ? ' total incl. bodyweight' : '';
+  return L.maxSource(state, e.id) === 'tested'
+    ? `Using your 1RM: ${round(max)}${total}${tm?.at ? `, tested ${shortDay(tm.at)}` : ''}`
+    : `Using e1RM ${round(max)}${total} from your recent sets`;
+}
+// Saves a typed-in 1RM (blank clears it); a changed value is dated today.
+function setTestedMax(e, raw) {
+  const v = String(raw ?? '').trim();
+  if (v === '' || !(Number(v) > 0)) { e.testedMax = null; e.startMax = null; return; }
+  if (Number(v) !== Number(e.testedMax?.load)) e.testedMax = { load: Number(v), at: Date.now() };
+  e.startMax = null;
+}
+
+function sheetMax(sh) {
+  const e = exOf(sh.id);
+  return `<h3>1-rep max: ${esc(e.name)}</h3>
+    <div class="field"><label>Tested 1RM (${unit()}${e.bodyweight ? ', added load' : ''})</label>
+      <input id="mx-load" inputmode="decimal" value="${esc(e.testedMax?.load ?? '')}" placeholder="e.g. 315"></div>
+    <p class="meta">Heavy and moderate loads are worked out from it. It counts for ${L.TESTED_MAX_WEEKS} weeks; stronger logged sets still raise it.</p>
+    <div class="actions"><button class="primary" data-act="maxSave" data-id="${e.id}">Save</button></div>`;
+}
+
 function sheetEditEx(sh) {
   const e = exOf(sh.id);
   const fam = famOf(e.familyId);
@@ -1849,9 +1917,9 @@ function sheetEditEx(sh) {
     <label class="toggle"><input type="checkbox" id="ee-default" ${fam?.defaultExerciseId === e.id ? 'checked' : ''}> Usual choice for this family</label>
     <div class="field"><label>How do you log it?</label><select id="ee-metric">${opts(METRICS, e.metric)}</select></div>
     <label class="toggle"><input type="checkbox" id="ee-bw" ${e.bodyweight ? 'checked' : ''}> Weight is added to bodyweight <span class="hint">(weighted pull-ups, dips)</span></label>
-    <div class="field"><label>Starting max (${unit()}${e.bodyweight ? ', added load' : ''})</label>
-      <input id="ee-max" inputmode="decimal" value="${esc(e.startMax)}" placeholder="Used until you log sets">
-      ${max ? `<div class="meta">Current e1RM: ${round(max)}${e.bodyweight ? ' total incl. bodyweight' : ''}</div>` : ''}</div>
+    <div class="field"><label>1-rep max (${unit()}${e.bodyweight ? ', added load' : ''}) <span class="hint">${e.testedMax?.at ? `tested ${shortDay(e.testedMax.at)}` : 'optional'}</span></label>
+      <input id="ee-max" inputmode="decimal" value="${esc(e.testedMax?.load ?? e.startMax ?? '')}" placeholder="Your tested max">
+      <div class="meta">${max ? esc(maxLine(e)) : 'No max yet.'} A max you enter counts for ${L.TESTED_MAX_WEEKS} weeks; stronger sets still raise it.</div></div>
     <div class="field"><label>Max reps per set <span class="hint">optional · e.g. 5 for Olympic lifts</span></label>
       <input id="ee-maxreps" inputmode="numeric" value="${esc(e.maxReps)}"></div>
     <div class="field"><label>Rest override (m:ss) <span class="hint">optional · otherwise the scheme's rest</span></label>
@@ -2593,6 +2661,12 @@ const actions = {
     save(); render();
   },
 
+  maxSet: d => openSheet({ type: 'max', id: d.id }),
+  maxSave: d => {
+    setTestedMax(exOf(d.id), sheetEl.querySelector('#mx-load').value);
+    ui.sheet = null;
+    save(); render(); toast('1RM saved');
+  },
   exSave: d => {
     const e = exOf(d.id);
     const q = sel => sheetEl.querySelector(sel);
@@ -2606,8 +2680,7 @@ const actions = {
     e.name = q('#ee-name').value.trim() || e.name;
     e.metric = q('#ee-metric').value;
     e.bodyweight = q('#ee-bw').checked;
-    const m = q('#ee-max').value.trim();
-    e.startMax = m === '' ? null : Number(m);
+    setTestedMax(e, q('#ee-max').value);
     e.restSec = q('#ee-rest').value.trim() === '' ? null : parseMSS(q('#ee-rest').value);
     const mr = q('#ee-maxreps').value.trim();
     e.maxReps = mr === '' ? null : Number(mr);
@@ -2869,6 +2942,9 @@ document.addEventListener('change', e => {
       if (el.value.trim() !== '' && v > 0) p.verticals.push({ week: Number(w), value: v, at: Date.now() });
       save();
     }
+  } else if (d.max) {
+    setTestedMax(exOf(d.max), el.value);
+    save(); render();
   } else if (d.progweek) {
     P.setWeek(state, d.progweek, Number(el.value));
     save(); render(); toast(`Week ${el.value}, day 1`);

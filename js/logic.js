@@ -144,6 +144,26 @@ const countsForMax = s => !s.warmup && (!s.tier || s.tier === 'T1' || s.tier ===
 
 // Best e1RM across the last 3 T1/T2 sessions with this exercise, before `before`.
 // Falls back to the exercise's starting max (added load for bodyweight moves).
+// A 1-rep max you tested and typed in, as a total load (bodyweight added for weighted bodyweight lifts), with the day it
+// was tested (null for an undated one, like the old "starting max"). Null if none.
+export const TESTED_MAX_WEEKS = 16;
+export function testedMaxOf(state, ex) {
+  const tm = ex?.testedMax ?? (ex?.startMax ? { load: ex.startMax, at: null } : null);
+  if (!tm || !(Number(tm.load) > 0)) return null;
+  const total = ex.bodyweight ? (state.settings.bodyweight ? state.settings.bodyweight + Number(tm.load) : null) : Number(tm.load);
+  return total == null ? null : { total, at: tm.at ?? null };
+}
+
+// Where the estimated max comes from: 'tested' (your typed-in 1RM is the higher, and recent), 'sets' (your logged sets), or null.
+export function maxSource(state, exerciseId, before = Infinity) {
+  const m = estimatedMax(state, exerciseId, before);
+  if (m == null) return null;
+  const tested = testedMaxOf(state, byId(state.exercises, exerciseId));
+  return tested && Math.abs(tested.total - m) < 1e-9 ? 'tested' : 'sets';
+}
+
+// Best of the last 3 sessions' heavy and moderate sets. A tested 1RM from the last 16 weeks is a floor (lighter T2 work
+// can't drag the loads down, and stronger sets still win); an older or undated one is used only when there are no sets.
 export function estimatedMax(state, exerciseId, before = Infinity) {
   const bySession = new Map();
   for (const s of state.sets) {
@@ -154,11 +174,12 @@ export function estimatedMax(state, exerciseId, before = Infinity) {
     if (!cur || e > cur.e) bySession.set(s.sessionId, { e, t: s.loggedAt });
   }
   const recent = [...bySession.values()].sort((a, b) => b.t - a.t).slice(0, 3);
-  if (recent.length) return Math.max(...recent.map(r => r.e));
-  const ex = byId(state.exercises, exerciseId);
-  if (!ex?.startMax) return null;
-  if (ex.bodyweight) return state.settings.bodyweight ? state.settings.bodyweight + ex.startMax : null;
-  return ex.startMax;
+  const fromSets = recent.length ? Math.max(...recent.map(r => r.e)) : null;
+  const tested = testedMaxOf(state, byId(state.exercises, exerciseId));
+  const now = before === Infinity ? Date.now() : before;
+  if (!tested || (tested.at != null && tested.at > now)) return fromSets;
+  const fresh = tested.at != null && now - tested.at <= TESTED_MAX_WEEKS * 7 * DAY;
+  return fresh ? Math.max(fromSets ?? 0, tested.total) : fromSets ?? tested.total;
 }
 
 function dayBest(state, s) {

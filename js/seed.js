@@ -31,7 +31,7 @@ function ex(id, name, familyId, rank, metric, equipment, opts = {}) {
     id, name, familyId, rank, metric, equipment,
     anytime: defaultAnytime(equipment, !!opts.bodyweight),
     region: FAMILY_REGION[familyId] ?? 'full', explosive: EXPLOSIVE_FAMILIES.includes(familyId),
-    bodyweight: false, youtube: '', start: null, cues: '', startMax: null, maxReps: null, restSec: null,
+    bodyweight: false, youtube: '', start: null, cues: '', startMax: null, testedMax: null, maxReps: null, restSec: null,
     role: EXERCISE_ROLES[id] ?? 'main', ...(id in PATTERN_OVERRIDES ? { pattern: PATTERN_OVERRIDES[id] } : {}),
     ...opts,
   };
@@ -193,7 +193,7 @@ export function seed() {
   ];
 
   return {
-    version: 14,
+    version: 15,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
@@ -201,6 +201,7 @@ export function seed() {
       increment: 5,
       kettlebells: [30, 40, 45, 53], // loads for kettlebell exercises snap to these
       recovery: { t1AfterT1: true },
+      week: { workouts: null, minutes: null }, // your usual week for the goal budget; null = from your recent check-ins
       lastExportAt: null,
       timer: { autoStart: true, sound: true, vibrate: true, warn10: true, keepAwake: true, notify: false, prep: 5 },
     },
