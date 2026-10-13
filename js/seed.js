@@ -1,7 +1,7 @@
 // Seed data: real lifts from the PRD plus placeholder T3 work. Everything is editable in-app.
 
 import { mobilitySeed } from './mobility.js';
-import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo } from './library.js';
+import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 
 export const EQUIPMENT = [
   'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell',
@@ -32,6 +32,7 @@ function ex(id, name, familyId, rank, metric, equipment, opts = {}) {
     anytime: defaultAnytime(equipment, !!opts.bodyweight),
     region: FAMILY_REGION[familyId] ?? 'full', explosive: EXPLOSIVE_FAMILIES.includes(familyId),
     bodyweight: false, youtube: '', start: null, cues: '', startMax: null, maxReps: null, restSec: null,
+    role: EXERCISE_ROLES[id] ?? 'main', ...(id in PATTERN_OVERRIDES ? { pattern: PATTERN_OVERRIDES[id] } : {}),
     ...opts,
   };
 }
@@ -192,7 +193,7 @@ export function seed() {
   ];
 
   return {
-    version: 13,
+    version: 14,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,

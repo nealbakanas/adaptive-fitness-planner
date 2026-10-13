@@ -221,6 +221,7 @@ function newExercise({ name, familyName, metric = 'load_reps', bodyweight = fals
   const e = {
     id: L.uid(), name, familyId: fam.id, rank: rank ?? (L.familyMembers(state, fam.id).at(-1)?.rank ?? 0) + 1,
     metric, bodyweight, equipment, anytime, region, explosive, youtube: '', start: null, cues: '', startMax: null, maxReps: null, restSec: null,
+    role: L.guessRole(name, metric, explosive),
   };
   state.exercises.push(e);
   normalizeRanks(fam.id);
@@ -1860,6 +1861,8 @@ function sheetEditEx(sh) {
     <div class="field"><label>Body region <span class="hint">heavy work here makes explosive work wait</span></label>
       <select id="ee-region">${opts([['lower', 'Lower body'], ['upper', 'Upper body'], ['full', 'Whole body']], e.region || 'full')}</select></div>
     <label class="toggle"><input type="checkbox" id="ee-expl" ${e.explosive ? 'checked' : ''}> Explosive <span class="hint">jumps, throws, Olympic lifts: best done fresh</span></label>
+    <div class="field"><label>Role <span class="hint">what suggestions may use it for</span></label>
+      <select id="ee-role">${opts([['main', 'Main lift (T1/T2 strength)'], ['power', 'Power (explosive T1/T2)'], ['accessory', 'Accessory (T3 only)'], ['technique', 'Technique drill']], e.role ?? L.guessRole(e.name, e.metric, e.explosive))}</select></div>
     <label class="toggle"><input type="checkbox" id="ee-arch" ${e.archived ? 'checked' : ''}> Archived <span class="hint">kept for history, left out of suggestions and pickers</span></label>
     <div class="field"><label>YouTube URL</label><input id="ee-yt" value="${esc(e.youtube)}" placeholder="https://youtu.be/..."></div>
     <div class="field"><label>Start time (m:ss)</label><input id="ee-start" value="${esc(fmtMSS(e.start))}" placeholder="0:42"></div>
@@ -2612,6 +2615,7 @@ const actions = {
     e.anytime = q('#ee-any').checked;
     e.region = q('#ee-region').value;
     e.explosive = q('#ee-expl').checked;
+    e.role = q('#ee-role').value;
     e.archived = q('#ee-arch').checked;
     e.youtube = q('#ee-yt').value.trim();
     e.start = parseMSS(q('#ee-start').value);

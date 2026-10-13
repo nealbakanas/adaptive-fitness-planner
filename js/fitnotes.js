@@ -240,6 +240,7 @@ function createExercise(state, row) {
     rank: (L.familyMembers(state, fam.id).at(-1)?.rank ?? 0) + 1,
     metric: f.metric, bodyweight: f.bodyweight, equipment: [...row.equipment],
     anytime: defaultAnytime(row.equipment, f.bodyweight), region: row.region, explosive: row.explosive, archived: !!row.archive,
+    role: L.guessRole(row.name.trim() || row.fnName, f.metric, row.explosive),
     youtube: '', start: null, cues: '', startMax: null, restSec: null,
     maxReps: row.mode === 'load' && /clean|snatch|jerk/i.test(row.name) ? 5 : null, // Olympic lifts: no sets of 8+
   };

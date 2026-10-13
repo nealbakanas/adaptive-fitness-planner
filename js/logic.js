@@ -59,6 +59,16 @@ export function guessRegion(name) {
 export const guessExplosive = name => !/(clean|snatch)[- ]?grip|deadlift|\brdl\b|romanian/i.test(name || '')
   && /jump|hop|bound|skip|sprint|clean|snatch|jerk|push press|swing|throw|toss|slam|plyo|clap|bounce|high pull|depth/i.test(name || '');
 
+// What an exercise may be prescribed as, from its name: explosive → power; not loaded or isolation/pump work → accessory
+// (T3 only); else a main lift that T1/T2 picks may use. Editable per exercise.
+const ACCESSORY_NAME = /curl|raise|\bfl(y|ys|ies)\b|flye|extension|kickback|push ?down|shrug|wrist|forearm|grip|pinch|roller|band|pull[- ]?apart|face pull|calf|calves|lateral|rear[- ]?delt|crunch|twist|pallof|plank|rotation|abduct|adduct|hyper|sorensen/i;
+export function guessRole(name, metric = 'load_reps', explosive = false) {
+  if (explosive) return 'power';
+  return metric !== 'load_reps' || ACCESSORY_NAME.test(name || '') ? 'accessory' : 'main';
+}
+// Automatic T1/T2 strength picks use main lifts only; exercises from before roles existed count by their name.
+export const isMainLift = e => (e?.role ?? guessRole(e?.name, e?.metric, e?.explosive)) === 'main';
+
 export function isAvailable(ex, loc) {
   return !!loc && (ex.equipment || []).every(e => loc.equipment.includes(e));
 }
@@ -81,7 +91,17 @@ export function pickExercise(state, familyId, loc, tier, preferredId = null) {
   const fam = byId(state.families, familyId);
   let members = familyMembers(state, familyId).filter(e => !e.archived && isAvailable(e, loc));
   // Heavy and moderate work needs a load to measure, unless it's explosive (jumps count by reps).
-  if (tier === 'T1' || tier === 'T2') members = members.filter(e => e.metric === 'load_reps' || e.explosive);
+  if (tier === 'T1' || tier === 'T2') {
+    members = members.filter(e => e.metric === 'load_reps' || e.explosive);
+    // A family-wide heavy or moderate goal uses a main lift or power exercise when the family has one, not its accessories.
+    const real = members.filter(e => (e.role ?? guessRole(e.name, e.metric, e.explosive)) !== 'accessory' || e.id === preferredId);
+    if (real.length) members = real;
+  }
+  // A family-wide pump (T3) goal uses an unweighted move when there is one: pull-ups, not weighted pull-ups 3×15.
+  if (tier === 'T3' && !preferredId) {
+    const light = members.filter(e => !(e.equipment || []).includes('dip-belt'));
+    if (light.length) members = light;
+  }
   // Heavy work means a lift you've actually loaded: once any lift in the family has a max, T1 only uses those.
   // So a heavy squat goal waits for the barbell instead of turning into goblet squats at the office.
   if (tier === 'T1' && familyMembers(state, familyId).some(e => !e.archived && estimatedMax(state, e.id) != null)) {
@@ -474,6 +494,7 @@ const PATTERNS = [
   ['push', /\bdips?\b|press|push[- ]?ups?|bench|incline|tricep|telle|extension|skull|push ?down|raise|\bfly\b|chest|shoulder/i],
 ];
 export function movementPattern(state, e) {
+  if (e && Object.hasOwn(e, 'pattern')) return e.pattern; // set where the name rules get it wrong
   const text = `${e?.name ?? ''} ${byId(state.families, e?.familyId)?.name ?? ''}`;
   return PATTERNS.find(([, re]) => re.test(text))?.[0] ?? null;
 }
@@ -714,7 +735,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
     },
     // Explosive exercises for a region (whole-body lifts count for either). `sameFamily` allows a second clean variation.
     explosives(region, { load = null, sameFamily = null } = {}) {
-      return state.exercises.filter(e => e.explosive && !e.archived && isAvailable(e, loc)
+      return state.exercises.filter(e => e.explosive && !e.archived && isAvailable(e, loc) && (e.role ?? 'power') === 'power'
         && (!famUsed.has(e.familyId) || e.familyId === sameFamily) && !k.blocks.some(b => b.exerciseId === e.id)
         && (region === 'any' || e.region === region || e.region === 'full')
         && (load == null || (e.metric === 'load_reps') === load))
@@ -725,7 +746,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
     // (T1 insists when any has one; `needMax` always). T2: your T2 goals' lifts first, and not a T1 goal's own lift when
     // another fits. Then lifts from goal families, ones you do, with a max, the family's usual one.
     main(p, tier, needMax = false) {
-      let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && pattern(e) === p);
+      let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && isMainLift(e) && pattern(e) === p);
       if (tier === 'T1' && hasT1Goals) c = c.filter(e => t1Core.has(e.id));
       else if (needMax || (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null))) c = c.filter(e => estimatedMax(state, e.id) != null);
       const t1Goal = e => tier === 'T2' && t1Lifts.has(e.id);
@@ -745,12 +766,14 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
       }
       return false;
     },
-    // No barbell setups or weighted pull-ups and dips (dip belt: those are main lifts); the ones you do but haven't done for longest first.
+    // No rack setups or weighted pull-ups and dips (dip belt: those are main lifts); the ones you do but haven't done for longest first.
     // `level`: 0 a family not used yet, 1 a different movement in a family this workout added, 2 anything not in the workout.
     accessory(p, level = 0) {
       const fits = [usable, reusable, spare][level];
-      const base = state.exercises.filter(x => fits(x) && !x.explosive && !mainLifts.has(x.id)
-        && !(x.equipment || []).some(q => q === 'barbell' || q === 'rack' || q === 'dip-belt'));
+      // Accessories may need a bar or plates; main lifts come in only without a barbell setup; drills never.
+      const role = x => x.role ?? guessRole(x.name, x.metric, x.explosive);
+      const base = state.exercises.filter(x => fits(x) && !x.explosive && !mainLifts.has(x.id) && ['accessory', 'main'].includes(role(x))
+        && !(x.equipment || []).some(q => q === 'rack' || q === 'dip-belt' || (q === 'barbell' && role(x) !== 'accessory')));
       const of = q => base.filter(x => pattern(x) === q);
       const c = p === 'back' ? (of('hinge').some(x => LOWER_BACK.test(x.name)) ? of('hinge').filter(x => LOWER_BACK.test(x.name)) : of('hinge')) : of(p);
       return c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0] ?? null;

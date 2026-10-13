@@ -1,8 +1,8 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
 import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise } from './seed.js';
-import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo } from './library.js';
+import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
-import { guessRegion, guessExplosive } from './logic.js';
+import { guessRegion, guessExplosive, guessRole } from './logic.js';
 
 // Test pages set their own key so they never touch real data.
 const KEY = globalThis.AFP_STORAGE_KEY ?? 'afp.v1';
@@ -222,6 +222,16 @@ export function migrate(s) {
       if (!s.schemes.some(x => x.id === sc.id || (x.sets === sc.sets && x.reps === sc.reps && x.tiers.includes('T2')))) s.schemes.push(sc);
     }
     s.version = 13;
+  }
+  if (s.version < 14) {
+    // v14: a role on every exercise (main lift, power, accessory, technique drill), so automatic T1/T2 picks never use
+    // curls, raises or grip work. Library exercises get their reviewed role, your own a guess from the name; a role you
+    // already set is kept. Plus the movement patterns the name rules got wrong.
+    for (const e of s.exercises) {
+      e.role ??= EXERCISE_ROLES[e.id] ?? guessRole(e.name, e.metric, e.explosive);
+      if (e.id in PATTERN_OVERRIDES && !Object.hasOwn(e, 'pattern')) e.pattern = PATTERN_OVERRIDES[e.id];
+    }
+    s.version = 14;
   }
   return s;
 }
