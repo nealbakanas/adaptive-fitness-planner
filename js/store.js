@@ -242,6 +242,11 @@ export function migrate(s) {
     }
     s.version = 15;
   }
+  if (s.version < 16) {
+    // v16: onboarding for new installs. Anything saved before it is already set up.
+    s.settings.onboarded = true;
+    s.version = 16;
+  }
   return s;
 }
 

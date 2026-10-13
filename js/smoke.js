@@ -19,9 +19,16 @@ const KEY = globalThis.AFP_STORAGE_KEY;
 const wipe = () => Object.keys(localStorage).filter(k => k === KEY || k.startsWith(`${KEY}.`)).forEach(k => localStorage.removeItem(k));
 wipe();
 await import('./app.js');
-const { state } = await import('./store.js');
+const store = await import('./store.js');
+const { state } = store;
 const L = await import('./logic.js');
 await new Promise(r => setTimeout(r, 200));
+
+step('a new install starts with setup, which can be skipped', () => {
+  check('setup shown first', /Welcome/.test(text()) && !!q('[data-act=obNext]') && q('nav')?.hidden !== false, text().slice(0, 200));
+  click('[data-act=obSkip]');
+  check('skipping keeps the starter goals', state.settings.onboarded === true && state.slots.length > 5);
+});
 
 step('check-in renders', () => check('check-in renders', text().includes('Check in') && !!q('[data-act=suggest]')));
 
@@ -501,6 +508,43 @@ if (fixture) {
 
 check('no uncaught errors', errors.length === 0, errors.join(' | '));
 wipe();
+
+
+step('set up again: locations, week, lifts, maxes, review, save and undo', () => {
+  click('[data-act=nav][data-tab=more]');
+  click('[data-act=setupAgain]');
+  check('starts at about you', /About you/.test(text()));
+  click('[data-act=obSet][data-k=unit][data-v=lb]');
+  setVal(q('[data-ob=bodyweight]'), '210');
+  click('[data-act=obNext]');
+  check('locations', /Where you train/.test(text()) && qa('[data-act=obEq]').length > 5);
+  click('[data-act=obLocAdd]');
+  setVal(q('[data-ob="loc.2.name"]'), 'Hotel');
+  click('[data-act=obEq][data-i="2"][data-eq=dumbbells]');
+  click('[data-act=obNext]');
+  setVal(q('[data-ob="week.workouts"]'), '5'); setVal(q('[data-ob="week.minutes"]'), '60');
+  click('[data-act=obNext]');
+  check('heavy lifts prefilled from current goals', /Heavy lifts/.test(text()) && qa('[data-act=obToggle][data-k=t1].on').length === 2);
+  click('[data-act=obToggle][data-k=t1][data-id=gs-bench-press]');
+  check('a third heavy lift', qa('[data-act=obToggle][data-k=t1].on').length === 3);
+  click('[data-act=obNext]');
+  check('support step offers power work', /Support work/.test(text()) && !!q('[data-act=obToggle][data-k=power]'));
+  click('[data-act=obNext]');
+  click('[data-act=obToggle][data-k=pump][data-id=fam-calves]');
+  click('[data-act=obNext]');
+  check('maxes for the picked lifts', !!q('[data-ob="max.ex-back-squat"]'));
+  setVal(q('[data-ob="max.ex-back-squat"]'), '350');
+  click('[data-act=obNext]');
+  check('review shows goals and the budget', /Your weekly goals/.test(text()) && /minutes a week|more than the/.test(text()) && qa('.slotrow').length > 5, text().slice(0, 400));
+  const before = JSON.stringify(state.slots);
+  click('[data-act=obFinish]');
+  check('saved: goals, week, location, max', state.slots.some(sl => sl.exerciseId === 'gs-bench-press' && sl.tier === 'T1') && state.settings.week.workouts === 5
+    && state.locations.some(l => l.name === 'Hotel' && l.equipment.includes('dumbbells')) && state.exercises.find(e => e.id === 'ex-back-squat').testedMax?.load === 350 && state.settings.bodyweight === 210);
+  check('history untouched and back on Today', state.sets.length > 0 && /Undo/.test(text()));
+  click('[data-act=setupUndo]');
+  const now = store.state; // undo swaps in the saved copy as a new object
+  check('undo restores the old goals', JSON.stringify(now.slots) === before && !now.locations.some(l => l.name === 'Hotel') && !/Undo/.test(text()));
+});
 
 const fails = out.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${out.filter(r => r[0] === 'PASS').length} passed, ${fails} failed`;

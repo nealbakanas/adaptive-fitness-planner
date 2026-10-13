@@ -67,6 +67,10 @@ After the first visit it works offline: `sw.js` fetches from the network first (
 - **Archived exercises** stay in history but are left out of suggestions, swaps and pickers (Library → Show archived).
 - Week starts Monday by default. Sleep is 1–5, stored as a number.
 
+## Onboarding
+
+A new install opens with a short setup (`js/onboard.js`); anyone can rerun it from Settings → **Set up again**. Steps: units and bodyweight; where you train (locations and their gear); your week (workouts × minutes); 2–3 heavy lifts (T1) from the main lifts your gear allows, grouped by squat/hinge/push/pull, each with times a week; support lifts (T2) and power work (jumps, cleans, snatches, jerks); accessory areas (T3); tested 1RMs for the lifts you picked; and a review with the week budget. Heavy and support picks become goals naming the lift, power and accessory picks family-wide goals, and an Olympic lift family also gets a technique goal. It starts from your current setup (the starter goals for a new install). Saving replaces goals, locations and the week, sets the maxes, and keeps a copy: **Undo** in the banner puts everything back. Logged history is never touched. *Skip* keeps the starter setup; *Import from FitNotes first* goes to the import. Data saved before onboarding existed counts as already set up.
+
 ## Data safety
 
 - If saved data can't be opened (for example an upgrade step fails), the app keeps it untouched, pauses saving, and shows a message with **Copy the saved data** and **Start fresh**. It never saves the starter data over it.

@@ -193,7 +193,7 @@ export function seed() {
   ];
 
   return {
-    version: 15,
+    version: 16,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
@@ -202,6 +202,7 @@ export function seed() {
       kettlebells: [30, 40, 45, 53], // loads for kettlebell exercises snap to these
       recovery: { t1AfterT1: true },
       week: { workouts: null, minutes: null }, // your usual week for the goal budget; null = from your recent check-ins
+      onboarded: false, // a new install starts with the setup (js/onboard.js)
       lastExportAt: null,
       timer: { autoStart: true, sound: true, vibrate: true, warn10: true, keepAwake: true, notify: false, prep: 5 },
     },

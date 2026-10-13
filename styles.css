@@ -440,3 +440,11 @@ label.btn.fnpick { width: 100%; min-height: 56px; font-size: 18px; margin-top: 1
 .progchart tr.cur { background: rgba(79, 179, 255, 0.14); }
 .progchart tr.full td:nth-last-child(2) { color: var(--good); }
 .progchart input.vert { width: 38px; min-height: 30px; padding: 2px 4px; font-size: 13px; text-align: center; }
+
+/* Onboarding: compact times-a-week steppers in a row */
+.stepper.small { gap: 8px; }
+.stepper.small button { width: 40px; padding: 6px 0; font-size: 18px; }
+.stepper.small span { font-size: 18px; }
+
+/* Onboarding hides the tab bar */
+nav[hidden] { display: none !important; }
