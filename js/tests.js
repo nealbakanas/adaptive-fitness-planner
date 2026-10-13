@@ -807,6 +807,56 @@ test('a heavy day adds a T1 lift from a pattern with no heavy work lately; jumps
   const tired = L.buildSuggestion(s, ci({ minutes: 75, fatigue: 4, intent: 'heavy' }), fri);
   ok(!tired.blocks.some(b => b.tier === 'T1'), 'tired: no heavy lift added');
 });
+test('review fixes: + Time sees the session, heavy fill needs a max, one strength lift per pattern, T3s grouped, never over time', () => {
+  const s = seed();
+  s.settings.bodyweight = 200;
+  const wk = L.weekBounds(s);
+  const log = (id, tier, scheme, load, day, h) => {
+    const sc = s.schemes.find(x => x.id === scheme);
+    for (let i = 0; i < sc.sets; i++) s.sets.push({ id: L.uid(), sessionId: `r${id}${day}`, blockId: `r${id}${day}`, exerciseId: id, tier, schemeId: scheme,
+      load, reps: sc.reps, done: true, loggedAt: wk.start + day * DAY + h * 3600e3 + i * 120e3, bw: 200 });
+  };
+  log('ex-back-ext', 'T3', 's-t3-4x12', 25, -6, 18);
+  log('ex-back-squat', 'T1', 's-t1-5x3', 315, 0, 18);
+  log('ex-wpullup', 'T1', 's-t1-5x3', 45, 1, 18);
+  const thu = wk.start + 3 * DAY + 17.5 * 3600e3;
+  const ex = id => s.exercises.find(e => e.id === id);
+  const strength = b => (b.tier === 'T1' || b.tier === 'T2') && !ex(b.exerciseId).explosive;
+  for (const c of [{ locationId: 'loc-office', minutes: 45, lean: null }, { locationId: 'loc-basement', minutes: 60, lean: 'lower' }]) {
+    const r = L.buildSuggestion(s, ci({ ...c, fatigue: 1, intent: 'heavy' }), thu);
+    const names = r.blocks.map(b => `${b.tier} ${ex(b.exerciseId).name}`).join(', ');
+    ok(r.blocks.filter(b => b.tier === 'T1').every(b => L.estimatedMax(s, b.exerciseId) != null), `heavy fill only uses lifts with a max: ${names}`);
+    const pats = r.blocks.filter(strength).map(b => L.movementPattern(s, ex(b.exerciseId)));
+    eq(new Set(pats).size, pats.length, `one strength lift per pattern: ${names}`);
+    ok(r.minutesUsed <= c.minutes, `${r.minutesUsed} of ${c.minutes} min`);
+    // + Time three times: the session's heavy lift is seen, so no second T1.
+    const fams = r.blocks.map(b => ex(b.exerciseId).familyId);
+    for (let i = 0; i < 3; i++) {
+      const more = L.buildSuggestion(s, ci({ ...c, minutes: 30, fatigue: 1, intent: 'heavy' }), thu, { excludeFamilies: fams, sessionBlocks: r.blocks });
+      r.blocks.push(...more.blocks); fams.push(...more.blocks.map(b => ex(b.exerciseId).familyId));
+    }
+    ok(r.blocks.filter(b => b.tier === 'T1' && strength(b)).length <= 1, `+ Time adds no second heavy lift: ${r.blocks.filter(b => b.tier === 'T1').map(b => ex(b.exerciseId).name)}`);
+  }
+  // Ten sets of 2-3 stay out of a fresh day's strength work, even after 3×10 was just used.
+  log('ex-front-squat', 'T2', 's-t2-3x10', 185, 2, 9);
+  ok(L.pickScheme(s, 'T2', ex('ex-front-squat'), 60, ci({ fatigue: 1 })).reps >= 4, 'fresh T2 after 3×10 is not 10×3');
+  const blocks = [{ id: 'x', tier: 'T2', exerciseId: 'ex-front-squat', schemeId: 's-t2-3x10' }];
+  L.stretchToFit(s, blocks, 12, ci({ fatigue: 1 }));
+  eq(blocks[0].schemeId, 's-t2-3x10', 'a fresh stretch never turns 3×10 into 10×2');
+  // Office, short and tired: every T3 in a superset, within the time.
+  const office = L.buildSuggestion(seed(), ci({ locationId: 'loc-office', minutes: 20, fatigue: 5, lean: 'lower' }));
+  ok(office.blocks.filter(b => b.tier === 'T3').every(b => b.pairOf || office.blocks.some(x => x.pairOf === b.id)) && office.minutesUsed <= 20,
+    office.blocks.map(b => `${b.tier} ${b.exerciseId}${b.pairOf ? '~' : ''}`).join(', '));
+  // Focused workouts never run over, whatever the length.
+  for (const minutes of [45, 60, 90]) for (const region of ['upper', 'lower']) for (const intent of ['auto', 'sweat']) {
+    const f = L.buildFocus(s, ci({ minutes, intent, fatigue: 3 }), { region, explosive: true }, thu);
+    ok(L.blocksMinutes(s, f.blocks) <= minutes + 1e-9, `${region} focus ${intent} ${minutes} min: ${L.blocksMinutes(s, f.blocks)}`);
+  }
+  // v13 keeps a T2 10×2 you already had instead of adding a duplicate.
+  const old = seed(); old.version = 12; old.schemes = old.schemes.filter(x => !['s-t2-10x2', 's-t2-10x3'].includes(x.id));
+  old.schemes.find(x => x.id === 's-t1-10x2').tiers.push('T2');
+  eq(migrate(old).schemes.filter(x => x.tiers.includes('T2') && x.sets === 10 && x.reps === 2).length, 1, 'no duplicate 10×2');
+});
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
   const wk = L.weekBounds(s);

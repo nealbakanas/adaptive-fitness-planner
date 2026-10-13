@@ -355,12 +355,16 @@ step('hold timer logs a timed set and starts the rest', () => {
   if (!q('[data-act=addEx]')) { click('[data-k=locationId][data-v=loc-basement]'); click('[data-act=suggest]'); }
   click('[data-act=addEx]');
   click('[data-act=addExPick][data-id=ex-sorensen]');
-  const block = qa('section.block').find(b => /Sorensen hold/.test(b.innerText));
+  // Do it on its own: an added T3 can join a superset, and then the rest waits for the end of the round.
+  const ses = state.sessions.at(-1), sor = ses.blocks.find(b => b.exerciseId === 'ex-sorensen');
+  for (const b of ses.blocks.filter(x => x === sor ? x.pairOf : x.pairOf === sor.id)) click(`[data-act=pairUnlink][data-b="${b.id}"]`);
+  check('the hold is on its own', !sor.pairOf && !ses.blocks.some(x => x.pairOf === sor.id));
+  const block = qa('section.block').find(b => /Sorensen hold/.test(b.querySelector('.bhead')?.innerText ?? ''));
   check('timed set has a start button', !!block?.querySelector('[data-act=workStart]'));
   const setId = block.querySelector('[data-act=workStart]').dataset.id;
   click(block.querySelector('[data-act=workStart]'));
   check('timer counts you in', /Get ready · Sorensen hold/.test(q('#timer').innerText), q('#timer').innerText);
-  check('set row shows it is running', !!qa('section.block').find(b => /Sorensen hold/.test(b.innerText))?.querySelector('.go.on'));
+  check('set row shows it is running', !!qa('section.block').find(b => /Sorensen hold/.test(b.querySelector('.bhead')?.innerText ?? ''))?.querySelector('.go.on'));
   const st = state.sets.find(x => x.id === setId);
   check('starts from 30s with no history', st.time === 30, String(st.time));
   state.timer.startedAt -= 7000; // 5s get-ready + 2s into the hold
@@ -371,7 +375,7 @@ step('hold timer logs a timed set and starts the rest', () => {
   check('rest starts after the hold', state.timer && state.timer.kind !== 'work' && /Rest/.test(q('#timer').innerText));
   const next = state.sets.find(x => x.blockId === st.blockId && !x.done);
   check('the next set starts from that time', next?.time === 2, String(next?.time));
-  click(qa('section.block').find(b => /Sorensen hold/.test(b.innerText)).querySelector('[data-act=workStart]'));
+  click(qa('section.block').find(b => /Sorensen hold/.test(b.querySelector('.bhead')?.innerText ?? '')).querySelector('[data-act=workStart]'));
   state.timer.startedAt -= 60000;
   state.timer.endsAt -= 60000;
   document.dispatchEvent(new Event('visibilitychange'));

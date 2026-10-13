@@ -216,7 +216,11 @@ export function migrate(s) {
   }
   if (s.version < 13) {
     // v13: T2 in sets of 2-3 on a minute's rest (10×2, 10×3), so power work at T2 isn't stuck at sets of 5.
-    for (const sc of base.schemes) if (['s-t2-10x2', 's-t2-10x3'].includes(sc.id) && !s.schemes.some(x => x.id === sc.id)) s.schemes.push(sc);
+    // A T2 scheme you already have with the same sets and reps is kept instead (no duplicate rows).
+    for (const sc of base.schemes) {
+      if (!['s-t2-10x2', 's-t2-10x3'].includes(sc.id)) continue;
+      if (!s.schemes.some(x => x.id === sc.id || (x.sets === sc.sets && x.reps === sc.reps && x.tiers.includes('T2')))) s.schemes.push(sc);
+    }
     s.version = 13;
   }
   return s;

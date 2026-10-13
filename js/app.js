@@ -1260,7 +1260,7 @@ function settingsLocations() {
 function settingsTiers() {
   const desc = {
     T1: 'Heavy sets of 1–3 on main lifts (GZCL: 85–100%, 10–15 reps)',
-    T2: 'Sets of 5–8 on supporting lifts (GZCL: 65–85%, 20–30 reps)',
+    T2: 'Sets of 5–8 on supporting lifts, or 10 × 2–3 on a minute\'s rest for power work and tired days (GZCL: 65–85%, 20–30 reps)',
     T3: 'Accessory work, 10+ reps a set (GZCL: 30+ reps total)',
     TECH: 'Technique: quality explosive reps when tired or after a heavy day',
   };
@@ -1502,7 +1502,7 @@ function renderSheet() {
 
 const TIER_DESC = {
   T1: 'Heavy: sets of 1–3 at 85%+ of your max, 10–15 reps total.',
-  T2: 'Moderate: sets of 5–8 at 65–85%, 20–30 reps total.',
+  T2: 'Moderate: sets of 5–8 at 65–85%, 20–30 reps total. Power work and tired days: 10 × 2–3 on a minute\'s rest.',
   T3: 'Accessory: 10+ reps a set, 30+ total. Any load counts.',
   TECH: 'Technique: crisp, low-volume explosive work when tired or after heavy days. Has its own goal.',
 };
@@ -2147,7 +2147,7 @@ const actions = {
     const excludeFamilies = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
     const res = s.source === 'focus'
       ? L.buildFocus(state, { ...s, minutes: extra }, { region: s.focusRegion, accessoriesOnly: true }, Date.now(), { excludeFamilies })
-      : L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies });
+      : L.buildSuggestion(state, { ...s, minutes: extra }, Date.now(), { excludeFamilies, sessionBlocks: s.blocks });
     s.minutes += extra;
     if (res.notes?.length) s.focusNotes = [...(s.focusNotes || []), ...res.notes];
     s.blocks.push(...res.blocks);
