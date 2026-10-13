@@ -756,6 +756,32 @@ test('focused workouts: upper and lower from the whole library, explosive first 
   const more = L.buildFocus(s, ci({ minutes: 20 }), { region: 'lower', accessoriesOnly: true }, Date.now(), { excludeFamilies: ['fam-hams'] });
   ok(more.blocks.length && more.blocks.every(b => b.tier === 'T3' && s.exercises.find(e => e.id === b.exerciseId).familyId !== 'fam-hams'), names(more).join(', '));
 });
+test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
+  const s = seed();
+  const wk = L.weekBounds(s);
+  const fri = wk.start + 4 * DAY + 10 * 3600e3;
+  // Monday to Thursday: every goal met with its usual exercise.
+  s.slots.forEach((sl, d) => {
+    const ex = L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId);
+    for (let q = 0; q < sl.quota; q++) for (let i = 0; i < 6; i++) {
+      s.sets.push({ id: L.uid(), sessionId: `f${d}${q}`, blockId: `f${d}${q}`, exerciseId: ex.id, tier: sl.tier, load: 100, reps: sl.tier === 'T3' ? 12 : 5,
+        done: true, loggedAt: wk.start + ((d + q) % 4) * DAY + 9 * 3600e3 + i, bw: 200, countsManual: true, countsToward: sl.id });
+    }
+  });
+  ok([...L.creditWeek(s, fri).slots.values()].every(r => r.filled >= r.slot.quota), 'all goals met');
+  const r = L.buildSuggestion(s, ci({ minutes: 60, fatigue: 1 }), fri);
+  const ex = id => s.exercises.find(e => e.id === id);
+  const t2 = r.blocks.filter(b => b.tier === 'T2').map(b => ex(b.exerciseId));
+  const names = r.blocks.map(b => `${b.tier} ${ex(b.exerciseId).name}`).join(', ');
+  eq(t2.length, 2, names);
+  ok(new Set(t2.map(e => L.movementPattern(s, e))).size === 2, `different patterns: ${names}`);
+  const t1Lifts = s.slots.filter(sl => sl.tier === 'T1').map(sl => sl.exerciseId ?? s.families.find(f => f.id === sl.familyId).defaultExerciseId);
+  ok(t2.every(e => !t1Lifts.includes(e.id) && e.familyId !== 'fam-arms'), `support lifts, not a T1 goal's lift or curls: ${names}`);
+  const t3 = r.blocks.filter(b => b.tier === 'T3');
+  ok(t3.length >= 4 && t3.every(b => b.pairOf || r.blocks.some(x => x.pairOf === b.id)), `T3 supersets: ${names}`);
+  ok(t3.every(b => !ex(b.exerciseId).equipment.includes('dip-belt')), `no weighted pull-ups or dips as pump work: ${names}`);
+  ok(r.minutesUsed >= 50 && r.minutesUsed <= 60, `uses the hour: ${r.minutesUsed}`);
+});
 test('goals nearly done: suggestion is thin but a focused workout still fills the time', () => {
   const s = seed();
   // Fill every goal except incline press this week.

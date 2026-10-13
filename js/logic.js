@@ -531,8 +531,12 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
   const loc = byId(state.locations, ci.locationId);
   // A T1/T2 goal's own lift is a main lift, not something to squeeze into a rest; its easier variations are fair game.
   const skip = new Set(excludeFamilies);
-  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2')
-    .map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
+  const goalLift = sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId;
+  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(goalLift));
+  // Heavy-goal lifts: support work picks a different lift for the pattern when there is one, so it complements them.
+  const t1Lifts = new Set(state.slots.filter(sl => sl.tier === 'T1').map(goalLift));
+  // Families with a heavy or moderate goal hold the main lifts (squats before leg extensions, chin-ups before curls).
+  const goalFamilies = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId));
   const since = Date.now() - 84 * DAY;
   const lately = state.sets.filter(x => x.done && !x.warmup && x.loggedAt >= since);
   const recent = new Set(lately.map(x => x.exerciseId));
@@ -636,8 +640,12 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
   const isDefault = e => byId(state.families, e.familyId)?.defaultExerciseId === e.id;
   const usable = e => !e.archived && !famUsed.has(e.familyId) && isAvailable(e, loc);
   // A T1/T2 goal's own lift is a main lift, not accessory filler (as in suggestPair).
-  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2')
-    .map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
+  const goalLift = sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId;
+  const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(goalLift));
+  // Heavy-goal lifts: support work picks a different lift for the pattern when there is one, so it complements them.
+  const t1Lifts = new Set(state.slots.filter(sl => sl.tier === 'T1').map(goalLift));
+  // Families with a heavy or moderate goal hold the main lifts (squats before leg extensions, chin-ups before curls).
+  const goalFamilies = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId));
   // Once every family is in use: another move from a family this workout already uses, if it's a different
   // movement (triceps after curls). Families from the goals or the session so far stay off limits.
   const famPatterns = new Map();
@@ -671,11 +679,13 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
         .sort((a, b) => (b.region === region) - (a.region === region) || lately(b) - lately(a) || isDefault(b) - isDefault(a) || a.rank - b.rank);
     },
     // A loaded lift for a movement pattern: one you do, with a max (T1 insists when any has one), the family's usual one.
+    // At T2, not a T1 goal's own lift when another fits.
     main(p, tier) {
       let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && pattern(e) === p);
       if (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null)) c = c.filter(e => estimatedMax(state, e.id) != null);
-      return c.sort((a, b) => lately(b) - lately(a) || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null)
-        || isDefault(b) - isDefault(a) || a.rank - b.rank)[0] ?? null;
+      const t1Goal = e => tier === 'T2' && t1Lifts.has(e.id);
+      return c.sort((a, b) => t1Goal(a) - t1Goal(b) || goalFamilies.has(b.familyId) - goalFamilies.has(a.familyId) || lately(b) - lately(a)
+        || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null) || isDefault(b) - isDefault(a) || a.rank - b.rank)[0] ?? null;
     },
     // A lift from the patterns given: one not in the workout yet, trained heavy least recently.
     strength(patterns, why, tier = 'T2') {
@@ -686,10 +696,10 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = []) {
       }
       return false;
     },
-    // No barbell setups; the ones you do but haven't done for longest first.
+    // No barbell setups or weighted pull-ups and dips (dip belt: those are main lifts); the ones you do but haven't done for longest first.
     accessory(p, relaxed = false) {
       const base = state.exercises.filter(x => (relaxed ? reusable(x) : usable(x)) && !x.explosive && !mainLifts.has(x.id)
-        && !(x.equipment || []).some(q => q === 'barbell' || q === 'rack'));
+        && !(x.equipment || []).some(q => q === 'barbell' || q === 'rack' || q === 'dip-belt'));
       const of = q => base.filter(x => pattern(x) === q);
       const c = p === 'back' ? (of('hinge').some(x => LOWER_BACK.test(x.name)) ? of('hinge').filter(x => LOWER_BACK.test(x.name)) : of('hinge')) : of(p);
       return c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0] ?? null;
@@ -790,7 +800,9 @@ function fillTime(state, ci, t, blocks, budget, famUsed) {
   const k = libraryKit(state, ci, t, budget, famUsed, blocks.map(b => b.exerciseId));
   const intro = `Your open goals fill ${ci.minutes - budget} of your ${ci.minutes} minutes, so the rest is from your library${lean ? `, leaning ${lean}-body` : ''}:`;
   const mains = lean ? FOCUS_MAIN[lean] : [...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower];
-  if (ci.intent !== 'easy' && budget >= 15 && blocks.filter(b => b.tier === 'T2').length < 2) k.strength(mains, 'to fill the time');
+  // Up to two T2 lifts in the session (goal ones count), each from a different pattern, least recently trained heavy first.
+  while (ci.intent !== 'easy' && k.budget >= 15 && blocks.filter(b => b.tier === 'T2').length + k.count('T2') < 2
+    && k.strength(mains, 'to fill the time'));
   k.accessories(lean ? FOCUS_T3[lean] : FOCUS_T3.either, MAX_BLOCKS - blocks.length);
   // A lean is a bias, not a limit: once that half of the library runs out, the rest of the time still gets used.
   if (lean) k.accessories(FOCUS_T3.either, MAX_BLOCKS - blocks.length);
