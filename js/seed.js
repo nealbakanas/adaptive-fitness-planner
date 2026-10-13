@@ -169,6 +169,9 @@ export function seed() {
     // T3 for hard bodyweight moves capped at a few reps a set (Nordics, glute-ham raises).
     sc('s-t3-4x8', 4, 8, 60, 7, ['T3']),
     sc('s-t3-6x5', 6, 5, 60, 8, ['T3']),
+    // T2 in sets of 2-3 on a minute's rest: power work (cleans, snatches) and tired days. Last, so ties keep the older picks.
+    sc('s-t2-10x2', 10, 2, 60, 12, ['T2']),
+    sc('s-t2-10x3', 10, 3, 60, 13, ['T2']),
   ];
 
   const slots = [
@@ -189,7 +192,7 @@ export function seed() {
   ];
 
   return {
-    version: 12,
+    version: 13,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
