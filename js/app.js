@@ -1227,7 +1227,8 @@ function settingsYou() {
       ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`, 'Weekly goals reset on this day')}
     </div>
     <div class="label">Suggestions</div>
-    <div class="menu">${frow('Go easier on T1 the day after T1', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1))}</div>`;
+    <div class="menu">${frow('Go easier on T1 the day after T1', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1))}
+      ${frow('Jump every day', switchIn('settings.dailyJumps', st.dailyJumps !== false), 'Intense T2 and high-volume T3 jumps on alternate sessions')}</div>`;
 }
 
 function settingsTimer() {
