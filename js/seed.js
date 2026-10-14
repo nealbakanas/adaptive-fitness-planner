@@ -11,6 +11,9 @@ export const EQUIPMENT = [
 // Everything the library knows about, including gear only the Garage Strength exercises use (not at any location to start).
 export const ALL_EQUIPMENT = [...EQUIPMENT, ...GS_EQUIPMENT];
 
+// The Basement is a barbell setup: no kettlebell, dip belt, pull-up bar, rings or dip station there.
+export const NOT_IN_BASEMENT = ['kettlebell', 'dip-belt', 'pullup-bar', 'rings', 'dip-station'];
+
 // Movements that need the Hyper Pro itself (a back extension, GHR or leg curl can't be done without it).
 export const HYPER_PRO_ONLY = ['ex-back-ext', 'ex-back-ext-90', 'ex-reverse-hyper', 'ex-ghr', 'ex-ghd-situp', 'ex-sorensen',
   'ex-belt-squat', 'ex-leg-ext', 'ex-seated-legcurl', 'ex-lying-legcurl'];
@@ -193,7 +196,7 @@ export function seed() {
   ];
 
   return {
-    version: 16,
+    version: 17,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
@@ -208,7 +211,7 @@ export function seed() {
     },
     locations: [
       { id: 'loc-office', name: 'Office', equipment: ['pullup-bar', 'rings', 'dip-belt', 'kettlebell', 'ab-wheel'] },
-      { id: 'loc-basement', name: 'Basement', equipment: [...EQUIPMENT] }, // not the Garage Strength extras (dowel, cable, ...)
+      { id: 'loc-basement', name: 'Basement', equipment: EQUIPMENT.filter(eq => !NOT_IN_BASEMENT.includes(eq)) }, // barbell setup; bodyweight gear is at the Office
     ],
     tiers: {
       // GZCL: T1 85-100% in sets of 1-3 for 10-15 reps, T2 65-85% in sets of 5-8 for 20-30 reps, T3 10+ reps a set for 30+ total.

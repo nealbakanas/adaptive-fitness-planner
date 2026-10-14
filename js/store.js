@@ -1,5 +1,5 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
-import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise } from './seed.js';
+import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT } from './seed.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
 import { guessRegion, guessExplosive, guessRole } from './logic.js';
@@ -246,6 +246,13 @@ export function migrate(s) {
     // v16: onboarding for new installs. Anything saved before it is already set up.
     s.settings.onboarded = true;
     s.version = 16;
+  }
+  if (s.version < 17) {
+    // v17: the Basement has no kettlebell, dip belt, pull-up bar, rings or dip station. Only a Basement that still has
+    // the full starter gear list is changed; one you've edited is left alone.
+    const basement = s.locations.find(l => l.id === 'loc-basement');
+    if (basement && EQUIPMENT.every(eq => basement.equipment.includes(eq))) basement.equipment = basement.equipment.filter(eq => !NOT_IN_BASEMENT.includes(eq));
+    s.version = 17;
   }
   return s;
 }

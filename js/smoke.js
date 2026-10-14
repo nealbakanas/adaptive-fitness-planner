@@ -28,6 +28,10 @@ step('a new install starts with setup, which can be skipped', () => {
   check('setup shown first', /Welcome/.test(text()) && !!q('[data-act=obNext]') && q('nav')?.hidden !== false, text().slice(0, 200));
   click('[data-act=obSkip]');
   check('skipping keeps the starter goals', state.settings.onboarded === true && state.slots.length > 5);
+  const basement = state.locations.find(l => l.id === 'loc-basement');
+  check('the starter Basement has no pull-up bar, rings or dip station', !['pullup-bar', 'rings', 'dip-station', 'kettlebell', 'dip-belt'].some(eq => basement.equipment.includes(eq)));
+  // The flows below use every exercise, so this run's Basement gets the bodyweight gear too.
+  basement.equipment.push('kettlebell', 'dip-belt', 'pullup-bar', 'rings', 'dip-station');
 });
 
 step('check-in renders', () => check('check-in renders', text().includes('Check in') && !!q('[data-act=suggest]')));
