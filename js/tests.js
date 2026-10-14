@@ -1065,9 +1065,14 @@ test('goals nearly done: suggestion is thin but a focused workout still fills th
   ok(extra.filter(b => b.tier === 'T2').every(b => L.bodyRegion(s, s.exercises.find(e => e.id === b.exerciseId)) === 'lower'), `T2: ${extra.map(b => name(b.exerciseId))}`);
   const firstT3s = low.notes.filter(n => /^T3/.test(n)).slice(0, 3).join(' | ');
   ok(!/pull|push|dip|curl|press/i.test(firstT3s), `lower accessories first: ${firstT3s}`);
-  // Easy day: no extra T2 lift, just accessories.
-  const easy = L.buildSuggestion(s, ci({ minutes: 60, intent: 'easy' }));
-  ok(!easy.blocks.some(b => b.tier === 'T2' && b.slotId !== 'sl-t2-incline'), 'no T2 fill on an easy day');
+  // Easy day: still 1-2 T2s (jumps count), in shorter, lighter schemes, and the time is filled.
+  const easy = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'lower' }));
+  const t2 = easy.blocks.filter(b => b.tier === 'T2');
+  ok(t2.length >= 1 && t2.length <= 2 && t2.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), `easy lower day: jumps and a T2: ${easy.blocks.map(b => b.tier + ' ' + name(b.exerciseId))}`);
+  ok(t2.every(b => { const sc = s.schemes.find(x => x.id === b.schemeId); return sc.minutes <= 10; }), 'lighter schemes');
+  ok(easy.minutesUsed >= 40, `fills the time: ${easy.minutesUsed}`);
+  const easyUp = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'upper' }));
+  ok(!easyUp.blocks.some(b => s.exercises.find(e => e.id === b.exerciseId).region === 'lower' && s.exercises.find(e => e.id === b.exerciseId).explosive), 'no jumps when leaning upper');
   ok(L.buildSuggestion(s, ci({ minutes: 60 }), Date.now(), { excludeFamilies: ['fam-incline'] }).minutesUsed >= 50, '+ Time fills from the library too');
 });
 test('lean: goals for the half you lean toward come first', () => {
