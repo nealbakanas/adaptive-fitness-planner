@@ -211,7 +211,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 16);
+  eq(m.version, 17);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -230,7 +230,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 16);
+  eq(m.version, 17);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -502,7 +502,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 16);
+  eq(m.version, 17);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -664,7 +664,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 16);
+  eq(m.version, 17);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -691,7 +691,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 16);
+  eq(m.version, 17);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -783,13 +783,25 @@ test('a tired day fills leftover minutes with sets, never more reps per set', ()
   L.stretchToFit(s, fresh, 30, ci({ fatigue: 1 }));
   ok(s.schemes.find(x => x.id === fresh[0].schemeId).minutes > six.minutes, 'fresh: any bigger scheme');
 });
+test('the starter Basement is a barbell setup; the upgrade fixes an untouched one and leaves an edited one', () => {
+  const s = seed();
+  const base = s.locations.find(l => l.id === 'loc-basement');
+  ok(['barbell', 'rack', 'bench', 'dumbbells', 'box', 'hyper-pro'].every(eq => base.equipment.includes(eq)), base.equipment.join());
+  ok(!['kettlebell', 'dip-belt', 'pullup-bar', 'rings', 'dip-station'].some(eq => base.equipment.includes(eq)), base.equipment.join());
+  const old = seed(); old.version = 16;
+  old.locations.find(l => l.id === 'loc-basement').equipment = ['barbell', 'rack', 'bench', 'dumbbells', 'kettlebell', 'dip-belt', 'pullup-bar', 'rings', 'dip-station', 'bands', 'ab-wheel', 'box', 'hyper-pro', 'leg-developer', 'cable'];
+  eq(migrate(old).locations.find(l => l.id === 'loc-basement').equipment, ['barbell', 'rack', 'bench', 'dumbbells', 'bands', 'ab-wheel', 'box', 'hyper-pro', 'leg-developer', 'cable']);
+  const edited = seed(); edited.version = 16;
+  edited.locations.find(l => l.id === 'loc-basement').equipment = ['barbell', 'rack', 'pullup-bar'];
+  eq(migrate(edited).locations.find(l => l.id === 'loc-basement').equipment, ['barbell', 'rack', 'pullup-bar'], 'yours is kept');
+});
 test('a heavy day adds one of your T1 lifts, trained heavy least recently and not right after heavy work there; jumps and cleans don\'t use up the two T2 lifts', () => {
   const s = seed();
   const wk = L.weekBounds(s);
   const fri = wk.start + 4 * DAY + 17 * 3600e3;
   // Monday to Thursday: every goal met; heavy squats Monday and heavy pull-ups Tuesday.
   s.slots.forEach((sl, d) => {
-    const ex = L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId);
+    const ex = (L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId) ?? L.pickExercise(s, sl.familyId, s.locations[0], sl.tier, sl.exerciseId)); // pull-ups and dips are at the Office
     const day = sl.tier === 'T1' ? (sl.familyId === 'fam-squat' ? 0 : 1) : 2 + (d % 2);
     for (let q = 0; q < sl.quota; q++) for (let i = 0; i < 6; i++) {
       s.sets.push({ id: L.uid(), sessionId: `h${d}${q}`, blockId: `h${d}${q}`, exerciseId: ex.id, tier: sl.tier, load: 100, reps: sl.tier === 'T3' ? 12 : 5,
@@ -807,7 +819,9 @@ test('a heavy day adds one of your T1 lifts, trained heavy least recently and no
   for (let i = 0; i < 5; i++) sore.sets.push({ id: L.uid(), sessionId: 'thu', blockId: 'thu', exerciseId: 'ex-front-squat', tier: 'T1', load: 225, reps: 3,
     done: true, loggedAt: fri - DAY + i, bw: 200 });
   const r2 = L.buildSuggestion(sore, ci({ minutes: 75, fatigue: 2, intent: 'heavy' }), fri);
-  eq(r2.blocks.filter(b => b.tier === 'T1').map(b => b.exerciseId), ['ex-wpullup'], 'after heavy squats yesterday');
+  eq(r2.blocks.filter(b => b.tier === 'T1').map(b => b.exerciseId), [], 'after heavy squats yesterday: no pull-up bar in the Basement, so no heavy lift');
+  const r3 = L.buildSuggestion(sore, ci({ locationId: 'loc-office', minutes: 75, fatigue: 2, intent: 'heavy' }), fri);
+  eq(r3.blocks.filter(b => b.tier === 'T1').map(b => b.exerciseId), ['ex-wpullup'], 'at the Office it is the pull-up');
   eq(r.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length, 2, `two T2 strength lifts: ${names}`);
   ok(r.minutesUsed >= 70, `uses the 75 minutes: ${r.minutesUsed}`);
   const tired = L.buildSuggestion(s, ci({ minutes: 75, fatigue: 4, intent: 'heavy' }), fri);
@@ -871,7 +885,7 @@ test('extra heavy work sticks to your T1 goals\' lifts; support work tries your 
   const wk = L.weekBounds(s);
   // Every goal met Monday to Wednesday.
   s.slots.forEach((sl, d) => {
-    const e = L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId);
+    const e = (L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId) ?? L.pickExercise(s, sl.familyId, s.locations[0], sl.tier, sl.exerciseId)); // pull-ups and dips are at the Office
     for (let q = 0; q < sl.quota; q++) for (let i = 0; i < 6; i++) s.sets.push({ id: L.uid(), sessionId: `c${d}${q}`, blockId: `c${d}${q}`, exerciseId: e.id, tier: sl.tier,
       load: 100, reps: sl.tier === 'T3' ? 12 : 5, done: true, loggedAt: wk.start + ((d + q) % 3) * DAY + 9 * 3600e3 + i, bw: 200, countsManual: true, countsToward: sl.id });
   });
@@ -1015,7 +1029,7 @@ test('Friday, every goal done: the hour still gets two complementary T2 lifts an
   const fri = wk.start + 4 * DAY + 10 * 3600e3;
   // Monday to Thursday: every goal met with its usual exercise.
   s.slots.forEach((sl, d) => {
-    const ex = L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId);
+    const ex = (L.pickExercise(s, sl.familyId, s.locations[1], sl.tier, sl.exerciseId) ?? L.pickExercise(s, sl.familyId, s.locations[0], sl.tier, sl.exerciseId)); // pull-ups and dips are at the Office
     for (let q = 0; q < sl.quota; q++) for (let i = 0; i < 6; i++) {
       s.sets.push({ id: L.uid(), sessionId: `f${d}${q}`, blockId: `f${d}${q}`, exerciseId: ex.id, tier: sl.tier, load: 100, reps: sl.tier === 'T3' ? 12 : 5,
         done: true, loggedAt: wk.start + ((d + q) % 4) * DAY + 9 * 3600e3 + i, bw: 200, countsManual: true, countsToward: sl.id });
@@ -1065,13 +1079,19 @@ test('goals nearly done: suggestion is thin but a focused workout still fills th
   ok(extra.filter(b => b.tier === 'T2').every(b => L.bodyRegion(s, s.exercises.find(e => e.id === b.exerciseId)) === 'lower'), `T2: ${extra.map(b => name(b.exerciseId))}`);
   const firstT3s = low.notes.filter(n => /^T3/.test(n)).slice(0, 3).join(' | ');
   ok(!/pull|push|dip|curl|press/i.test(firstT3s), `lower accessories first: ${firstT3s}`);
-  // Easy day: no extra T2 lift, just accessories.
-  const easy = L.buildSuggestion(s, ci({ minutes: 60, intent: 'easy' }));
-  ok(!easy.blocks.some(b => b.tier === 'T2' && b.slotId !== 'sl-t2-incline'), 'no T2 fill on an easy day');
+  // Easy day: still 1-2 T2s (jumps count), in shorter, lighter schemes, and the time is filled.
+  const easy = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'lower' }));
+  const t2 = easy.blocks.filter(b => b.tier === 'T2');
+  ok(t2.length >= 1 && t2.length <= 2 && t2.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), `easy lower day: jumps and a T2: ${easy.blocks.map(b => b.tier + ' ' + name(b.exerciseId))}`);
+  ok(t2.every(b => { const sc = s.schemes.find(x => x.id === b.schemeId); return sc.minutes <= 10; }), 'lighter schemes');
+  ok(easy.minutesUsed >= 40, `fills the time: ${easy.minutesUsed}`);
+  const easyUp = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'upper' }));
+  ok(!easyUp.blocks.some(b => s.exercises.find(e => e.id === b.exerciseId).region === 'lower' && s.exercises.find(e => e.id === b.exerciseId).explosive), 'no jumps when leaning upper');
   ok(L.buildSuggestion(s, ci({ minutes: 60 }), Date.now(), { excludeFamilies: ['fam-incline'] }).minutesUsed >= 50, '+ Time fills from the library too');
 });
 test('lean: goals for the half you lean toward come first', () => {
   const s = seed();
+  s.locations[1].equipment = [...s.equipment]; // lean scoring, not gear: a basement with everything
   const score = (lean, fam) => L.scoreSlots(s, ci({ lean })).find(c => c.slot.familyId === fam)?.score;
   ok(score('lower', 'fam-squat') > score('either', 'fam-squat') && score('upper', 'fam-squat') < score('either', 'fam-squat'), 'squat');
   ok(score('upper', 'fam-vpull') > score('either', 'fam-vpull') && score('lower', 'fam-vpull') < score('either', 'fam-vpull'), 'pull-ups');
@@ -1136,7 +1156,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 16);
+  eq(m.version, 17);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');

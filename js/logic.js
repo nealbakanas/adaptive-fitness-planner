@@ -435,7 +435,8 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
     let s = 0;
     if (doseFit(state, tier, sc, dose)) s += 3;
     if (e <= 2.5) s += tier === 'T3' ? sc.sets * 0.1 : (6 - sc.reps) * 0.3; // low energy: low reps, many sets (T3: more, shorter sets)
-    else if (e >= 3.5 && !ex.explosive && tier !== 'T3') s += sc.sets * sc.reps * 0.04; // high energy: more volume, but not for power work
+    else if (e >= 3.5 && !ex.explosive && tier !== 'T3' && ci?.intent !== 'easy') s += sc.sets * sc.reps * 0.04; // high energy: more volume, but not for power work or on an easy day
+    if (ci?.intent === 'easy' && tier === 'T2') s -= sc.minutes * 0.1; // easy day: the shorter, lighter option
     // T3 is already volume work: sets of 8-15 keep the reps good, so 2×25 is only for a tight squeeze on time.
     if (tier === 'T3') s -= Math.max(0, sc.reps - 15) * 0.15 + Math.max(0, 8 - sc.reps) * 0.1;
     if (ex.explosive && sc.reps <= 3) s += 1;          // power work: sets of 1-3 keep every rep fast
@@ -920,9 +921,23 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
     const heavy = recentHeavyRegions(state, t);
     pick('T1', 'heavy day, no heavy work there since yesterday', { needMax: true }, p => !regionConflict(PATTERN_REGION[p], heavy));
   }
-  // Up to two T2 strength lifts in the session (goal ones count; jumps and cleans are power work and don't),
-  // each from a pattern with no strength lift yet, least recently trained heavy first.
-  while (ci.intent !== 'easy' && k.budget >= 15 && strengthIn('T2') < 2 && pick('T2', 'to fill the time'));
+  if (ci.intent === 'easy') {
+    // Easy day: still 1-2 T2s, lighter. Jumps first when there are none and you're not leaning upper-body (T2 when
+    // fresh for power, else high-volume T3), then T2 lifts until the session has two T2 blocks in all (jumps count).
+    const t2Count = () => [...sessionBlocks, ...blocks, ...k.blocks].filter(b => b.tier === 'T2').length;
+    const hasJump = [...sessionBlocks, ...blocks].some(b => { const e = byId(state.exercises, b.exerciseId); return e?.explosive && e.region === 'lower' && e.metric !== 'load_reps'; });
+    const jump = !hasJump && lean !== 'upper' && k.budget >= 10 && k.explosives('lower', { load: false }).find(e => e.region === 'lower');
+    if (jump) {
+      const fresh = powerReadiness(state, ci, jump, t).fresh;
+      const dose = fresh && !slotFor(state, jump, 'T2') ? { repMin: 12, repMax: 20 } : null;
+      k.add(jump, fresh ? 'T2' : 'T3', fresh ? 'easy day: some jumps while you\'re fresh' : 'easy day: easy volume jumps', dose);
+    }
+    while (k.budget >= 12 && t2Count() < 2 && pick('T2', 'easy day, lighter'));
+  } else {
+    // Up to two T2 strength lifts in the session (goal ones count; jumps and cleans are power work and don't),
+    // each from a pattern with no strength lift yet, least recently trained heavy first.
+    while (k.budget >= 15 && strengthIn('T2') < 2 && pick('T2', 'to fill the time'));
+  }
   const all = () => [...blocks, ...k.blocks];
   const room = maxBlocks(ci.minutes) - blocks.length;
   // A lean is a bias, not a limit: once that half of the library runs out, the rest of the time still gets used.
