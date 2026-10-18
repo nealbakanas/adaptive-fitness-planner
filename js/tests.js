@@ -822,7 +822,7 @@ test('a heavy day adds one of your T1 lifts, trained heavy least recently and no
   eq(r2.blocks.filter(b => b.tier === 'T1').map(b => b.exerciseId), [], 'after heavy squats yesterday: no pull-up bar in the Basement, so no heavy lift');
   const r3 = L.buildSuggestion(sore, ci({ locationId: 'loc-office', minutes: 75, fatigue: 2, intent: 'heavy' }), fri);
   eq(r3.blocks.filter(b => b.tier === 'T1').map(b => b.exerciseId), ['ex-wpullup'], 'at the Office it is the pull-up');
-  eq(r.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length, 2, `two T2 strength lifts: ${names}`);
+  eq(r.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length, 3, `fresh 75 minutes: three T2 strength lifts: ${names}`);
   ok(r.minutesUsed >= 70, `uses the 75 minutes: ${r.minutesUsed}`);
   const tired = L.buildSuggestion(s, ci({ minutes: 75, fatigue: 4, intent: 'heavy' }), fri);
   ok(!tired.blocks.some(b => b.tier === 'T1'), 'tired: no heavy lift added');
@@ -1023,6 +1023,21 @@ test('the week budget: minutes your goals take, room for more T2/T3, from your s
   const b3 = G.weekBudget(h);
   eq([b3.workouts, b3.minutes, b3.fromHistory.workouts], [2, 60, true]);
 });
+test('fresh days get a third (or fourth) T2 before more than 4-6 T3s; tired days stay at two', () => {
+  const s = seed();
+  s.slots = []; // what the fill step itself chooses, with no goals taking the time
+  const ex = id => s.exercises.find(e => e.id === id);
+  for (const [minutes, t2, t3cap] of [[45, 2, 4], [60, 3, 4], [90, 3, 6]]) {
+    const r = L.buildSuggestion(s, ci({ minutes, fatigue: 1, intent: 'auto' }));
+    const str = r.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length;
+    const t3 = r.blocks.filter(b => b.tier === 'T3').length;
+    const names = r.blocks.map(b => `${b.tier} ${ex(b.exerciseId).name}`).join(', ');
+    ok(str >= Math.min(t2, 3) && t3 <= t3cap, `${minutes} min fresh: ${str} T2 strength, ${t3} T3: ${names}`);
+    ok(r.minutesUsed >= minutes - 8, `${minutes} min filled: ${r.minutesUsed}`);
+  }
+  const tired = L.buildSuggestion(s, ci({ minutes: 60, fatigue: 4 }));
+  ok(tired.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length <= 2, 'tired: no more than two T2 strength lifts');
+});
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
   const wk = L.weekBounds(s);
@@ -1040,8 +1055,9 @@ test('Friday, every goal done: the hour still gets two complementary T2 lifts an
   const ex = id => s.exercises.find(e => e.id === id);
   const t2 = r.blocks.filter(b => b.tier === 'T2').map(b => ex(b.exerciseId));
   const names = r.blocks.map(b => `${b.tier} ${ex(b.exerciseId).name}`).join(', ');
-  eq(t2.length, 2, names);
-  ok(new Set(t2.map(e => L.movementPattern(s, e))).size === 2, `different patterns: ${names}`);
+  eq(t2.length, 3, `fresh hour: three T2 lifts: ${names}`);
+  ok(r.blocks.filter(b => b.tier === 'T3').length <= 4, `at most 4 T3s in an hour: ${names}`);
+  ok(new Set(t2.map(e => L.movementPattern(s, e))).size === t2.length, `each in a different pattern: ${names}`);
   const t1Lifts = s.slots.filter(sl => sl.tier === 'T1').map(sl => sl.exerciseId ?? s.families.find(f => f.id === sl.familyId).defaultExerciseId);
   ok(t2.every(e => !t1Lifts.includes(e.id) && e.familyId !== 'fam-arms'), `support lifts, not a T1 goal's lift or curls: ${names}`);
   const t3 = r.blocks.filter(b => b.tier === 'T3');

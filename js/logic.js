@@ -651,6 +651,7 @@ export function stretchToFit(state, blocks, minutes, ci = null) {
     for (const b of blocks) {
       const ex = byId(state.exercises, b.exerciseId), cur = byId(state.schemes, b.schemeId);
       if (!ex || !cur || ex.explosive || (b.tier !== 'T2' && b.tier !== 'T3')) continue;
+      if (ci?.intent === 'easy' && b.tier === 'T2') continue; // easy day: T2s stay light
       const dose = slotDose(state, byId(state.slots, b.slotId), b.tier);
       for (const sc of schemeOptions(state, b.tier)) {
         if (sc.minutes <= cur.minutes || overRepCap(ex, sc) || !doseFit(state, b.tier, sc, dose)) continue;
@@ -933,24 +934,42 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
       k.add(jump, fresh ? 'T2' : 'T3', fresh ? 'easy day: some jumps while you\'re fresh' : 'easy day: easy volume jumps', dose);
     }
     while (k.budget >= 12 && t2Count() < 2 && pick('T2', 'easy day, lighter'));
-  } else {
-    // Up to two T2 strength lifts in the session (goal ones count; jumps and cleans are power work and don't),
-    // each from a pattern with no strength lift yet, least recently trained heavy first.
-    while (k.budget >= 15 && strengthIn('T2') < 2 && pick('T2', 'to fill the time'));
   }
+  // Fresh days (energy 4-5, not Easy) get more T2 strength work: 3 lifts from 45 minutes, 4 from 75. Otherwise 2.
+  // Goal ones count; jumps and cleans are power work and don't. Each from a pattern with no strength lift yet.
+  const fresh = energy(ci) >= 3.5 && ci.intent !== 'easy';
+  const t2Target = ci.intent === 'easy' ? 0 : !fresh ? 2 : ci.minutes >= 75 ? 4 : ci.minutes >= 45 ? 3 : 2;
+  while (k.budget >= 15 && strengthIn('T2') < t2Target && pick('T2', 'to fill the time'));
   const all = () => [...blocks, ...k.blocks];
   const room = maxBlocks(ci.minutes) - blocks.length;
+  // T3s per session (goal ones count): 4 (two supersets) up to an hour, then one more per 15 minutes.
+  const t3Cap = Math.max(4, Math.round(ci.minutes / 15));
+  const t3Left = () => t3Cap - [...sessionBlocks, ...all()].filter(b => b.tier === 'T3').length;
   // A lean is a bias, not a limit: once that half of the library runs out, the rest of the time still gets used.
   const rotations = lean ? [FOCUS_T3[lean], FOCUS_T3.either] : [FOCUS_T3.either];
-  for (const r of rotations) k.accessories(r, room);
+  for (const r of rotations) if (t3Left() > 0) k.accessories(r, room, t3Left());
   // Grouping T3s into supersets frees time (a partner counts half): group them, then add one more while one fits.
-  for (;;) {
-    const merged = regroup(state, all());
-    k.budget = ci.minutes - blocksMinutes(state, merged);
+  // Past the T3 cap, leftover time goes to more sets first, then (fresh days) another T2, and only then more T3s.
+  const regroupBudget = () => { const merged = regroup(state, all()); k.budget = ci.minutes - blocksMinutes(state, merged); return merged; };
+  for (let overflow = false; ;) {
+    regroupBudget();
     const n = k.blocks.length;
+    if (!overflow && t3Left() <= 0) {
+      stretchToFit(state, regroupBudget(), ci.minutes, ci);
+      regroupBudget();
+      overflow = true;
+      if (fresh && k.budget >= 12 && pick('T2', 'more time on a fresh day')) continue;
+    }
     // A new family or movement from either rotation first, else another exercise from a family already in.
-    for (const level of [[0, 1], [2]]) for (const r of rotations) if (k.blocks.length === n) k.accessories(r, room, 1, level);
-    if (k.blocks.length === n) break;
+    const limit = overflow ? 1 : Math.min(1, t3Left());
+    if (limit > 0) for (const level of [[0, 1], [2]]) for (const r of rotations) if (k.blocks.length === n) k.accessories(r, room, limit, level);
+    if (k.blocks.length === n) {
+      if (overflow) break;
+      overflow = true; // the T3 cap wasn't reached but nothing else fits as a T3: still try the overflow steps once
+      stretchToFit(state, regroupBudget(), ci.minutes, ci);
+      if (fresh && k.budget >= 12 && pick('T2', 'more time on a fresh day')) continue;
+      break;
+    }
   }
   // Never over the time: a T3 that ends up outside a superset costs its full minutes.
   for (const b of trimToFit(state, all(), ci.minutes, k.blocks)) dropNote(state, k, b);
