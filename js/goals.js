@@ -44,6 +44,7 @@ function familyStats(state, now, days) {
 // Minutes a goal session of a tier usually takes: the middle of your schemes for it plus warm-up. T3s go in supersets,
 // where every second one costs half, so they average three quarters.
 export function tierCost(state, tier) {
+  if (tier === 'JUMP') return 0; // done during the warm-up
   const ms = L.schemeOptions(state, tier).map(s => s.minutes || 0).sort((a, b) => a - b);
   const mid = ms.length ? ms[ms.length >> 1] : 8;
   return (mid + L.WARMUP[tier]) * (tier === 'T3' ? 0.75 : 1);

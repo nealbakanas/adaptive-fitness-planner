@@ -740,7 +740,12 @@ test('focused workouts: upper and lower from the whole library, explosive first 
   ok(lower.minutesUsed <= 60, 'fits the time');
   const upper = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper' });
   ok(upper.blocks.every(b => ['push', 'pull', 'core'].includes(pat(b.exerciseId))), `upper only: ${names(upper)}`);
-  ok(new Set(upper.blocks.filter(b => b.tier !== 'T3').map(b => pat(b.exerciseId))).size === 2, 'push and pull main lifts');
+  // Main lifts come from your T1/T2 goal families: at the Basement that's pressing (the pull-up goals need the Office bar),
+  // so no chest-supported row stands in as a T2; at the Office it's push and pull.
+  const goalFams = new Set(s.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId));
+  ok(upper.blocks.filter(b => b.tier === 'T1' || b.tier === 'T2').every(b => goalFams.has(s.exercises.find(e => e.id === b.exerciseId).familyId)), `main lifts from goal families: ${names(upper)}`);
+  const office = L.buildFocus(s, ci({ minutes: 60, locationId: 'loc-office' }), { region: 'upper' });
+  ok(new Set(office.blocks.filter(b => b.tier !== 'T3').map(b => pat(b.exerciseId))).size === 2, `push and pull main lifts at the Office: ${names(office)}`);
   ok(!upper.blocks.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), 'no explosive work unless asked');
   // Power work leads with a family you have goals for: cleans, not jerks, until you add a jerk goal.
   const upx = L.buildFocus(s, ci({ minutes: 60 }), { region: 'upper', explosive: true });
@@ -822,7 +827,8 @@ test('a heavy day adds one of your T1 lifts, trained heavy least recently and no
   eq(r2.blocks.filter(b => b.tier === 'T1').map(b => b.exerciseId), [], 'after heavy squats yesterday: no pull-up bar in the Basement, so no heavy lift');
   const r3 = L.buildSuggestion(sore, ci({ locationId: 'loc-office', minutes: 75, fatigue: 2, intent: 'heavy' }), fri);
   eq(r3.blocks.filter(b => b.tier === 'T1').map(b => b.exerciseId), ['ex-wpullup'], 'at the Office it is the pull-up');
-  eq(r.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length, 3, `fresh 75 minutes: three T2 strength lifts: ${names}`);
+  // Two at the Basement: your T2-goal families there are hinge and push (squats took the T1; pull-ups and dips need the Office).
+  eq(r.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length, 2, `fresh 75 minutes: the T2 strength lifts your goals allow here: ${names}`);
   ok(r.minutesUsed >= 70, `uses the 75 minutes: ${r.minutesUsed}`);
   const tired = L.buildSuggestion(s, ci({ minutes: 75, fatigue: 4, intent: 'heavy' }), fri);
   ok(!tired.blocks.some(b => b.tier === 'T1'), 'tired: no heavy lift added');
@@ -1104,6 +1110,23 @@ test('review fixes: jumps off never set the bar for other goals; a regenerated m
   const again = L.buildMix(t, { ...c, minutes: 25, variant: 1 }, { T1: 0, T2: 1, T3: 6 }, Date.now(), { sessionBlocks: kept, excludeFamilies: kept.map(b => t.exercises.find(e => e.id === b.exerciseId).familyId) });
   eq(again.blocks.filter(b => b.tier === 'T2').length, 0, 'the T2 you started counts');
   ok(again.blocks.filter(b => b.tier === 'T3').length <= 4, 'four more T3s at most');
+});
+test('a 30-minute upper + explosive Basement day never makes pump work (chest-supported rows) a T2; jumps take no time', () => {
+  const s = seed();
+  const ex = b => s.exercises.find(e => e.id === b.exerciseId);
+  // Pressing was heavy yesterday, so the main lift is T2, and the pull-up goals need the Office bar.
+  s.slots.push({ id: 'sl-t1-ohp', familyId: 'fam-ohp', exerciseId: 'gs-z-press', tier: 'T1', quota: 1, priority: 3 });
+  done(s, 'gs-z-press', 'T1', 3, 5, 1, 135);
+  for (const lean of [null, 'upper']) for (const fatigue of [1, 2, 3]) {
+    const r = L.buildFocus(s, ci({ minutes: 30, fatigue, lean }), { region: 'upper', explosive: true });
+    const names = r.blocks.map(b => `${b.tier} ${ex(b).name}`).join(', ');
+    ok(!r.blocks.some(b => (b.tier === 'T1' || b.tier === 'T2') && ex(b).familyId === 'fam-upperback'), `no upper-back T2: ${names}`);
+    const withJumps = L.buildFocus(s, ci({ minutes: 30, fatigue, lean, jumps: true }), { region: 'upper', explosive: true });
+    eq(withJumps.minutesUsed, r.minutesUsed, `jumps don't use the time: ${withJumps.blocks.map(b => `${b.tier} ${ex(b).name}`)}`);
+    ok(withJumps.blocks.some(b => b.tier === 'JUMP'), 'jumps still there');
+  }
+  eq(L.blocksMinutes(s, [{ tier: 'JUMP', schemeId: 's-j-5x3' }]), 0);
+  eq(G.tierCost(s, 'JUMP'), 0, 'the week budget leaves jumps out');
 });
 test('v18: jumps move out of T2 into their own tier; goals keep their reps and this week keeps its credit', () => {
   const s = seed();
