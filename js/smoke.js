@@ -83,6 +83,15 @@ step('choose the mix, then regenerate it', () => {
   click('[data-act=regen]');
   const after = qa('section.block').map(b => b.querySelector('[data-act=swapEx]').innerText).join();
   check('regenerate keeps the mix but changes picks', after !== before && tiers().filter(t => /^T2/.test(t)).length === 1, after);
+  // A started block stays whole: its sets left to do aren't dropped, and it counts toward the mix.
+  const t3 = () => qa('section.block').find(b => /^T3/.test(b.querySelector('.tier').innerText.trim()));
+  const started = t3(), name = started.querySelector('[data-act=swapEx]').innerText, sets = started.querySelectorAll('.set:not(.warm)').length;
+  click(started.querySelector('.set:not(.warm) [data-act=check]'));
+  const t3count = tiers().filter(t => /^T3/.test(t)).length;
+  click('[data-act=regen]');
+  const still = qa('section.block').find(b => b.querySelector('[data-act=swapEx]').innerText === name);
+  check('started block keeps all its sets', !!still && still.querySelectorAll('.set:not(.warm)').length === sets && still.querySelectorAll('.set.done:not(.warm)').length === 1, `${name}: ${still?.querySelectorAll('.set:not(.warm)').length}/${sets}`);
+  check('the mix still adds up with a started block', tiers().filter(t => /^T3/.test(t)).length <= t3count, tiers().join(','));
   click('[data-act=recheck]');
   const j2 = q('[data-ci-jumps]');
   if (j2?.checked) { j2.checked = false; j2.dispatchEvent(new Event('change', { bubbles: true })); }

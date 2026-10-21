@@ -1092,6 +1092,19 @@ test('jumps are their own category: only with Add jumps, one block, never a T2, 
   eq(L.creditWeek(s).slots.get('sl-t2-jumps').filled, 2);
   ok(L.buildSuggestion(s, ci({ minutes: 45, jumps: true })).blocks.some(b => b.tier === 'JUMP'), 'jumps when asked, goal or not');
 });
+test('review fixes: jumps off never set the bar for other goals; a regenerated mix counts what you started', () => {
+  const s = seed();
+  s.slots = s.slots.filter(x => ['sl-t2-jumps', 'sl-t3-arms'].includes(x.id));
+  const r = L.buildSuggestion(s, ci({ minutes: 30, lean: 'lower' }), Date.now(), { fill: false });
+  ok(r.blocks.some(b => b.slotId === 'sl-t3-arms'), `the upper T3 goal isn't dropped against the (off) jumps goal: ${JSON.stringify(r.scored.map(c => [c.slot.id, c.note]))}`);
+  const t = seed();
+  const c = ci({ minutes: 45, lean: 'lower' });
+  const first = L.buildMix(t, c, { T1: 0, T2: 1, T3: 6 });
+  const kept = first.blocks.filter(b => b.tier === 'T2').concat(first.blocks.filter(b => b.tier === 'T3').slice(0, 2));
+  const again = L.buildMix(t, { ...c, minutes: 25, variant: 1 }, { T1: 0, T2: 1, T3: 6 }, Date.now(), { sessionBlocks: kept, excludeFamilies: kept.map(b => t.exercises.find(e => e.id === b.exerciseId).familyId) });
+  eq(again.blocks.filter(b => b.tier === 'T2').length, 0, 'the T2 you started counts');
+  ok(again.blocks.filter(b => b.tier === 'T3').length <= 4, 'four more T3s at most');
+});
 test('v18: jumps move out of T2 into their own tier; goals keep their reps and this week keeps its credit', () => {
   const s = seed();
   s.version = 17;
@@ -1110,9 +1123,18 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
   eq(L.creditWeek(m).slots.get('sl-t2-jumps').filled, 1, 'this week still counts');
   const [bj, pc] = m.sessions.find(x => x.id === 'open1').blocks;
-  eq([bj.tier, pc.tier], ['JUMP', 'T2']);
-  ok(m.schemes.find(x => x.id === bj.schemeId).tiers.includes('JUMP'), 'open block gets a jump scheme');
+  eq([bj.tier, pc.tier, bj.schemeId], ['JUMP', 'T2', 's-t2-4x3'], 'open block moves, keeping the scheme its sets were made from');
   eq(m.plans[0].items[0].tier, 'JUMP');
+  // Your own all-jumps family with a family-wide T2 goal moves too; a mixed family's goal stays.
+  const t = seed();
+  t.version = 17;
+  t.families.push({ id: 'plyo', name: 'Plyometrics' }, { id: 'mixed', name: 'Mixed' });
+  t.exercises.push({ id: 'p1', name: 'Hurdle hops', familyId: 'plyo', rank: 1, metric: 'reps', equipment: [], explosive: true, region: 'lower' },
+    { id: 'p2', name: 'Pogo jumps', familyId: 'mixed', rank: 1, metric: 'reps', equipment: [], explosive: true, region: 'lower' },
+    { id: 'p3', name: 'Med ball throw', familyId: 'mixed', rank: 2, metric: 'reps', equipment: [], explosive: true, region: 'upper' });
+  t.slots.push({ id: 'g1', familyId: 'plyo', tier: 'T2', quota: 1 }, { id: 'g2', familyId: 'mixed', tier: 'T2', quota: 1 });
+  const mt = migrate(t);
+  eq([mt.slots.find(x => x.id === 'g1').tier, mt.slots.find(x => x.id === 'g2').tier], ['JUMP', 'T2']);
   const again = migrate(structuredClone(m));
   eq(again.schemes.length, m.schemes.length, 'idempotent');
 });

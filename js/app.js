@@ -265,6 +265,19 @@ function addBlock(s, ex, tier) {
   return b;
 }
 
+// Clears what you haven't started from the open session: blocks with nothing logged go, with their sets. A block you've
+// started stays whole (its remaining sets too). Returns the blocks kept.
+function keepStarted(s) {
+  const keep = s.blocks.filter(b => state.sets.some(x => x.blockId === b.id && x.done));
+  state.sets = state.sets.filter(x => x.sessionId !== s.id || keep.some(b => b.id === x.blockId));
+  s.blocks = keep;
+  for (const b of keep) if (b.pairOf && !keep.some(x => x.id === b.pairOf)) delete b.pairOf;
+  return keep;
+}
+
+// "Why this session" rows from buildSuggestion's scores.
+const whyRows = res => res.scored.map(c => ({ label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
+
 function createSession(blocks, source, extra = {}) {
   const s = {
     id: L.uid(), day: L.dayKey(), checkinAt: Date.now(), firstSetAt: null, status: 'open',
@@ -2122,8 +2135,7 @@ const actions = {
 
   suggest: () => {
     const res = L.buildSuggestion(state, ui.ci);
-    const why = res.scored.map(c => ({ label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
-    createSession(res.blocks, 'suggested', { why, ready: res.ready, goalMinutes: res.goalMinutes, focusNotes: res.notes });
+    createSession(res.blocks, 'suggested', { why: whyRows(res), ready: res.ready, goalMinutes: res.goalMinutes, focusNotes: res.notes });
     render(); window.scrollTo(0, 0);
   },
 
@@ -2131,12 +2143,7 @@ const actions = {
   focus: d => {
     const region = d.r, explosive = !!d.x;
     let s = currentSession();
-    if (s) {
-      const keep = s.blocks.filter(b => state.sets.some(x => x.blockId === b.id && x.done));
-      state.sets = state.sets.filter(x => x.sessionId !== s.id || x.done);
-      s.blocks = keep;
-      for (const b of keep) if (b.pairOf && !keep.some(x => x.id === b.pairOf)) delete b.pairOf;
-    }
+    if (s) keepStarted(s);
     const ci = s ? { ...s, minutes: sessionBudget(s) } : ui.ci;
     const res = L.buildFocus(state, ci, { region, explosive }, Date.now(), { excludeFamilies: (s?.blocks || []).map(b => exOf(b.exerciseId)?.familyId) });
     const extra = { focusRegion: region, focusExplosive: explosive, focusNotes: res.notes, ready: res.ready };
@@ -2147,6 +2154,7 @@ const actions = {
       Object.assign(s, extra, { source: 'focus' });
       delete s.why;
       delete s.goalMinutes;
+      delete s.mix; // it's a focused workout now, so Regenerate rebuilds it as one
       save();
     } else {
       s = createSession(res.blocks, 'focus', extra);
@@ -2170,15 +2178,13 @@ const actions = {
     if (!res.blocks.length) toast('Nothing fits here. Try another location or more time.');
   },
 
-  // Another take on the same check-in: unlogged blocks are rebuilt with the library picks rotated; logged work stays.
+  // Another take on the same check-in: blocks you haven't started are rebuilt with the picks rotated; started ones stay.
   regen: () => {
     const s = currentSession();
     if (!s || !['suggested', 'swapped', 'focus'].includes(s.source)) return;
-    const keep = s.blocks.filter(b => state.sets.some(x => x.blockId === b.id && x.done));
-    const before = s.blocks.filter(b => !keep.includes(b)).map(b => b.exerciseId).join();
-    state.sets = state.sets.filter(x => x.sessionId !== s.id || x.done);
-    s.blocks = keep;
-    for (const b of keep) if (b.pairOf && !keep.some(x => x.id === b.pairOf)) delete b.pairOf;
+    const started = new Set(s.blocks.filter(b => state.sets.some(x => x.blockId === b.id && x.done)).map(b => b.id));
+    const before = s.blocks.filter(b => !started.has(b.id)).map(b => b.exerciseId).join();
+    const keep = keepStarted(s);
     s.variant = (s.variant || 0) + 1;
     s.source = s.focusRegion ? 'focus' : 'suggested';
     const ci = { ...s, minutes: sessionBudget(s) };
@@ -2193,7 +2199,7 @@ const actions = {
     s.focusNotes = res.notes;
     s.ready = res.ready;
     if (res.scored) {
-      s.why = res.scored.map(c => ({ label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
+      s.why = whyRows(res);
       s.goalMinutes = res.goalMinutes;
     }
     save(); render(); window.scrollTo(0, 0);

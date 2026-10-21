@@ -255,25 +255,19 @@ export function migrate(s) {
     s.version = 17;
   }
   if (s.version < 18) {
-    // v18: jumps are their own category (the JUMP tier, in contacts), out of T2. T2 jump goals, and logged sets, workout
-    // blocks and plan items with jumps at T2, move to it; goals keep their reps, so this week's credit is unchanged.
+    // v18: jumps are their own category (the JUMP tier, in contacts), out of T2. T2 jump goals (naming a jump, or for a family
+    // that is all jumps), and logged sets, workout blocks and plan items with jumps at T2 move to it. Goals keep their reps
+    // and slot, so this week's credit is unchanged; blocks and plan items keep their scheme (and an open block its sets).
     s.tiers.JUMP ??= { ...JUMP_TIER };
     for (const sc of JUMP_SCHEMES) if (!s.schemes.some(x => x.id === sc.id)) s.schemes.push({ ...sc, tiers: [...sc.tiers] });
     const jump = id => isJump(s.exercises.find(e => e.id === id));
+    const allJumps = fid => { const m = s.exercises.filter(e => e.familyId === fid && !e.archived); return m.length > 0 && m.every(e => isJump(e)); };
     for (const sl of s.slots) {
-      const named = sl.exerciseId ? jump(sl.exerciseId) : sl.familyId === 'fam-jumps';
-      if (sl.tier === 'T2' && named) sl.tier = 'JUMP';
+      if (sl.tier === 'T2' && (sl.exerciseId ? jump(sl.exerciseId) : sl.familyId === 'fam-jumps' || allJumps(sl.familyId))) sl.tier = 'JUMP';
     }
     for (const x of s.sets) if (x.tier === 'T2' && jump(x.exerciseId)) x.tier = 'JUMP';
-    for (const ss of s.sessions) for (const b of ss.blocks || []) {
-      if (b.tier !== 'T2' || !jump(b.exerciseId)) continue;
-      b.tier = 'JUMP';
-      // An open or paused block keeps working: a jump scheme in place of its T2 one. Finished ones keep what you did.
-      if (ss.status !== 'done' && !s.schemes.find(x => x.id === b.schemeId)?.tiers.includes('JUMP')) b.schemeId = 's-j-4x3';
-    }
-    for (const p of s.plans || []) for (const it of p.items || []) {
-      if (it.tier === 'T2' && jump(it.exerciseId)) { it.tier = 'JUMP'; if (!s.schemes.find(x => x.id === it.schemeId)?.tiers.includes('JUMP')) it.schemeId = 's-j-4x3'; }
-    }
+    for (const ss of s.sessions) for (const b of ss.blocks || []) if (b.tier === 'T2' && jump(b.exerciseId)) b.tier = 'JUMP';
+    for (const p of s.plans || []) for (const it of p.items || []) if (it.tier === 'T2' && jump(it.exerciseId)) it.tier = 'JUMP';
     s.version = 18;
   }
   return s;

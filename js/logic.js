@@ -475,7 +475,8 @@ function variedAccessory(state, ci, c) {
 // `sessionBlocks`: the workout so far, when this fills extra time (+ Time), so its lifts count.
 export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [], fill = true, sessionBlocks = [] } = {}) {
   const scored = scoreSlots(state, ci, t);
-  const top = scored[0]?.score || 0;
+  // Jumps are only in when you ask for them, and then whatever the scores say: they don't set the bar for other goals.
+  const top = Math.max(0, ...scored.filter(c => c.slot.tier !== 'JUMP').map(c => c.score));
   let budget = ci.minutes;
   const blocks = [];
   const count = { T1: 0, T2: 0, T3: 0, TECH: 0, JUMP: 0 };
@@ -863,13 +864,11 @@ function explosiveLower(state, ci, t, k) {
   if (!clean) { if (!k.blocks.length) k.notes.push('No lower-body explosive lift is available here, so this is a plain lower-body workout.'); return k.blocks.length > 0; }
   const rd = powerReadiness(state, ci, clean, t);
   if (!rd.fresh) return k.add(clean, 'TECH', `technique instead of power (${rd.reasons.join('; ')})`) || k.blocks.length > 0;
-  {
-    k.add(clean, 'T1', 'clean variation for power');
-    // A second clean variation if it still leaves room for a few accessories.
-    const second = k.explosives('full', { load: true, sameFamily: clean.familyId }).find(e => e.familyId === clean.familyId);
-    // Power reps (sets of 1-3, 10-20 in all), not a 5×5: it's speed work after the main clean.
-    if (second && ci.intent !== 'easy' && k.budget >= 30) k.add(second, 'T2', 'second clean variation, lighter', { repMin: 10, repMax: 20 });
-  }
+  k.add(clean, 'T1', 'clean variation for power');
+  // A second clean variation if it still leaves room for a few accessories.
+  const second = k.explosives('full', { load: true, sameFamily: clean.familyId }).find(e => e.familyId === clean.familyId);
+  // Power reps (sets of 1-3, 10-20 in all), not a 5×5: it's speed work after the main clean.
+  if (second && ci.intent !== 'easy' && k.budget >= 30) k.add(second, 'T2', 'second clean variation, lighter', { repMin: 10, repMax: 20 });
   return k.blocks.length > 0;
 }
 
@@ -920,8 +919,10 @@ export function buildFocus(state, ci, { region, explosive = false, accessoriesOn
 // A workout with the counts you ask for: `mix` = { T1, T2, T3 } blocks. Open goals fill each tier first (for the half you
 // lean toward), then the library does, with the same rules as the other builders. The counts are what you asked for, so
 // nothing tops up beyond them; only a T3 that doesn't fit the time is dropped.
-export function buildMix(state, ci, mix, t = Date.now(), { excludeFamilies = [], sessionBlocks = [] } = {}) {
+export function buildMix(state, ci, asked, t = Date.now(), { excludeFamilies = [], sessionBlocks = [] } = {}) {
   const lean = leanOf(ci);
+  // Regenerating a mix you've started: blocks you've logged count toward it.
+  const mix = Object.fromEntries(['T1', 'T2', 'T3'].map(tier => [tier, Math.max(0, (asked[tier] || 0) - sessionBlocks.filter(b => b.tier === tier).length)]));
   const scored = scoreSlots(state, ci, t);
   const blocks = [], notes = [];
   const famUsed = new Set(excludeFamilies);
@@ -933,7 +934,6 @@ export function buildMix(state, ci, mix, t = Date.now(), { excludeFamilies = [],
     for (const c of scored.filter(x => x.slot.tier === tier)) {
       if (n >= (mix[tier] || 0)) break;
       if (c.waits || famUsed.has(c.slot.familyId) || (other && bodyRegion(state, c.exercise) === other)) continue;
-      if (tier === 'T2' && c.exercise.explosive && !powerReadiness(state, ci, c.exercise, t).fresh) continue;
       const sc = pickScheme(state, tier, c.exercise, budget - WARMUP[tier], ci, slotDose(state, c.slot));
       if (!sc) continue;
       blocks.push({ id: uid(), tier, slotId: c.slot.id, exerciseId: c.exercise.id, schemeId: sc.id, swaps: [] });
@@ -1053,6 +1053,7 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
       if (overflow) break;
       overflow = true; // the T3 cap wasn't reached but nothing else fits as a T3: still try the overflow steps once
       stretchToFit(state, regroupBudget(), ci.minutes, ci);
+      regroupBudget(); // the longer schemes used some of the time
       if (fresh && k.budget >= 12 && pick('T2', 'more time on a fresh day')) continue;
       break;
     }
