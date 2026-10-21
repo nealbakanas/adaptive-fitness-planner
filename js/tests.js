@@ -1059,6 +1059,18 @@ test('wrecked short day: at most one T2, the rest T3s; regenerate rotates the li
   eq(sig(again), sig(L.buildSuggestion(s, { ...ci({ minutes: 45, fatigue: 3, lean: 'lower' }), variant: 2 })), 'same variant, same workout');
   ok(again.minutesUsed >= 37 && again.minutesUsed <= 45, `regenerated workout still fills the time: ${again.minutesUsed}`);
 });
+test('chosen mix: the T2/T3 counts you ask for, for the half you lean toward, within the time', () => {
+  const s = seed();
+  const ex = id => s.exercises.find(e => e.id === id);
+  const c = { locationId: s.locations[1].id, minutes: 45, fatigue: 3, intent: 'auto', lean: 'lower' };
+  const r = L.buildMix(s, c, { T1: 0, T2: 1, T3: 6 });
+  const n = t => r.blocks.filter(b => b.tier === t).length;
+  eq([n('T1'), n('T2'), n('T3')], [0, 1, 6]);
+  ok(r.blocks.every(b => L.bodyRegion(s, ex(b.exerciseId)) !== 'upper'), 'lower lean: no upper-body blocks');
+  ok(r.minutesUsed <= 45, `within the time: ${r.minutesUsed}`);
+  const tight = L.buildMix(s, { ...c, minutes: 20 }, { T1: 0, T2: 1, T3: 10 });
+  ok(tight.minutesUsed <= 20 && tight.notes.some(x => /^Only/.test(x)), 'what does not fit is dropped and said so');
+});
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
   const wk = L.weekBounds(s);

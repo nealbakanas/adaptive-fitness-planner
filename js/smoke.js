@@ -66,6 +66,22 @@ step('power block while tired offers one-tap technique', () => {
   click('[data-act=recheck]');
 });
 
+step('choose the mix, then regenerate it', () => {
+  click('[data-k=locationId][data-v=loc-basement]');
+  click('[data-k=minutes][data-v="45"]');
+  click('[data-k=lean][data-v=lower]');
+  click('[data-act=mixStep][data-t=T3][data-d="1"]');
+  click('[data-act=mixStep][data-t=T3][data-d="1"]');
+  click('[data-act=mixBuild]');
+  const tiers = () => qa('section.block').map(b => b.querySelector('.tier').innerText.trim());
+  check('mix: one T2 and several T3s', tiers().filter(t => /^T2/.test(t)).length === 1 && tiers().filter(t => /^T3/.test(t)).length >= 4, tiers().join(','));
+  const before = qa('section.block').map(b => b.querySelector('[data-act=swapEx]').innerText).join();
+  click('[data-act=regen]');
+  const after = qa('section.block').map(b => b.querySelector('[data-act=swapEx]').innerText).join();
+  check('regenerate keeps the mix but changes picks', after !== before && tiers().filter(t => /^T2/.test(t)).length === 1, after);
+  click('[data-act=recheck]');
+});
+
 step('supersets, real rest, pause and resume, more time', () => {
   check('energy scale: 5 is fresh', /Energy\s*1 wrecked · 5 fresh/i.test(text()), text().slice(0, 300));
   click('[data-k=locationId][data-v=loc-basement]');

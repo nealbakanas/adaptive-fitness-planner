@@ -892,6 +892,64 @@ export function buildFocus(state, ci, { region, explosive = false, accessoriesOn
   return { blocks: k.blocks, notes: k.notes, minutesUsed: Math.round(blocksMinutes(state, k.blocks)), ready: readinessSummary(state, ci, t) };
 }
 
+// A workout with the counts you ask for: `mix` = { T1, T2, T3 } blocks. Open goals fill each tier first (for the half you
+// lean toward), then the library does, with the same rules as the other builders. The counts are what you asked for, so
+// nothing tops up beyond them; only a T3 that doesn't fit the time is dropped.
+export function buildMix(state, ci, mix, t = Date.now(), { excludeFamilies = [], sessionBlocks = [] } = {}) {
+  const lean = leanOf(ci);
+  const scored = scoreSlots(state, ci, t);
+  const blocks = [], notes = [];
+  const famUsed = new Set(excludeFamilies);
+  let budget = ci.minutes;
+  const other = lean && (lean === 'upper' ? 'lower' : 'upper');
+  for (const tier of ['T1', 'T2', 'T3']) {
+    let n = 0;
+    for (const c of scored.filter(x => x.slot.tier === tier)) {
+      if (n >= (mix[tier] || 0)) break;
+      if (c.waits || famUsed.has(c.slot.familyId) || (other && bodyRegion(state, c.exercise) === other)) continue;
+      if (tier === 'T2' && c.exercise.explosive && !powerReadiness(state, ci, c.exercise, t).fresh) continue;
+      const sc = pickScheme(state, tier, c.exercise, budget - WARMUP[tier], ci, slotDose(state, c.slot));
+      if (!sc) continue;
+      blocks.push({ id: uid(), tier, slotId: c.slot.id, exerciseId: c.exercise.id, schemeId: sc.id, swaps: [] });
+      famUsed.add(c.slot.familyId);
+      budget -= sc.minutes + WARMUP[tier];
+      notes.push(`${tier} ${c.exercise.name}: open goal`);
+      n++;
+    }
+  }
+  sortBlocks(state, blocks);
+  pairT3s(state, blocks);
+  const isStrength = b => (b.tier === 'T1' || b.tier === 'T2') && !byId(state.exercises, b.exerciseId)?.explosive;
+  const all = [...sessionBlocks, ...blocks];
+  const k = libraryKit(state, ci, t, ci.minutes - blocksMinutes(state, blocks), [...famUsed], all.filter(isStrength).map(b => b.exerciseId), all.map(b => b.exerciseId));
+  const have = tier => blocks.filter(b => b.tier === tier).length;
+  const halves = lean ? [FOCUS_MAIN[lean]] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]];
+  for (const tier of ['T1', 'T2']) {
+    while (have(tier) + k.count(tier) < (mix[tier] || 0) && k.budget >= 10
+      && halves.some(ps => k.strength(ps, `your ${tier} pick for this mix`, tier, { needMax: tier === 'T1' })));
+  }
+  // T3s: from the lean half's rotation, then the rest once that runs out; every one stays in the time.
+  const want = (mix.T3 || 0) - have('T3');
+  const rotations = lean ? [FOCUS_T3[lean], FOCUS_T3.either] : [FOCUS_T3.either];
+  for (let guard = 0; guard < 40 && k.count('T3') < want; guard++) {
+    regroup(state, [...blocks, ...k.blocks]);
+    k.budget = ci.minutes - blocksMinutes(state, [...blocks, ...k.blocks]);
+    const n = k.blocks.length;
+    for (const level of [[0, 1], [2]]) for (const r of rotations) if (k.blocks.length === n) k.accessories(r, 99, 1, level);
+    if (k.blocks.length === n) break;
+  }
+  const lib = k.blocks;
+  const merged = [...blocks, ...lib];
+  for (const b of trimToFit(state, merged, ci.minutes, lib)) dropNote(state, k, b);
+  sortBlocks(state, merged);
+  pairT3s(state, merged);
+  for (const tier of ['T1', 'T2', 'T3']) {
+    const got = merged.filter(b => b.tier === tier).length;
+    if (got < (mix[tier] || 0)) notes.push(`Only ${got} of ${mix[tier]} ${tier} fit${lean ? ` for ${lean}-body work` : ''} in ${ci.minutes} minutes here.`);
+  }
+  return { blocks: merged, notes: [...notes, ...k.notes], minutesUsed: Math.round(blocksMinutes(state, merged)), ready: readinessSummary(state, ci, t) };
+}
+
 // Removes a dropped block's line from "How this was built".
 const dropNote = (state, k, b) => { const head = `${b.tier} ${byId(state.exercises, b.exerciseId)?.name}:`; k.notes = k.notes.filter(n => !n.startsWith(head)); };
 

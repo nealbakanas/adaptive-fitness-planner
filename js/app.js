@@ -18,7 +18,7 @@ const REASONS = ['Equipment busy', 'Pain / niggle', 'Preference', 'Variety', 'Ti
 const METRICS = [['load_reps', 'Load × reps'], ['reps', 'Reps only'], ['time', 'Time'], ['distance', 'Distance'], ['none', 'None']];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const ui = { tab: 'today', ci: defaultCheckin(), sheet: null, plan: null, whyOpen: false, libQuery: '', focus: null, setPage: null, history: null };
+const ui = { tab: 'today', ci: defaultCheckin(), sheet: null, plan: null, whyOpen: false, libQuery: '', focus: null, setPage: null, history: null, mix: { T1: 0, T2: 1, T3: 6 }, mixOpen: false };
 
 // ---------- helpers ----------
 
@@ -708,6 +708,10 @@ function viewCheckin() {
     <div class="field"><label>Lean <span class="hint">which half feels up for it today</span></label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
+    <details class="mixer" ${ui.mixOpen ? 'open' : ''} data-mix><summary>Or choose the mix <span class="hint">how many T1, T2 and T3 blocks · uses your goals first</span></summary>
+      ${['T1', 'T2', 'T3'].map(t => `<div class="row mixrow"><span>${t}</span><div class="stepper small"><button data-act="mixStep" data-t="${t}" data-d="-1" aria-label="Fewer ${t}">−</button><span>${ui.mix[t]}</span><button data-act="mixStep" data-t="${t}" data-d="1" aria-label="More ${t}">+</button></div></div>`).join('')}
+      <p class="meta">Uses the time, place and lean above.</p>
+      <button class="primary" data-act="mixBuild">Build this mix</button></details>
     <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals${L.leanOf(ci) ? ` · leaning ${L.leanOf(ci)}` : ''}</span></label>${focusButtons(L.leanOf(ci))}</div>`;
   h += programCards();
   const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
@@ -2147,6 +2151,21 @@ const actions = {
     if (!res.blocks.length) toast('Nothing fits here. Try another location or more time.');
   },
 
+  mixStep: d => {
+    const max = { T1: 3, T2: 6, T3: 14 }[d.t];
+    ui.mix[d.t] = Math.max(0, Math.min(max, ui.mix[d.t] + Number(d.d)));
+    ui.mixOpen = true;
+    render();
+  },
+  mixBuild: () => {
+    const mix = { ...ui.mix };
+    const res = L.buildMix(state, ui.ci, mix);
+    createSession(res.blocks, 'suggested', { mix, ready: res.ready, focusNotes: res.notes });
+    ui.mixOpen = false;
+    render(); window.scrollTo(0, 0);
+    if (!res.blocks.length) toast('Nothing fits here. Try another location or more time.');
+  },
+
   // Another take on the same check-in: unlogged blocks are rebuilt with the library picks rotated; logged work stays.
   regen: () => {
     const s = currentSession();
@@ -2159,7 +2178,8 @@ const actions = {
     s.source = s.focusRegion ? 'focus' : 'suggested';
     const ci = { ...s, minutes: sessionBudget(s) };
     const excludeFamilies = keep.map(b => exOf(b.exerciseId)?.familyId);
-    const res = s.focusRegion
+    const res = s.mix ? L.buildMix(state, ci, s.mix, Date.now(), { excludeFamilies, sessionBlocks: keep })
+      : s.focusRegion
       ? L.buildFocus(state, ci, { region: s.focusRegion, explosive: !!s.focusExplosive }, Date.now(), { excludeFamilies, sessionBlocks: keep })
       : L.buildSuggestion(state, ci, Date.now(), { excludeFamilies, sessionBlocks: keep });
     s.blocks.push(...res.blocks);
@@ -3203,6 +3223,7 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('toggle', e => {
   if (e.target.hasAttribute?.('data-why')) ui.whyOpen = e.target.open;
+  if (e.target.hasAttribute?.('data-mix')) ui.mixOpen = e.target.open;
 }, true);
 
 function addEquipment(el) {
