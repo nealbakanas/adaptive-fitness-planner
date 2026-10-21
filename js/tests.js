@@ -1038,6 +1038,27 @@ test('fresh days get a third (or fourth) T2 before more than 4-6 T3s; tired days
   const tired = L.buildSuggestion(s, ci({ minutes: 60, fatigue: 4 }));
   ok(tired.blocks.filter(b => b.tier === 'T2' && !ex(b.exerciseId).explosive).length <= 2, 'tired: no more than two T2 strength lifts');
 });
+test('wrecked short day: at most one T2, the rest T3s; regenerate rotates the library picks', () => {
+  const s = seed();
+  const ex = id => s.exercises.find(e => e.id === id);
+  for (const lean of ['lower', 'upper', 'either']) {
+    for (const fatigue of [5, 4]) {
+      const r = L.buildSuggestion(s, ci({ minutes: 30, fatigue, lean }));
+      const names = r.blocks.map(b => `${b.tier} ${ex(b.exerciseId).name}`).join(', ');
+      ok(r.blocks.filter(b => b.tier === 'T2').length <= 1, `${lean}, energy ${6 - fatigue}: one T2 at most: ${names}`);
+      if (!r.blocks.some(b => b.tier === 'T1')) ok(r.blocks.filter(b => b.tier === 'T3').length >= 2, `${lean}, energy ${6 - fatigue}: a bunch of T3s: ${names}`); // an urgent heavy goal may still take the slot
+      ok(r.minutesUsed <= 30 && r.minutesUsed >= 22, `fills the half hour: ${r.minutesUsed}`);
+    }
+  }
+  const sig = r => r.blocks.map(b => b.exerciseId).join();
+  const base = L.buildSuggestion(s, ci({ minutes: 45, fatigue: 3, lean: 'lower' }));
+  const sigs = new Set([sig(base)]);
+  for (let v = 1; v <= 4; v++) sigs.add(sig(L.buildSuggestion(s, { ...ci({ minutes: 45, fatigue: 3, lean: 'lower' }), variant: v })));
+  ok(sigs.size >= 2, 'regenerating gives different workouts');
+  const again = L.buildSuggestion(s, { ...ci({ minutes: 45, fatigue: 3, lean: 'lower' }), variant: 2 });
+  eq(sig(again), sig(L.buildSuggestion(s, { ...ci({ minutes: 45, fatigue: 3, lean: 'lower' }), variant: 2 })), 'same variant, same workout');
+  ok(again.minutesUsed >= 37 && again.minutesUsed <= 45, `regenerated workout still fills the time: ${again.minutesUsed}`);
+});
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
   const wk = L.weekBounds(s);

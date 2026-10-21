@@ -759,6 +759,7 @@ function viewSession(s) {
   }
   h += `<div class="actions">
     <button data-act="usePlan">Use a plan instead</button>
+    ${['suggested', 'swapped', 'focus'].includes(s.source) ? '<button data-act="regen">Regenerate</button>' : ''}
     <button data-act="recheck">New check-in</button>
     <button data-act="pause">Pause for later</button>
     <button class="primary" data-act="finish">Finish</button></div>`;
@@ -2144,6 +2145,34 @@ const actions = {
     }
     render(); window.scrollTo(0, 0);
     if (!res.blocks.length) toast('Nothing fits here. Try another location or more time.');
+  },
+
+  // Another take on the same check-in: unlogged blocks are rebuilt with the library picks rotated; logged work stays.
+  regen: () => {
+    const s = currentSession();
+    if (!s || !['suggested', 'swapped', 'focus'].includes(s.source)) return;
+    const keep = s.blocks.filter(b => state.sets.some(x => x.blockId === b.id && x.done));
+    state.sets = state.sets.filter(x => x.sessionId !== s.id || x.done);
+    s.blocks = keep;
+    for (const b of keep) if (b.pairOf && !keep.some(x => x.id === b.pairOf)) delete b.pairOf;
+    s.variant = (s.variant || 0) + 1;
+    s.source = s.focusRegion ? 'focus' : 'suggested';
+    const ci = { ...s, minutes: sessionBudget(s) };
+    const excludeFamilies = keep.map(b => exOf(b.exerciseId)?.familyId);
+    const res = s.focusRegion
+      ? L.buildFocus(state, ci, { region: s.focusRegion, explosive: !!s.focusExplosive }, Date.now(), { excludeFamilies, sessionBlocks: keep })
+      : L.buildSuggestion(state, ci, Date.now(), { excludeFamilies, sessionBlocks: keep });
+    s.blocks.push(...res.blocks);
+    L.pairT3s(state, s.blocks);
+    for (const b of res.blocks) genSets(s, b);
+    s.focusNotes = res.notes;
+    s.ready = res.ready;
+    if (res.scored) {
+      s.why = res.scored.map(c => ({ label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
+      s.goalMinutes = res.goalMinutes;
+    }
+    save(); render(); window.scrollTo(0, 0);
+    toast('New take on today');
   },
 
   startPlan: d => {

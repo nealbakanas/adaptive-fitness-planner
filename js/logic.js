@@ -469,7 +469,8 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
   for (const tier of BUILD_ORDER) {
     for (const c of scored.filter(x => x.slot.tier === tier)) {
       if (c.waits) { c.note = 'power work waits for a fresh day'; continue; }
-      if (count[tier] >= TIER_CAP[tier]) { c.note = `${tier} cap reached`; continue; }
+      // Wrecked (energy 1-2): one T2 at most, the rest of the time goes to T3s.
+      if (count[tier] >= (tier === 'T2' && energy(ci) <= 2.5 ? 1 : TIER_CAP[tier])) { c.note = `${tier} cap reached`; continue; }
       if (famUsed.has(c.slot.familyId)) { c.note = 'same family already in this session'; continue; }
       if (c.score < 0.25 * top) { c.note = 'score too low vs. top pick'; continue; }
       // A tier the chosen intent pushes down must be nearly as urgent as the top pick, otherwise
@@ -701,6 +702,7 @@ export function bodyRegion(state, e) {
 function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken = []) {
   const loc = byId(state.locations, ci.locationId);
   const famUsed = new Set(excludeFamilies);
+  const variant = ci.variant || 0; // Regenerate bumps this to rotate equal picks
   const pattern = e => movementPattern(state, e);
   // When each exercise and pattern was last trained (pattern: heavy or moderate work only; patLastT1: heavy only).
   const exLast = new Map(), patLast = new Map(), patLastT1 = new Map();
@@ -774,8 +776,12 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
       else if (needMax || (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null))) c = c.filter(e => estimatedMax(state, e.id) != null);
       const t1Goal = e => tier === 'T2' && t1Lifts.has(e.id);
       const chosen = e => tier === 'T2' && t2Chosen.has(e.id);
-      return c.sort((a, b) => t1Goal(a) - t1Goal(b) || chosen(b) - chosen(a) || goalFamilies.has(b.familyId) - goalFamilies.has(a.familyId) || lately(b) - lately(a)
-        || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null) || isDefault(b) - isDefault(a) || a.rank - b.rank)[0] ?? null;
+      const lead = (a, b) => t1Goal(a) - t1Goal(b) || chosen(b) - chosen(a) || goalFamilies.has(b.familyId) - goalFamilies.has(a.familyId);
+      c.sort((a, b) => lead(a, b) || lately(b) - lately(a)
+        || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null) || isDefault(b) - isDefault(a) || a.rank - b.rank);
+      // Regenerate: rotate among the lifts that rank equally on what you chose, so the goals' lifts stay the core.
+      const tied = c.filter(x => lead(x, c[0]) === 0);
+      return c.length ? tied[variant % Math.min(tied.length, 3)] : null;
     },
     // A lift from the patterns given that don't have a strength lift in the workout yet, trained heavy least recently.
     // For a T1 lift, "heavy" means T1: T2 work in a pattern doesn't make it look recently trained.
@@ -799,7 +805,8 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
         && !(x.equipment || []).some(q => q === 'rack' || q === 'dip-belt' || (q === 'barbell' && role(x) !== 'accessory')));
       const of = q => base.filter(x => pattern(x) === q);
       const c = p === 'back' ? (of('hinge').some(x => LOWER_BACK.test(x.name)) ? of('hinge').filter(x => LOWER_BACK.test(x.name)) : of('hinge')) : of(p);
-      return c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank)[0] ?? null;
+      c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank);
+      return c.length ? c[(variant * 2 + k.blocks.length) % (variant ? Math.min(c.length, 3) : 1)] : null; // regenerate: one of the top three
     },
     // Go round the rotation until the time is used (or nothing else fits), at each of `levels` in turn (see accessory).
     // `limit` caps how many this call adds; returns how many it added.
@@ -938,7 +945,7 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
   // Fresh days (energy 4-5, not Easy) get more T2 strength work: 3 lifts from 45 minutes, 4 from 75. Otherwise 2.
   // Goal ones count; jumps and cleans are power work and don't. Each from a pattern with no strength lift yet.
   const fresh = energy(ci) >= 3.5 && ci.intent !== 'easy';
-  const t2Target = ci.intent === 'easy' ? 0 : !fresh ? 2 : ci.minutes >= 75 ? 4 : ci.minutes >= 45 ? 3 : 2;
+  const t2Target = ci.intent === 'easy' ? 0 : energy(ci) <= 2.5 ? 1 : !fresh ? 2 : ci.minutes >= 75 ? 4 : ci.minutes >= 45 ? 3 : 2;
   while (k.budget >= 15 && strengthIn('T2') < t2Target && pick('T2', 'to fill the time'));
   const all = () => [...blocks, ...k.blocks];
   const room = maxBlocks(ci.minutes) - blocks.length;
