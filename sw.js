@@ -1,6 +1,6 @@
 // Offline support and rest-timer notifications.
 
-const CACHE = 'afp-v4';
+const CACHE = 'afp-v5';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json',
   'js/app.js', 'js/logic.js', 'js/store.js', 'js/seed.js', 'js/fitnotes.js', 'js/goals.js', 'js/mobility.js', 'js/programs.js', 'js/library.js', 'js/onboard.js',

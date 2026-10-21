@@ -25,7 +25,7 @@ function familyStats(state, now, days) {
     const day = L.dayKey(s.loggedAt);
     workouts.add(day);
     if (!byFam.has(ex.familyId)) {
-      byFam.set(ex.familyId, { days: new Set(), explosive: new Set(), loaded: new Set(), tiers: { T1: new Set(), T2: new Set(), T3: new Set(), TECH: new Set() }, reps: new Map(), uses: new Map() });
+      byFam.set(ex.familyId, { days: new Set(), explosive: new Set(), loaded: new Set(), tiers: { T1: new Set(), T2: new Set(), T3: new Set(), TECH: new Set(), JUMP: new Set() }, reps: new Map(), uses: new Map() });
     }
     const f = byFam.get(ex.familyId);
     f.days.add(day);
@@ -115,7 +115,8 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
     } else if (explosive) {
       // About 12 contacts is a solid power dose (4×3); more than that and the reps stop being fast.
       const repMin = Math.min(12, Math.max(6, Math.round(L.median([...f.reps.values()]))));
-      rows.push({ ...base, kind: 'power', tier: 'T2', quota: quotaOf(n), priority: base.region === 'upper' ? 2 : 3, repMin, repMax: Math.max(repMin, 20),
+      // Jumps are their own category (JUMP); other explosive moves (throws) are T2 power work.
+      rows.push({ ...base, kind: 'power', tier: L.isJump(top) ? 'JUMP' : 'T2', quota: quotaOf(n), priority: base.region === 'upper' ? 2 : 3, repMin, repMax: Math.max(repMin, 20),
         reason: `Explosive work in ${where}: about ${repMin} reps a session.` });
     } else if (isPress) {
       rows.push({ ...base, kind: 'press', tier: 'T2', quota: 1, priority: 1,

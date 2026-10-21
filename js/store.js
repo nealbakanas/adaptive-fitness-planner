@@ -1,8 +1,8 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
-import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT } from './seed.js';
+import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES } from './seed.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
-import { guessRegion, guessExplosive, guessRole } from './logic.js';
+import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
 
 // Test pages set their own key so they never touch real data.
 const KEY = globalThis.AFP_STORAGE_KEY ?? 'afp.v1';
@@ -253,6 +253,22 @@ export function migrate(s) {
     const basement = s.locations.find(l => l.id === 'loc-basement');
     if (basement && EQUIPMENT.every(eq => basement.equipment.includes(eq))) basement.equipment = basement.equipment.filter(eq => !NOT_IN_BASEMENT.includes(eq));
     s.version = 17;
+  }
+  if (s.version < 18) {
+    // v18: jumps are their own category (the JUMP tier, in contacts), out of T2. T2 jump goals (naming a jump, or for a family
+    // that is all jumps), and logged sets, workout blocks and plan items with jumps at T2 move to it. Goals keep their reps
+    // and slot, so this week's credit is unchanged; blocks and plan items keep their scheme (and an open block its sets).
+    s.tiers.JUMP ??= { ...JUMP_TIER };
+    for (const sc of JUMP_SCHEMES) if (!s.schemes.some(x => x.id === sc.id)) s.schemes.push({ ...sc, tiers: [...sc.tiers] });
+    const jump = id => isJump(s.exercises.find(e => e.id === id));
+    const allJumps = fid => { const m = s.exercises.filter(e => e.familyId === fid && !e.archived); return m.length > 0 && m.every(e => isJump(e)); };
+    for (const sl of s.slots) {
+      if (sl.tier === 'T2' && (sl.exerciseId ? jump(sl.exerciseId) : sl.familyId === 'fam-jumps' || allJumps(sl.familyId))) sl.tier = 'JUMP';
+    }
+    for (const x of s.sets) if (x.tier === 'T2' && jump(x.exerciseId)) x.tier = 'JUMP';
+    for (const ss of s.sessions) for (const b of ss.blocks || []) if (b.tier === 'T2' && jump(b.exerciseId)) b.tier = 'JUMP';
+    for (const p of s.plans || []) for (const it of p.items || []) if (it.tier === 'T2' && jump(it.exerciseId)) it.tier = 'JUMP';
+    s.version = 18;
   }
   return s;
 }

@@ -24,7 +24,7 @@ export function startDraft(state, now = Date.now()) {
   for (const sl of state.slots) {
     const e = L.byId(state.exercises, goalLift(state, sl));
     if (sl.tier === 'T1' && e && roleOf(e) === 'main') t1[e.id] = sl.quota;
-    else if (sl.tier === 'T2' && POWER_FAMILIES.includes(sl.familyId)) power[sl.familyId] = sl.quota;
+    else if ((sl.tier === 'T2' || sl.tier === 'JUMP') && POWER_FAMILIES.includes(sl.familyId)) power[sl.familyId] = sl.quota;
     else if (sl.tier === 'T2' && e && roleOf(e) === 'main') t2[e.id] = sl.quota;
     else if (sl.tier === 'T3' && PUMP_FAMILIES.includes(sl.familyId)) pump[sl.familyId] = sl.quota;
   }
@@ -70,7 +70,7 @@ export function buildSlots(state, draft) {
   for (const [id, quota] of Object.entries(draft.t1)) if (ex(id)) add({ familyId: ex(id).familyId, exerciseId: id, tier: 'T1', quota, priority: 3 });
   for (const [id, quota] of Object.entries(draft.t2)) if (ex(id)) add({ familyId: ex(id).familyId, exerciseId: id, tier: 'T2', quota, priority: 2 });
   for (const [fid, quota] of Object.entries(draft.power)) {
-    add({ familyId: fid, tier: 'T2', quota, priority: 2, ...(fid === 'fam-jumps' ? { repMin: 12, repMax: 20 } : {}) });
+    add({ familyId: fid, tier: fid === 'fam-jumps' ? 'JUMP' : 'T2', quota, priority: 2, ...(fid === 'fam-jumps' ? { repMin: 12, repMax: 20 } : {}) });
     if (OLYMPIC.includes(fid)) add({ familyId: fid, tier: 'TECH', quota: 1, priority: 1 });
   }
   for (const [fid, quota] of Object.entries(draft.pump)) add({ familyId: fid, tier: 'T3', quota, priority: 1 });

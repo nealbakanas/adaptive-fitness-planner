@@ -355,6 +355,7 @@ button.quiet { color: var(--muted); }
 
 /* ---------- technique tier and readiness ---------- */
 .tier.TECH { background: #e9c46a; }
+.tier.JUMP { background: #8ecae6; color: #102a35; }
 .sub.ready { color: var(--warn); margin-top: 2px; }
 .sub.ready.good { color: var(--good); }
 
@@ -448,3 +449,7 @@ label.btn.fnpick { width: 100%; min-height: 56px; font-size: 18px; margin-top: 1
 
 /* Onboarding hides the tab bar */
 nav[hidden] { display: none !important; }
+
+.mixer { margin: 12px 0; }
+.mixer summary { cursor: pointer; font-weight: 600; }
+.mixrow { display: flex; justify-content: space-between; align-items: center; }
