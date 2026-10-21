@@ -1,8 +1,8 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
-import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT } from './seed.js';
+import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES } from './seed.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
-import { guessRegion, guessExplosive, guessRole } from './logic.js';
+import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
 
 // Test pages set their own key so they never touch real data.
 const KEY = globalThis.AFP_STORAGE_KEY ?? 'afp.v1';
@@ -253,6 +253,28 @@ export function migrate(s) {
     const basement = s.locations.find(l => l.id === 'loc-basement');
     if (basement && EQUIPMENT.every(eq => basement.equipment.includes(eq))) basement.equipment = basement.equipment.filter(eq => !NOT_IN_BASEMENT.includes(eq));
     s.version = 17;
+  }
+  if (s.version < 18) {
+    // v18: jumps are their own category (the JUMP tier, in contacts), out of T2. T2 jump goals, and logged sets, workout
+    // blocks and plan items with jumps at T2, move to it; goals keep their reps, so this week's credit is unchanged.
+    s.tiers.JUMP ??= { ...JUMP_TIER };
+    for (const sc of JUMP_SCHEMES) if (!s.schemes.some(x => x.id === sc.id)) s.schemes.push({ ...sc, tiers: [...sc.tiers] });
+    const jump = id => isJump(s.exercises.find(e => e.id === id));
+    for (const sl of s.slots) {
+      const named = sl.exerciseId ? jump(sl.exerciseId) : sl.familyId === 'fam-jumps';
+      if (sl.tier === 'T2' && named) sl.tier = 'JUMP';
+    }
+    for (const x of s.sets) if (x.tier === 'T2' && jump(x.exerciseId)) x.tier = 'JUMP';
+    for (const ss of s.sessions) for (const b of ss.blocks || []) {
+      if (b.tier !== 'T2' || !jump(b.exerciseId)) continue;
+      b.tier = 'JUMP';
+      // An open or paused block keeps working: a jump scheme in place of its T2 one. Finished ones keep what you did.
+      if (ss.status !== 'done' && !s.schemes.find(x => x.id === b.schemeId)?.tiers.includes('JUMP')) b.schemeId = 's-j-4x3';
+    }
+    for (const p of s.plans || []) for (const it of p.items || []) {
+      if (it.tier === 'T2' && jump(it.exerciseId)) { it.tier = 'JUMP'; if (!s.schemes.find(x => x.id === it.schemeId)?.tiers.includes('JUMP')) it.schemeId = 's-j-4x3'; }
+    }
+    s.version = 18;
   }
   return s;
 }

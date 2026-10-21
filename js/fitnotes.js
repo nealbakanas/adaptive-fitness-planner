@@ -270,7 +270,7 @@ const totalOf = (ex, c, bodyweight) => ex.bodyweight ? bodyweight + (c.load ?? 0
 // GZCL guess: sets of 1-3 at 85%+ of the lift's recent best are T1, sets up to 8 at 65%+ are T2, the rest T3.
 // Jumps and sprints count as power work (T2); other unweighted work as T3.
 function guessTier(ex, c, ref, bodyweight) {
-  if (ex.metric !== 'load_reps') return ex.explosive ? 'T2' : 'T3';
+  if (ex.metric !== 'load_reps') return L.isJump(ex) ? 'JUMP' : ex.explosive ? 'T2' : 'T3';
   const total = totalOf(ex, c, bodyweight);
   if (total == null || !ref) return 'T3';
   const pct = total / ref;

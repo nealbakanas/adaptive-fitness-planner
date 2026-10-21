@@ -36,7 +36,7 @@ function defaultCheckin() {
   return {
     locationId: last?.locationId ?? state.locations[0]?.id,
     minutes: last?.minutes ?? 45,
-    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false,
+    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false,
   };
 }
 
@@ -706,6 +706,7 @@ function viewCheckin() {
     <div class="field"><label>Sleep <span class="hint">optional · 1 poor · 5 great · tap again to clear</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
     <div class="field"><label>Intent</label>${seg('intent', INTENTS, ci.intent)}</div>
     <div class="field"><label>Lean <span class="hint">which half feels up for it today</span></label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
+    <label class="toggle"><input type="checkbox" data-ci-jumps ${ci.jumps ? 'checked' : ''}> Add jumps <span class="hint">one jumps block, toward your jumps goal</span></label>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
     <details class="mixer" ${ui.mixOpen ? 'open' : ''} data-mix><summary>Or choose the mix <span class="hint">how many T1, T2 and T3 blocks · uses your goals first</span></summary>
@@ -775,7 +776,7 @@ function pairIdeas(s, ordered, credit) {
   const out = new Map();
   const used = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
   for (const b of ordered) {
-    if (!['T1', 'T2', 'TECH'].includes(b.tier) || b.noPair || inPair(s, b) || !blockSets(b).some(x => !x.done)) continue;
+    if (!['T1', 'T2', 'TECH', 'JUMP'].includes(b.tier) || b.noPair || inPair(s, b) || !blockSets(b).some(x => !x.done)) continue;
     const ex = exOf(b.exerciseId);
     const idea = ex && L.suggestPair(state, s, ex, { excludeFamilies: used, credit });
     if (!idea) continue;
@@ -805,7 +806,7 @@ function viewBlock(s, b, credit, idea = null) {
     const r = credit.slots.get(slot.id);
     const agg = r?.days.get(L.dayKey()) || { reps: 0, sets: 0 };
     const need = L.slotDose(state, slot, b.tier).repMin;
-    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : 'qualifying reps'}`;
+    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : 'qualifying reps'}`;
     dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? '✓ Filled' : 'Toward'} ${esc(slotLabel(slot))}: ${prog}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
@@ -1039,7 +1040,7 @@ function weekBudgetCard() {
   const b = G.weekBudget(state);
   const src = k => b.fromHistory[k] ? 'from your last 4 weeks' : state.settings.week?.[k] ? 'you set this' : 'a starting guess';
   const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
-  const rows = [['T1', 'Heavy'], ['T2', 'Moderate'], ['T3', 'Accessory'], ['TECH', 'Technique']].filter(([t]) => t !== 'TECH' || b.count.TECH)
+  const rows = [['T1', 'Heavy'], ['T2', 'Moderate'], ['T3', 'Accessory'], ['TECH', 'Technique'], ['JUMP', 'Jumps']].filter(([t]) => (t !== 'TECH' && t !== 'JUMP') || b.count[t])
     .map(([t, label]) => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${label}</span>
       <span class="meta">~${round(b.cost[t])} min each${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
   const verdict = b.room >= 0
@@ -1396,6 +1397,7 @@ function settingsTiers() {
     T2: 'Sets of 5–8 on supporting lifts, or 10 × 2–3 on a minute\'s rest for power work and tired days (GZCL: 65–85%, 20–30 reps)',
     T3: 'Accessory work, 10+ reps a set (GZCL: 30+ reps total)',
     TECH: 'Technique: quality explosive reps when tired or after a heavy day',
+    JUMP: 'Jumps and plyometrics, counted in contacts. Only in a workout when you turn on Add jumps at check-in',
   };
   return `<p class="meta pad">A session fills a goal when its counted sets reach the minimum reps for that tier. For T1 and T2, only sets at or above the minimum intensity count.</p>` +
     L.TIERS.map(t => {
@@ -1403,7 +1405,8 @@ function settingsTiers() {
       return `<div class="label"><span class="tier ${t}">${t}</span> ${desc[t]}</div><div class="menu">
         ${frow('Minimum reps', numIn(`tiers.${t}.repMin`, c.repMin), 'Working reps needed to count')}
         ${frow('Maximum reps', numIn(`tiers.${t}.repMax`, c.repMax), 'Upper end when picking schemes')}
-        ${t === 'T3' ? frow('Or minimum sets', numIn('tiers.T3.setMin', c.setMin), 'For time or bodyweight work')
+        ${t === 'JUMP' ? ''
+          : t === 'T3' ? frow('Or minimum sets', numIn('tiers.T3.setMin', c.setMin), 'For time or bodyweight work')
           : t === 'TECH' ? frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max. Any load still counts.') + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))
           : frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max') + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))}
       </div>`;
@@ -1638,6 +1641,7 @@ const TIER_DESC = {
   T2: 'Moderate: sets of 5–8 at 65–85%, 20–30 reps total. Power work and tired days: 10 × 2–3 on a minute\'s rest.',
   T3: 'Accessory: 10+ reps a set, 30+ total. Any load counts.',
   TECH: 'Technique: crisp, low-volume explosive work when tired or after heavy days. Has its own goal.',
+  JUMP: 'Jumps: plyometrics in short, fast sets, counted in contacts. Suggested only when you turn on Add jumps.',
 };
 
 // Pick any exercise, from any family: mode 'add' adds a block, mode 'swap' replaces one.
@@ -2171,6 +2175,7 @@ const actions = {
     const s = currentSession();
     if (!s || !['suggested', 'swapped', 'focus'].includes(s.source)) return;
     const keep = s.blocks.filter(b => state.sets.some(x => x.blockId === b.id && x.done));
+    const before = s.blocks.filter(b => !keep.includes(b)).map(b => b.exerciseId).join();
     state.sets = state.sets.filter(x => x.sessionId !== s.id || x.done);
     s.blocks = keep;
     for (const b of keep) if (b.pairOf && !keep.some(x => x.id === b.pairOf)) delete b.pairOf;
@@ -2192,7 +2197,8 @@ const actions = {
       s.goalMinutes = res.goalMinutes;
     }
     save(); render(); window.scrollTo(0, 0);
-    toast('New take on today');
+    // Your goals' lifts stay put, so a workout of only those can come back the same.
+    toast(res.blocks.map(b => b.exerciseId).join() === before ? 'Same again: your goals fill this one. Swap an exercise, or choose the mix.' : 'New take on today');
   },
 
   startPlan: d => {
@@ -3171,6 +3177,8 @@ document.addEventListener('change', e => {
     renderSheet();
   } else if (el.hasAttribute('data-ci-split')) {
     ui.ci.split = el.checked;
+  } else if (el.hasAttribute('data-ci-jumps')) {
+    ui.ci.jumps = el.checked;
   } else if (el.hasAttribute('data-import')) {
     importFile(el.files[0]);
   } else if (el.hasAttribute('data-fnfile')) {

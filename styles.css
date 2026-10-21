@@ -355,6 +355,7 @@ button.quiet { color: var(--muted); }
 
 /* ---------- technique tier and readiness ---------- */
 .tier.TECH { background: #e9c46a; }
+.tier.JUMP { background: #8ecae6; color: #102a35; }
 .sub.ready { color: var(--warn); margin-top: 2px; }
 .sub.ready.good { color: var(--good); }
 

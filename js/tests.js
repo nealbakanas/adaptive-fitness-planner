@@ -80,9 +80,9 @@ test('scheme for explosive jumps: short sets, no more contacts than the goal all
   const dose = L.slotDose(s, s.slots.find(x => x.id === 'sl-t2-jumps'));
   eq([dose.repMin, dose.repMax], [12, 20]);
   for (const fatigue of [1, 3, 5]) {
-    const sc = L.pickScheme(s, 'T2', ex, 30, ci({ fatigue }), dose);
+    const sc = L.pickScheme(s, 'JUMP', ex, 30, ci({ fatigue }), dose);
     ok(sc && sc.reps <= 3, `fatigue ${fatigue}: got ${sc?.name}`);
-    ok(L.doseFit(s, 'T2', sc, dose), `fatigue ${fatigue}: ${sc.name} fits 12-20 jumps`);
+    ok(L.doseFit(s, 'JUMP', sc, dose), `fatigue ${fatigue}: ${sc.name} fits 12-20 jumps`);
   }
 });
 test('non-explosive lifts still get more volume on a high-energy day', () => {
@@ -94,9 +94,9 @@ test('non-explosive lifts still get more volume on a high-energy day', () => {
 // ---------- crediting ----------
 test('jump reps fill the jumps goal at its own minimum', () => {
   const s = seed();
-  done(s, 'ex-broad-jump', 'T2', 3, 3);              // 9 reps: not enough
+  done(s, 'ex-broad-jump', 'JUMP', 3, 3);            // 9 contacts: not enough
   eq(L.creditWeek(s).slots.get('sl-t2-jumps').filled, 0);
-  done(s, 'ex-broad-jump', 'T2', 3, 1);              // 12 reps
+  done(s, 'ex-broad-jump', 'JUMP', 3, 1);            // 12 contacts
   eq(L.creditWeek(s).slots.get('sl-t2-jumps').filled, 1);
 });
 test('technique sets fill only the technique goal, any load', () => {
@@ -139,7 +139,7 @@ test('explosive T1 work does not count as heavy: jumps and cleans stay fresh the
   done(s, 'ex-power-clean', 'T1', 2, 6, 1, 225);
   ok(L.powerReadiness(s, ci(), s.exercises.find(e => e.id === 'ex-broad-jump')).fresh, 'jumps fresh');
   ok(L.powerReadiness(s, ci(), s.exercises.find(e => e.id === 'ex-power-clean')).fresh, 'cleans fresh');
-  ok(L.buildSuggestion(s, ci()).blocks.some(b => b.exerciseId === 'ex-broad-jump'), 'jumps still suggested');
+  ok(L.buildSuggestion(s, ci({ jumps: true })).blocks.some(b => b.exerciseId === 'ex-broad-jump' && b.tier === 'JUMP'), 'jumps still suggested when asked for');
 });
 test('heavy work two days ago does not count', () => {
   const s = seed();
@@ -177,12 +177,12 @@ test('tired day: no explosive power blocks, technique instead', () => {
   ok(!r.blocks.some(b => (b.tier === 'T1' || b.tier === 'T2') && ex(b.exerciseId).explosive), 'no explosive power block');
   ok(r.ready.tired);
 });
-test('after heavy squats: lower jumps become technique-only, upper work is unaffected', () => {
+test('after heavy squats: cleans become technique-only; jumps are your call (Add jumps)', () => {
   const s = seed();
   done(s, 'ex-back-squat', 'T1', 3, 5, 1, 315);
   const scored = L.scoreSlots(s, ci());
-  const jumps = scored.find(x => x.slot.id === 'sl-t2-jumps');
-  ok(jumps.why.some(w => w.includes('not fresh')), 'jump goal flagged not fresh');
+  ok(!scored.find(x => x.slot.id === 'sl-t2-jumps').waits, 'jumps are not power work that waits');
+  ok(scored.find(x => x.slot.id === 'sl-t2-clean').waits, 'the clean goal waits');
   const tech = scored.find(x => x.slot.id === 'sl-tq-clean');
   ok(tech.why.some(w => w.includes('technique day')), 'technique goal boosted');
 });
@@ -211,7 +211,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 17);
+  eq(m.version, 18);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -230,7 +230,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 17);
+  eq(m.version, 18);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -330,7 +330,7 @@ test('FitNotes import: converts sets, guesses tiers, and a second import adds no
   eq(sets(clean.id).filter(x => x.load === 225).every(x => x.tier === 'T1'), true, 'heavy doubles are T1');
   eq(sets(clean.id).filter(x => x.load === 135).every(x => x.tier === 'T3'), true, 'the light day is T3');
   eq(Math.round(L.estimatedMax(s, clean.id)), 240, 'light day does not drag the max');
-  ok(sets(s.exercises.find(e => e.name === 'Seated Broad Jump').id).every(x => x.tier === 'T2'), 'jumps are power work');
+  ok(sets(s.exercises.find(e => e.name === 'Seated Broad Jump').id).every(x => x.tier === 'JUMP'), 'jumps are their own category');
   eq(s.exercises.find(e => e.id === 'ex-pistol').metric, 'load_reps');
   ok(s.sessions.filter(x => x.source === 'imported').every(x => x.status === 'done' && !x.firstSetAt), 'imported sessions stay out of check-in stats');
   const m = sum.maxes.find(x => x.name === 'Block Power Clean');
@@ -376,7 +376,7 @@ test('FitNotes import: imported sets this week count toward goals', () => {
   FN.applyImport(s, data, fnPlan(s, data), { bodyweight: 235 });
   const wk = L.weekBounds(s);
   const thisWeek = s.sets.filter(x => x.src === 'fitnotes' && x.loggedAt >= wk.start && x.loggedAt < wk.end);
-  ok(thisWeek.every(x => ['T1', 'T2', 'T3'].includes(x.tier)), 'every imported set has a tier');
+  ok(thisWeek.every(x => ['T1', 'T2', 'T3', 'JUMP'].includes(x.tier)), 'every imported set has a tier');
 });
 
 // ---------- suggested goals ----------
@@ -387,7 +387,7 @@ const history = (extras = []) => {
   for (let w = 0; w < 12; w++) {
     const [a, b, c] = [7 * w + 5, 7 * w + 3, 7 * w + 1];
     done(s, 'ex-power-clean', 'T1', 2, 6, a, 225, `pc${a}`);
-    done(s, 'ex-broad-jump', 'T2', 3, 4, a, null, `bj${a}`);
+    done(s, 'ex-broad-jump', 'JUMP', 3, 4, a, null, `bj${a}`);
     done(s, 'ex-back-squat', 'T1', 3, 5, a, 315, `sq${a}`);
     done(s, 'ex-wpullup', 'T2', 6, 4, b, 45, `pu${b}`);
     done(s, 'ex-wdip', 'T1', 3, 5, b, 90, `dp${b}`);
@@ -408,7 +408,7 @@ test('suggested goals: explosive first, GZCL tiers, about one heavy lift per wor
   eq([clean.kind, clean.quota, clean.priority], ['power-lift', 2, 3], 'cleans: heavy power, twice a week, high priority');
   eq(g.rows[0], clean, 'listed first');
   eq(row('Clean variations', 'TECH')?.quota, 1, 'a technique goal for tired days');
-  const jumps = row('Jumps', 'T2');
+  const jumps = row('Jumps', 'JUMP');
   eq([jumps.kind, jumps.priority, jumps.repMin, jumps.repMax], ['power', 3, 12, 20], 'jumps');
   eq(row('Squat pattern', 'T1')?.kind, 'strength', 'squats keep T1 (lower body first)');
   const dip = row('Dip', 'T2');
@@ -471,7 +471,7 @@ test('timed and distance sets count toward a goal, one per set', () => {
   const s = seed();
   s.exercises.push({ id: 'sprint', name: 'Sprints', familyId: 'fam-jumps', rank: 9, metric: 'distance', equipment: [], explosive: true, region: 'lower' });
   s.slots.find(x => x.id === 'sl-t2-jumps').repMin = 6;
-  for (let i = 0; i < 6; i++) s.sets.push({ id: `sp${i}`, sessionId: 'x', blockId: 'b', exerciseId: 'sprint', tier: 'T2', distance: 30, reps: null, done: true, loggedAt: NOON(0) + i });
+  for (let i = 0; i < 6; i++) s.sets.push({ id: `sp${i}`, sessionId: 'x', blockId: 'b', exerciseId: 'sprint', tier: 'JUMP', distance: 30, reps: null, done: true, loggedAt: NOON(0) + i });
   eq(L.creditWeek(s).slots.get('sl-t2-jumps').filled, 1);
 });
 
@@ -502,7 +502,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 17);
+  eq(m.version, 18);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -664,7 +664,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 17);
+  eq(m.version, 18);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -691,7 +691,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 17);
+  eq(m.version, 18);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -730,10 +730,10 @@ test('focused workouts: upper and lower from the whole library, explosive first 
   const names = res => res.blocks.map(b => `${b.tier} ${s.exercises.find(e => e.id === b.exerciseId).name}`);
   const region = id => s.exercises.find(e => e.id === id).region;
   const pat = id => L.movementPattern(s, s.exercises.find(e => e.id === id));
-  const lower = L.buildFocus(s, ci({ minutes: 60 }), { region: 'lower', explosive: true });
+  const lower = L.buildFocus(s, ci({ minutes: 60, jumps: true }), { region: 'lower', explosive: true });
   ok(lower.blocks.length >= 4, names(lower).join(', '));
   const first = s.exercises.find(e => e.id === lower.blocks[0].exerciseId);
-  ok(first.explosive && first.region === 'lower' && lower.blocks[0].tier === 'T2', `explosive first: ${names(lower)}`);
+  ok(first.explosive && first.region === 'lower' && lower.blocks[0].tier === 'JUMP', `jumps first when asked for: ${names(lower)}`);
   ok(lower.blocks.some(b => b.tier === 'T1'), 'a heavy main lift');
   ok(lower.blocks.every(b => ['lower', 'full'].includes(region(b.exerciseId)) || pat(b.exerciseId) === 'core'), `lower only: ${names(lower)}`);
   ok(lower.blocks.some(b => b.tier === 'T3') && lower.blocks.filter(b => b.tier === 'T3').every(b => b.pairOf || lower.blocks.some(x => x.pairOf === b.id)), 'T3s grouped');
@@ -1010,8 +1010,8 @@ test('the week budget: minutes your goals take, room for more T2/T3, from your s
   const s = seed();
   const b = G.weekBudget(s);
   eq([b.workouts, b.minutes, b.total], [3, 45, 135], 'a starting guess with no history');
-  eq(b.count, { T1: 2, T2: 6, T3: 6, TECH: 2 });
-  ok(Math.abs(b.used - (2 * b.cost.T1 + 6 * b.cost.T2 + 6 * b.cost.T3 + 2 * b.cost.TECH)) < 1e-9);
+  eq(b.count, { T1: 2, T2: 4, T3: 6, TECH: 2, JUMP: 2 });
+  ok(Math.abs(b.used - (2 * b.cost.T1 + 4 * b.cost.T2 + 6 * b.cost.T3 + 2 * b.cost.TECH + 2 * b.cost.JUMP)) < 1e-9);
   s.settings.week = { workouts: 5, minutes: 60 };
   const b2 = G.weekBudget(s);
   eq(b2.total, 300);
@@ -1051,13 +1051,13 @@ test('wrecked short day: at most one T2, the rest T3s; regenerate rotates the li
     }
   }
   const sig = r => r.blocks.map(b => b.exerciseId).join();
-  const base = L.buildSuggestion(s, ci({ minutes: 45, fatigue: 3, lean: 'lower' }));
+  const base = L.buildSuggestion(s, ci({ minutes: 75, fatigue: 3, lean: 'lower' }));
   const sigs = new Set([sig(base)]);
-  for (let v = 1; v <= 4; v++) sigs.add(sig(L.buildSuggestion(s, { ...ci({ minutes: 45, fatigue: 3, lean: 'lower' }), variant: v })));
+  for (let v = 1; v <= 4; v++) sigs.add(sig(L.buildSuggestion(s, { ...ci({ minutes: 75, fatigue: 3, lean: 'lower' }), variant: v })));
   ok(sigs.size >= 2, 'regenerating gives different workouts');
-  const again = L.buildSuggestion(s, { ...ci({ minutes: 45, fatigue: 3, lean: 'lower' }), variant: 2 });
-  eq(sig(again), sig(L.buildSuggestion(s, { ...ci({ minutes: 45, fatigue: 3, lean: 'lower' }), variant: 2 })), 'same variant, same workout');
-  ok(again.minutesUsed >= 37 && again.minutesUsed <= 45, `regenerated workout still fills the time: ${again.minutesUsed}`);
+  const again = L.buildSuggestion(s, { ...ci({ minutes: 75, fatigue: 3, lean: 'lower' }), variant: 2 });
+  eq(sig(again), sig(L.buildSuggestion(s, { ...ci({ minutes: 75, fatigue: 3, lean: 'lower' }), variant: 2 })), 'same variant, same workout');
+  ok(again.minutesUsed >= 67 && again.minutesUsed <= 75, `regenerated workout still fills the time: ${again.minutesUsed}`);
 });
 test('chosen mix: the T2/T3 counts you ask for, for the half you lean toward, within the time', () => {
   const s = seed();
@@ -1070,6 +1070,51 @@ test('chosen mix: the T2/T3 counts you ask for, for the half you lean toward, wi
   ok(r.minutesUsed <= 45, `within the time: ${r.minutesUsed}`);
   const tight = L.buildMix(s, { ...c, minutes: 20 }, { T1: 0, T2: 1, T3: 10 });
   ok(tight.minutesUsed <= 20 && tight.notes.some(x => /^Only/.test(x)), 'what does not fit is dropped and said so');
+});
+test('jumps are their own category: only with Add jumps, one block, never a T2, toward the jumps goal', () => {
+  const s = seed();
+  const ex = b => s.exercises.find(e => e.id === b.exerciseId);
+  for (const [minutes, fatigue, lean, intent] of [[30, 1, 'lower', 'auto'], [45, 3, 'either', 'easy'], [60, 5, 'upper', 'auto'], [90, 2, 'lower', 'heavy']]) {
+    const c = ci({ minutes, fatigue, lean, intent });
+    const label = `${minutes} min, energy ${6 - fatigue}, ${lean}, ${intent}`;
+    for (const r of [L.buildSuggestion(s, c), L.buildFocus(s, c, { region: 'lower', explosive: true }), L.buildMix(s, c, { T1: 0, T2: 1, T3: 4 })]) {
+      ok(!r.blocks.some(b => L.isJump(ex(b))), `${label}: no jumps unless asked: ${r.blocks.map(b => ex(b).name)}`);
+    }
+    for (const r of [L.buildSuggestion(s, { ...c, jumps: true }), L.buildFocus(s, { ...c, jumps: true }, { region: 'upper' }), L.buildMix(s, { ...c, jumps: true }, { T1: 0, T2: 1, T3: 4 })]) {
+      const j = r.blocks.filter(b => L.isJump(ex(b)));
+      ok(j.length === 1 && j[0].tier === 'JUMP' && j[0].slotId === 'sl-t2-jumps', `${label}: one JUMP block toward the goal: ${r.blocks.map(b => `${b.tier} ${ex(b).name}`)}`);
+      ok(r.minutesUsed <= minutes, `${label}: within the time`);
+      ok(s.schemes.find(x => x.id === j[0].schemeId).tiers.includes('JUMP'), 'a jump scheme');
+    }
+  }
+  // Goal met this week: jumps still come in when you ask for them.
+  for (let d = 0; d < 2; d++) s.sets.push(...Array.from({ length: 4 }, (_, i) => ({ id: `j${d}${i}`, sessionId: `j${d}`, blockId: `j${d}`, exerciseId: 'ex-broad-jump', tier: 'JUMP', reps: 4, done: true, loggedAt: L.weekBounds(s).start + d * DAY + i })));
+  eq(L.creditWeek(s).slots.get('sl-t2-jumps').filled, 2);
+  ok(L.buildSuggestion(s, ci({ minutes: 45, jumps: true })).blocks.some(b => b.tier === 'JUMP'), 'jumps when asked, goal or not');
+});
+test('v18: jumps move out of T2 into their own tier; goals keep their reps and this week keeps its credit', () => {
+  const s = seed();
+  s.version = 17;
+  delete s.tiers.JUMP;
+  s.schemes = s.schemes.filter(x => !x.tiers.includes('JUMP'));
+  const goal = s.slots.find(x => x.id === 'sl-t2-jumps');
+  goal.tier = 'T2';
+  done(s, 'ex-broad-jump', 'T2', 4, 3);
+  done(s, 'ex-power-clean', 'T2', 5, 3, 0, 155);
+  s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
+  s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
+  const m = migrate(s);
+  eq(m.version, 18);
+  ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
+  eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
+  ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
+  eq(L.creditWeek(m).slots.get('sl-t2-jumps').filled, 1, 'this week still counts');
+  const [bj, pc] = m.sessions.find(x => x.id === 'open1').blocks;
+  eq([bj.tier, pc.tier], ['JUMP', 'T2']);
+  ok(m.schemes.find(x => x.id === bj.schemeId).tiers.includes('JUMP'), 'open block gets a jump scheme');
+  eq(m.plans[0].items[0].tier, 'JUMP');
+  const again = migrate(structuredClone(m));
+  eq(again.schemes.length, m.schemes.length, 'idempotent');
 });
 test('Friday, every goal done: the hour still gets two complementary T2 lifts and T3 supersets', () => {
   const s = seed();
@@ -1128,10 +1173,12 @@ test('goals nearly done: suggestion is thin but a focused workout still fills th
   ok(extra.filter(b => b.tier === 'T2').every(b => L.bodyRegion(s, s.exercises.find(e => e.id === b.exerciseId)) === 'lower'), `T2: ${extra.map(b => name(b.exerciseId))}`);
   const firstT3s = low.notes.filter(n => /^T3/.test(n)).slice(0, 3).join(' | ');
   ok(!/pull|push|dip|curl|press/i.test(firstT3s), `lower accessories first: ${firstT3s}`);
-  // Easy day: still 1-2 T2s (jumps count), in shorter, lighter schemes, and the time is filled.
-  const easy = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'lower' }));
+  // Easy day: still 1-2 T2s, in shorter, lighter schemes, and the time is filled. With Add jumps: jumps and one T2.
+  const easy = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'lower', jumps: true }));
   const t2 = easy.blocks.filter(b => b.tier === 'T2');
-  ok(t2.length >= 1 && t2.length <= 2 && t2.some(b => s.exercises.find(e => e.id === b.exerciseId).explosive), `easy lower day: jumps and a T2: ${easy.blocks.map(b => b.tier + ' ' + name(b.exerciseId))}`);
+  ok(t2.length === 1 && easy.blocks.some(b => b.tier === 'JUMP'), `easy lower day: jumps and a T2: ${easy.blocks.map(b => b.tier + ' ' + name(b.exerciseId))}`);
+  const easyNoJumps = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'lower' })).blocks;
+  ok(!easyNoJumps.some(b => L.isJump(s.exercises.find(e => e.id === b.exerciseId))) && easyNoJumps.filter(b => b.tier === 'T2').length === 2, `no jumps unless asked: ${easyNoJumps.map(b => b.tier + ' ' + name(b.exerciseId))}`);
   ok(t2.every(b => { const sc = s.schemes.find(x => x.id === b.schemeId); return sc.minutes <= 10; }), 'lighter schemes');
   ok(easy.minutesUsed >= 40, `fills the time: ${easy.minutesUsed}`);
   const easyUp = L.buildSuggestion(s, ci({ minutes: 45, intent: 'easy', fatigue: 2, lean: 'upper' }));
@@ -1150,12 +1197,14 @@ test('lean: goals for the half you lean toward come first', () => {
   eq(t1('lower'), 'ex-back-squat');
   eq(t1('upper'), 'ex-wpullup');
 });
-test('explosive lower: jumps, one or two cleans, then lower back, leg and core accessories, filling the hour', () => {
+test('explosive lower: jumps (when asked for), one or two cleans, then lower back, leg and core accessories, filling the hour', () => {
   const s = seed();
   const ex = b => s.exercises.find(e => e.id === b.exerciseId);
-  const r = L.buildFocus(s, ci({ minutes: 60 }), { region: 'lower', explosive: true });
+  const r = L.buildFocus(s, ci({ minutes: 60, jumps: true }), { region: 'lower', explosive: true });
   const names = r.blocks.map(b => `${b.tier} ${ex(b).name}`).join(', ');
-  eq(ex(r.blocks[0]).familyId, 'fam-jumps', names);
+  eq([ex(r.blocks[0]).familyId, r.blocks[0].tier], ['fam-jumps', 'JUMP'], names);
+  const off = L.buildFocus(s, ci({ minutes: 60 }), { region: 'lower', explosive: true });
+  ok(!off.blocks.some(b => L.isJump(ex(b))) && ex(off.blocks[0]).familyId === 'fam-clean', 'no jumps unless asked: cleans lead');
   const cleans = r.blocks.filter(b => ex(b).familyId === 'fam-clean');
   ok(cleans.length >= 1 && cleans.length <= 2 && r.blocks.indexOf(cleans[0]) === 1, `cleans after the jumps: ${names}`);
   ok(cleans.every(b => s.schemes.find(x => x.id === b.schemeId).reps <= 3), 'cleans in sets of 1-3');
@@ -1205,7 +1254,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 17);
+  eq(m.version, 18);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');

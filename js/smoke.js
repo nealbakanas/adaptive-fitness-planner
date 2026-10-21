@@ -72,7 +72,11 @@ step('choose the mix, then regenerate it', () => {
   click('[data-k=lean][data-v=lower]');
   click('[data-act=mixStep][data-t=T3][data-d="1"]');
   click('[data-act=mixStep][data-t=T3][data-d="1"]');
+  const jumps = q('[data-ci-jumps]');
+  check('Add jumps is off by default', jumps && !jumps.checked);
+  jumps.checked = true; jumps.dispatchEvent(new Event('change', { bubbles: true }));
   click('[data-act=mixBuild]');
+  check('Add jumps gives one JUMP block', qa('section.block').filter(b => /^JUMP/.test(b.querySelector('.tier').innerText.trim())).length === 1);
   const tiers = () => qa('section.block').map(b => b.querySelector('.tier').innerText.trim());
   check('mix: one T2 and several T3s', tiers().filter(t => /^T2/.test(t)).length === 1 && tiers().filter(t => /^T3/.test(t)).length >= 4, tiers().join(','));
   const before = qa('section.block').map(b => b.querySelector('[data-act=swapEx]').innerText).join();
@@ -80,6 +84,8 @@ step('choose the mix, then regenerate it', () => {
   const after = qa('section.block').map(b => b.querySelector('[data-act=swapEx]').innerText).join();
   check('regenerate keeps the mix but changes picks', after !== before && tiers().filter(t => /^T2/.test(t)).length === 1, after);
   click('[data-act=recheck]');
+  const j2 = q('[data-ci-jumps]');
+  if (j2?.checked) { j2.checked = false; j2.dispatchEvent(new Event('change', { bubbles: true })); }
 });
 
 step('supersets, real rest, pause and resume, more time', () => {

@@ -45,6 +45,11 @@ export function gsExercise([id, name, familyId, metric, equipment, video, opts =
   return ex(id, name, familyId, rank, metric, [...equipment], { youtube: gsVideo(video), ...opts });
 }
 
+// Jumps (the JUMP tier): contacts per session, and short sets on about a minute's rest. Also added by the v18 upgrade.
+export const JUMP_TIER = { repMin: 12, repMax: 30, intMin: null, intMax: null };
+const jsc = (sets, reps, minutes) => ({ id: `s-j-${sets}x${reps}`, name: `${sets}×${reps}`, sets, reps, restSec: 60, minutes, tiers: ['JUMP'] });
+export const JUMP_SCHEMES = [jsc(4, 3, 5), jsc(5, 3, 6), jsc(6, 3, 7), jsc(3, 5, 5), jsc(4, 5, 6), jsc(5, 5, 7), jsc(3, 8, 6)];
+
 export function seed() {
   const families = [
     { id: 'fam-squat', name: 'Squat pattern', defaultExerciseId: 'ex-back-squat' },
@@ -176,6 +181,8 @@ export function seed() {
     // T2 in sets of 2-3 on a minute's rest: power work (cleans, snatches) and tired days. Last, so ties keep the older picks.
     sc('s-t2-10x2', 10, 2, 60, 12, ['T2']),
     sc('s-t2-10x3', 10, 3, 60, 13, ['T2']),
+    // Jumps, counted in contacts: short sets so every one is fast, on about a minute's rest.
+    ...JUMP_SCHEMES,
   ];
 
   const slots = [
@@ -187,8 +194,8 @@ export function seed() {
     { id: 'sl-t3-upperback', familyId: 'fam-upperback', tier: 'T3', quota: 2, priority: 1 },
     { id: 'sl-t3-arms', familyId: 'fam-arms', tier: 'T3', quota: 2, priority: 1 },
     { id: 'sl-t3-core', familyId: 'fam-core', tier: 'T3', quota: 2, priority: 1 },
-    // Power: jumps count by contacts (reps), so this goal needs fewer reps than a lifting T2.
-    { id: 'sl-t2-jumps', familyId: 'fam-jumps', tier: 'T2', quota: 2, priority: 2, repMin: 12, repMax: 20 },
+    // Jumps: their own category, counted in contacts. Only suggested on days you turn on Add jumps.
+    { id: 'sl-t2-jumps', familyId: 'fam-jumps', tier: 'JUMP', quota: 2, priority: 2, repMin: 12, repMax: 20 },
     // Technique: the same explosive lifts practiced when tired or after heavy work. Credits only this goal.
     { id: 'sl-tq-clean', familyId: 'fam-clean', tier: 'TECH', quota: 2, priority: 1 },
     // Hamstrings: deficit RDLs as moderate (T2) loaded work. Names the exercise so Nordics don't stand in for it.
@@ -196,7 +203,7 @@ export function seed() {
   ];
 
   return {
-    version: 17,
+    version: 18,
     settings: {
       weekStartDay: 1, // Monday
       bodyweight: null,
@@ -220,6 +227,8 @@ export function seed() {
       T3: { repMin: 30, repMax: 60, setMin: 3, intMin: null, intMax: null },
       // Technique: quality reps at a light-to-moderate load. The load range is a target, any load counts.
       TECH: { repMin: 8, repMax: 16, intMin: 0.5, intMax: 0.7 },
+      // Jumps: contacts per session. No load, so no intensity.
+      JUMP: JUMP_TIER,
     },
     equipment: [...ALL_EQUIPMENT], // grows as you add gear in the app
     families, exercises, schemes, slots,
