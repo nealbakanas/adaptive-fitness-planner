@@ -204,7 +204,7 @@ function slotIdFor(exerciseId, tier) {
 
 // Best scheme for an exercise added or re-tiered by hand: fits the time left if possible, never over its rep cap.
 function schemeForBlock(s, ex, tier, exceptBlock) {
-  const budget = sessionBudget(s, exceptBlock) - L.WARMUP[tier];
+  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.WARMUP[tier]; // jumps are warm-up time
   const dose = L.slotDose(state, L.slotFor(state, ex, tier), tier);
   return L.pickScheme(state, tier, ex, Math.max(budget, 0), s, dose)
     || L.pickScheme(state, tier, ex, Infinity, s, dose)
@@ -299,7 +299,7 @@ function planBlocks(plan) {
 
 function sessionBudget(s, exceptBlock) {
   return Math.round(s.minutes - s.blocks.filter(b => b !== exceptBlock)
-    .reduce((m, b) => m + ((schOf(b.schemeId)?.minutes || 0) + L.WARMUP[b.tier]) * (b.pairOf ? 0.5 : 1), 0));
+    .reduce((m, b) => m + L.blockMinutes(state, b), 0));
 }
 
 // Only real web links: a javascript: link in an imported or restored library would run code when tapped.
@@ -789,7 +789,7 @@ function pairIdeas(s, ordered, credit) {
   const out = new Map();
   const used = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
   for (const b of ordered) {
-    if (!['T1', 'T2', 'TECH', 'JUMP'].includes(b.tier) || b.noPair || inPair(s, b) || !blockSets(b).some(x => !x.done)) continue;
+    if (!['T1', 'T2', 'TECH'].includes(b.tier) || b.noPair || inPair(s, b) || !blockSets(b).some(x => !x.done)) continue;
     const ex = exOf(b.exerciseId);
     const idea = ex && L.suggestPair(state, s, ex, { excludeFamilies: used, credit });
     if (!idea) continue;
@@ -1055,7 +1055,7 @@ function weekBudgetCard() {
   const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
   const rows = [['T1', 'Heavy'], ['T2', 'Moderate'], ['T3', 'Accessory'], ['TECH', 'Technique'], ['JUMP', 'Jumps']].filter(([t]) => (t !== 'TECH' && t !== 'JUMP') || b.count[t])
     .map(([t, label]) => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${label}</span>
-      <span class="meta">~${round(b.cost[t])} min each${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
+      <span class="meta">${t === 'JUMP' ? 'in your warm-up, no workout time' : `~${round(b.cost[t])} min each`}${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
   const verdict = b.room >= 0
     ? `Your goals take about <b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes. Room for about <b>${b.addT2} more T2</b> or <b>${b.addT3} more T3</b> sessions a week (or a mix).`
     : `Your goals need about <b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> more than the ${round(b.total)} you train. Some will slip to next week: lower a quota or two, accessories first.`;
