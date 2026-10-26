@@ -61,19 +61,32 @@ const familiesWith = (state, draft, ids, ok) => ids.map(id => L.byId(state.famil
 export const powerChoices = (state, draft) => familiesWith(state, draft, POWER_FAMILIES, e => roleOf(e) === 'power');
 export const pumpChoices = (state, draft) => familiesWith(state, draft, PUMP_FAMILIES, e => roleOf(e) === 'accessory');
 
+// The picks of one kind (t1, t2, power, pump) that the setup offers with the draft's gear: { id: timesAWeek }.
+// A starter pick whose gear no location has (weighted dips without a dip station) isn't shown, so it can't be turned
+// off; it's left out until a location has the gear, and then it's back.
+export function picks(state, draft, kind) {
+  const ok = {
+    t1: id => { const e = L.byId(state.exercises, id); return !!e && usableHere(draft, e); },
+    power: id => powerChoices(state, draft).some(f => f.id === id),
+    pump: id => pumpChoices(state, draft).some(f => f.id === id),
+  };
+  ok.t2 = ok.t1;
+  return Object.fromEntries(Object.entries(draft[kind]).filter(([id]) => ok[kind](id)));
+}
+
 // The weekly goals the draft describes. Heavy and support lifts are named goals; power and accessories are family-wide.
 // An Olympic lift family also gets a technique goal for tired days, as Suggest from history does.
 export function buildSlots(state, draft) {
   const ex = id => L.byId(state.exercises, id);
   const slots = [];
   const add = (sl) => slots.push({ id: L.uid(), ...sl });
-  for (const [id, quota] of Object.entries(draft.t1)) if (ex(id)) add({ familyId: ex(id).familyId, exerciseId: id, tier: 'T1', quota, priority: 3 });
-  for (const [id, quota] of Object.entries(draft.t2)) if (ex(id)) add({ familyId: ex(id).familyId, exerciseId: id, tier: 'T2', quota, priority: 2 });
-  for (const [fid, quota] of Object.entries(draft.power)) {
+  for (const [id, quota] of Object.entries(picks(state, draft, 't1'))) add({ familyId: ex(id).familyId, exerciseId: id, tier: 'T1', quota, priority: 3 });
+  for (const [id, quota] of Object.entries(picks(state, draft, 't2'))) add({ familyId: ex(id).familyId, exerciseId: id, tier: 'T2', quota, priority: 2 });
+  for (const [fid, quota] of Object.entries(picks(state, draft, 'power'))) {
     add({ familyId: fid, tier: fid === 'fam-jumps' ? 'JUMP' : 'T2', quota, priority: 2, ...(fid === 'fam-jumps' ? { repMin: 12, repMax: 20 } : {}) });
     if (OLYMPIC.includes(fid)) add({ familyId: fid, tier: 'TECH', quota: 1, priority: 1 });
   }
-  for (const [fid, quota] of Object.entries(draft.pump)) add({ familyId: fid, tier: 'T3', quota, priority: 1 });
+  for (const [fid, quota] of Object.entries(picks(state, draft, 'pump'))) add({ familyId: fid, tier: 'T3', quota, priority: 1 });
   return slots;
 }
 
@@ -91,8 +104,10 @@ export function applyDraft(state, draft, now = Date.now()) {
   state.locations = draft.locations.map(l => ({ id: l.id, name: l.name.trim() || 'Gym', equipment: [...l.equipment] }));
   state.equipment = [...new Set([...state.equipment, ...state.locations.flatMap(l => l.equipment)])];
   state.slots = buildSlots(state, draft);
+  const lifts = new Set([...Object.keys(picks(state, draft, 't1')), ...Object.keys(picks(state, draft, 't2'))]);
   for (const [id, load] of Object.entries(draft.maxes)) {
     const e = L.byId(state.exercises, id);
+    if (!lifts.has(id)) continue; // a max for a lift you didn't end up picking
     if (!e || !(Number(load) > 0) || Number(load) === Number(e.testedMax?.load)) continue;
     e.testedMax = { load: Number(load), at: now };
   }

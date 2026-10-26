@@ -1017,16 +1017,16 @@ function viewOnboard(d) {
     const other = step === 'heavy' ? d.t2 : d.t1;
     const groups = O.strengthChoices(state, d);
     body = (step === 'heavy'
-      ? `<p class="meta">Pick 2–3 lifts to take heavy (sets of 1–3) and stick with for a few weeks. ${Object.keys(d.t1).length} picked.</p>`
+      ? `<p class="meta">Pick 2–3 lifts to take heavy (sets of 1–3) and stick with for a few weeks. ${Object.keys(O.picks(state, d, 't1')).length} picked.</p>`
       : `<p class="meta">Moderate lifts that complement your heavy ones (sets of 5–8). Pick any number; the review shows what fits.</p>`) +
       groups.map(([label, list]) => `<div class="label">${label}</div><div class="chips">${list.filter(e => !(e.id in other)).map(e => obChip(kind, e.id, e.name, e.id in d[kind])).join('')}</div>`).join('') +
       (step === 'support' ? `<div class="label">Power work (jumps, Olympic lifts)</div><div class="chips">${O.powerChoices(state, d).map(f => obChip('power', f.id, f.name, f.id in d.power)).join('')}</div>` : '') +
-      obPicked(kind, d[kind], exName) + (step === 'support' ? obPicked('power', d.power, famName) : '');
+      obPicked(kind, O.picks(state, d, kind), exName) + (step === 'support' ? obPicked('power', O.picks(state, d, 'power'), famName) : '');
   } else if (step === 'pump') {
     body = `<p class="meta">Accessory areas for pump and conditioning, done in supersets. The app picks the exercises and rotates them.</p>
-      <div class="chips">${O.pumpChoices(state, d).map(f => obChip('pump', f.id, f.name, f.id in d.pump)).join('')}</div>` + obPicked('pump', d.pump, famName);
+      <div class="chips">${O.pumpChoices(state, d).map(f => obChip('pump', f.id, f.name, f.id in d.pump)).join('')}</div>` + obPicked('pump', O.picks(state, d, 'pump'), famName);
   } else if (step === 'maxes') {
-    const ids = [...Object.keys(d.t1), ...Object.keys(d.t2)];
+    const ids = [...Object.keys(O.picks(state, d, 't1')), ...Object.keys(O.picks(state, d, 't2'))];
     body = ids.length
       ? `<p class="meta">Optional: a 1RM you've tested sets your heavy and moderate loads (${d.unit}). Leave blank and the app learns from your sets.</p>
         <div class="menu">${ids.map(id => frow(`${esc(exName(id))}${exOf(id)?.bodyweight ? ' <span class="hint">added load</span>' : ''}`,
