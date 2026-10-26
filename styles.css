@@ -453,3 +453,8 @@ nav[hidden] { display: none !important; }
 .mixer { margin: 12px 0; }
 .mixer summary { cursor: pointer; font-weight: 600; }
 .mixrow { display: flex; justify-content: space-between; align-items: center; }
+
+/* Remove sits in the exercise's top corner, away from the set buttons. */
+section.block .bhead { position: relative; padding-right: 40px; }
+.bhead .bremove { position: absolute; top: -6px; right: -6px; min-width: 36px; min-height: 36px; padding: 0; border: none; background: none; color: var(--muted); font-size: 16px; }
+.dose.prog.up { color: var(--good, #4cd98b); }

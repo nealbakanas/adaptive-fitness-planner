@@ -40,12 +40,19 @@ function defaultCheckin() {
   };
 }
 
-function toast(msg) {
+function toast(msg, undo = null) {
   const t = document.createElement('div');
   t.className = 'toast';
   t.textContent = msg;
+  if (undo) {
+    const b = document.createElement('button');
+    b.className = 'link';
+    b.textContent = 'Undo';
+    b.onclick = () => { t.remove(); undo(); };
+    t.append(' ', b);
+  }
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2200);
+  setTimeout(() => t.remove(), undo ? 5000 : 2200);
 }
 
 function currentSession() {
@@ -193,7 +200,7 @@ function genSets(session, block) {
   state.sets = state.sets.filter(s => !(s.blockId === block.id && !s.done && (!s.warmup || !warm)));
   for (const w of warmSets(block)) if (!w.done) w.exerciseId = ex.id; // unlogged warm-ups follow a swap
   const done = blockSets(block).length;
-  const load = L.targetLoad(state, ex, block.tier, sc);
+  const load = L.targetLoad(state, ex, block.tier, sc, session.checkinAt);
   for (let i = done; i < sc.sets; i++) state.sets.push(newSet(session, block, ex, sc, load));
 }
 
@@ -204,7 +211,7 @@ function slotIdFor(exerciseId, tier) {
 
 // Best scheme for an exercise added or re-tiered by hand: fits the time left if possible, never over its rep cap.
 function schemeForBlock(s, ex, tier, exceptBlock) {
-  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.WARMUP[tier]; // jumps are warm-up time
+  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.overhead(state, tier); // jumps are warm-up time
   const dose = L.slotDose(state, L.slotFor(state, ex, tier), tier);
   return L.pickScheme(state, tier, ex, Math.max(budget, 0), s, dose)
     || L.pickScheme(state, tier, ex, Infinity, s, dose)
@@ -807,10 +814,18 @@ function viewBlock(s, b, credit, idea = null) {
   const pct = L.targetPct(cfg, sc.reps);
   const sets = blockSets(b);
 
+  // Progression: how this load follows from last time (see L.progression).
+  const prog = L.progression(state, ex, b.tier, sc, s.checkinAt);
   let info = [];
-  if (ex.metric === 'load_reps' && pct) info.push(`${round(pct * 100)}% of e1RM`);
+  // With progression the load is last time's (+ the increment), so show what share of your e1RM that really is.
+  const progPct = prog && max ? (prog.load + (ex.bodyweight ? state.settings.bodyweight || 0 : 0)) / max : null;
+  if (ex.metric === 'load_reps' && (progPct || pct)) info.push(`${round((progPct || pct) * 100)}% of e1RM`);
   if (max) info.push(`e1RM ${round(max)}${ex.bodyweight ? ' total' : ''}`);
   else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`no max yet: enter a load or <button class="link" data-act="maxSet" data-id="${ex.id}">set your 1RM</button>`);
+  const lastDay = prog && new Date(prog.last.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const progLine = !prog ? '' : prog.up
+    ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()}: you hit every rep at ${prog.last.load} on ${lastDay}</div>`
+    : `<div class="dose prog">= ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} again: ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short on ${lastDay}. Hit them all to go up.</div>`;
   const restBtn = `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ rest ${clock(effectiveRest(b))}${b.restSec != null ? ' (set today)' : ex.restSec != null ? ' (exercise)' : ''}</button>`;
 
   let dose = '';
@@ -878,9 +893,10 @@ function viewBlock(s, b, credit, idea = null) {
     ${pairHead}
     <div class="bhead"><button class="tier ${b.tier}" data-act="tierEdit" data-b="${b.id}" aria-label="Change tier">${b.tier} ▾</button>
       <button class="chip" data-act="swapEx" data-b="${b.id}">${esc(ex.name)} ▾</button>
-      <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${sc.minutes}m ▾</button></div>
+      <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${sc.minutes}m ▾</button>
+      <button class="icon bremove" data-act="removeBlock" data-b="${b.id}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
     <div class="meta">${info.join(' · ')} ${restBtn}</div>
-    ${dose}
+    ${progLine}${dose}
     <div class="sets">${warmRows}${rows}</div>
     <div class="brow">
       ${canWarm(b, ex) ? `<button class="small" data-act="addWarm" data-b="${b.id}">+ warm-up</button>` : ''}
@@ -888,8 +904,8 @@ function viewBlock(s, b, credit, idea = null) {
       <button class="small" data-act="removeSet" data-b="${b.id}">− set</button>
       <button class="small" data-act="timerStart" data-b="${b.id}">⏱ Rest</button>
       ${inPair(s, b) ? '' : `<button class="small" data-act="pairOpen" data-b="${b.id}">↔ Superset</button>`}
+      <button class="small" data-act="exHist" data-id="${ex.id}">History</button>
       ${vid ? `<a class="small" href="${esc(vid)}" target="_blank" rel="noopener">▶ Video</a>` : ''}
-      <button class="small quiet" data-act="removeBlock" data-b="${b.id}">Remove</button>
     </div>
     ${ideaRow}
     ${ex.cues ? `<details class="cues"><summary>Cues</summary><p>${esc(ex.cues)}</p></details>` : ''}
@@ -914,7 +930,8 @@ function viewMobItem(item) {
   const vid = M.videoSearch(ex.video);
   const day = x => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return `<section class="block mob">
-    <div class="bhead"><span class="tier MOB">${item.def ? 'JUMP' : 'MOB'}</span><span class="mobname">${esc(ex.name)}</span></div>
+    <div class="bhead"><span class="tier MOB">${item.def ? 'JUMP' : 'MOB'}</span><span class="mobname">${esc(ex.name)}</span>
+      <button class="icon bremove" data-act="mRemove" data-i="${item.id}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
     <div class="meta">${esc([M.doseText(ex), `rest ${clock(ex.restSec || 0)}`, ex.parts.join(', ')].filter(Boolean).join(' · '))}</div>
     ${last ? `<div class="dose">Last time (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
     <div class="sets">${rows}</div>
@@ -923,7 +940,6 @@ function viewMobItem(item) {
       <button class="small" data-act="mAddSet" data-i="${item.id}">+ set</button>
       <button class="small" data-act="mRemoveSet" data-i="${item.id}">− set</button>
       ${vid ? `<a class="small" href="${esc(vid)}" target="_blank" rel="noopener">▶ Video</a>` : ''}
-      <button class="small quiet" data-act="mRemove" data-i="${item.id}">Remove</button>
     </div>
     ${ex.cues || ex.notes ? `<details class="cues"><summary>Cues${ex.notes ? ' and history' : ''}</summary>${ex.cues ? `<p>${esc(ex.cues)}</p>` : ''}${ex.notes ? `<p class="meta">${esc(ex.notes)}</p>` : ''}</details>` : ''}
   </section>`;
@@ -1354,6 +1370,7 @@ function settingsYou() {
       ${frow('Units', `<select data-bind="settings.unit" data-rerender>${opts([['lb', 'lb'], ['kg', 'kg']], st.unit)}</select>`)}
       ${frow('Round loads to', numIn('settings.increment', st.increment), `Smallest jump you can load, in ${unit()}`)}
       ${frow(`Kettlebells (${unit()})`, `<input class="list" inputmode="decimal" data-kb value="${esc((st.kettlebells || []).join(', '))}" placeholder="30, 40, 53">`, 'Kettlebell loads use these')}
+      ${frow('Changeover (min)', numIn('settings.changeover', st.changeover ?? 2), 'Added per exercise in suggestions: moving, loading and setting up. Jumps take none.')}
       ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`, 'Weekly goals reset on this day')}
     </div>
     <div class="label">Suggestions</div>
@@ -1640,7 +1657,7 @@ function renderSheet() {
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, pasteImport: sheetPasteImport,
-    addEx: sheetAddEx, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx }[s.type](s);
+    addEx: sheetAddEx, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
   sheetEl.hidden = false;
   if (ui.sheetFocus) {
@@ -1773,11 +1790,11 @@ function sheetSwapEx(sh) {
 function sheetSwapScheme(sh) {
   const { s, b } = findBlock(sh.blockId);
   const ex = exOf(b.exerciseId);
-  const budget = sessionBudget(s, b) - L.WARMUP[b.tier];
+  const budget = sessionBudget(s, b) - L.overhead(state, b.tier);
   return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${b.tier} · ${budget} min left in budget · loads recalculate automatically</div>
     <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {
-      const load = L.targetLoad(state, ex, b.tier, sc);
+      const load = L.targetLoad(state, ex, b.tier, sc, s.checkinAt);
       const bits = [`${sc.minutes} min`, `${sc.sets * sc.reps} reps`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
         load != null ? `${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : '', sc.minutes > budget ? 'over time' : '',
         L.overRepCap(ex, sc) ? `over ${ex.maxReps}-rep cap` : ''].filter(Boolean);
@@ -1857,6 +1874,49 @@ function readMobDraft() {
     cues: q('#me-cues').value.trim(), video: q('#me-video').value.trim(), notes: q('#me-notes').value.trim(), archived: q('#me-arch')?.checked ?? !!d.archived,
   });
   return d;
+}
+
+// One exercise's history: the max the loads come from, what's next at each tier, and every session with it, newest
+// first (sets, best e1RM, and whether every prescribed rep was hit).
+function sheetExHist(sh) {
+  const ex = exOf(sh.id);
+  if (!ex) return '<p class="muted">Exercise not found.</p>';
+  const day = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const bySession = new Map();
+  for (const st of state.sets) {
+    if (!st.done || st.exerciseId !== ex.id) continue;
+    const k = `${st.sessionId}|${st.tier}`;
+    if (!bySession.has(k)) bySession.set(k, { tier: st.tier, at: st.loggedAt, sets: [] });
+    const g = bySession.get(k);
+    g.sets.push(st);
+    g.at = Math.min(g.at, st.loggedAt);
+  }
+  const groups = [...bySession.values()].sort((a, b) => b.at - a.at);
+  const shown = groups.slice(0, sh.limit ?? 20);
+  const line = g => {
+    const work = g.sets.filter(x => !x.warmup).sort((a, b) => a.loggedAt - b.loggedAt);
+    const sc = schOf(work[0]?.schemeId);
+    const best = Math.max(0, ...work.map(x => L.setE1rm(state, x) || 0));
+    const hit = sc && ['T1', 'T2'].includes(g.tier) && ex.metric === 'load_reps'
+      ? (work.length >= sc.sets && work.every(x => Number(x.reps) >= sc.reps) ? ' · ✓ every rep' : ' · short') : '';
+    return `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(day(g.at))}${sc ? ` · ${esc(sc.name)}` : ''}</span>
+      <span class="meta">${esc(histSets({ ex, sets: g.sets }))}${best ? ` · e1RM ${round(best)}` : ''}${hit}</span></span></div>`;
+  };
+  // What the next session asks for at each tier you've done it at lately (same scheme as last time).
+  const next = ['T1', 'T2'].map(t => {
+    const last = L.lastOutcome(state, ex.id, t);
+    if (!last) return '';
+    const load = L.targetLoad(state, ex, t, last.scheme);
+    return load == null ? '' : `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">Next ${esc(last.scheme.name)}: ${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}</span>
+      <span class="meta">${last.complete ? `every rep at ${last.load} last time, so up` : `${last.short} rep${last.short === 1 ? '' : 's'} short at ${last.load} last time, so the same`}</span></span></div>`;
+  }).join('');
+  return `<h3>${esc(ex.name)}</h3>
+    ${maxLine(ex) ? `<div class="meta">${esc(maxLine(ex))}</div>` : ''}
+    ${next ? `<div class="label">Next time</div><div class="menu">${next}</div>` : ''}
+    <div class="label">${groups.length} session${groups.length === 1 ? '' : 's'}</div>
+    ${shown.map(line).join('') || '<p class="muted">Nothing logged yet.</p>'}
+    ${groups.length > shown.length ? `<button class="addblock" data-act="exHistMore">Show more (${groups.length - shown.length} older)</button>` : ''}
+    <div class="actions"><button data-act="histOpen" data-q="${esc(ex.name)}">Full workouts</button></div>`;
 }
 
 function sheetFinishAsk(sh) {
@@ -2046,7 +2106,7 @@ function sheetEditEx(sh) {
     <div class="field"><label>Start time (m:ss)</label><input id="ee-start" value="${esc(fmtMSS(e.start))}" placeholder="0:42"></div>
     <div class="field"><label>Cues</label><textarea id="ee-cues" rows="3">${esc(e.cues)}</textarea></div>
     <div class="actions">${hasHistory ? '' : `<button class="danger" data-act="exDelete" data-id="${e.id}">Delete</button>`}
-      ${hasHistory ? `<button data-act="histOpen" data-q="${esc(e.name)}">History</button>` : ''}
+      ${hasHistory ? `<button data-act="exHist" data-id="${e.id}">History</button>` : ''}
       <button data-act="qaVariation" data-id="${e.id}">Make a variation</button>
       <button class="primary" data-act="exSave" data-id="${e.id}">Save</button></div>`;
 }
@@ -2085,6 +2145,8 @@ const actions = {
     ui.tab = 'week';
     render(); window.scrollTo(0, 0);
   },
+  exHist: d => openSheet({ type: 'exHist', id: d.id, limit: 20 }),
+  exHistMore: () => { ui.sheet.limit += 20; renderSheet(); },
   histClose: () => { ui.history = null; render(); window.scrollTo(0, 0); },
   histMore: () => { ui.history.limit += HISTORY_PAGE; render(); },
 
@@ -2266,7 +2328,7 @@ const actions = {
     const { s, b } = findBlock(d.b);
     const last = blockSets(b).at(-1);
     const ex = exOf(b.exerciseId), sc = schOf(b.schemeId);
-    const ns = newSet(s, b, ex, sc, last?.load ?? L.targetLoad(state, ex, b.tier, sc));
+    const ns = newSet(s, b, ex, sc, last?.load ?? L.targetLoad(state, ex, b.tier, sc, s.checkinAt));
     if (last && last.exerciseId === ex.id) ns.reps = last.reps;
     state.sets.push(ns);
     save(); render();
@@ -2474,8 +2536,10 @@ const actions = {
   },
   mRemove: d => {
     const { item, list } = findMobItem(d.i);
-    if (item.sets.some(s => s.done)) { item.sets = item.sets.filter(s => s.done); toast('Logged sets kept; the rest removed'); }
-    else list.splice(list.indexOf(item), 1);
+    const at = list.indexOf(item), sets = [...item.sets];
+    const undo = () => { item.sets = sets; if (!list.includes(item)) list.splice(at, 0, item); save(); render(); };
+    if (item.sets.some(s => s.done)) { item.sets = item.sets.filter(s => s.done); toast('Logged sets kept; the rest removed', undo); }
+    else { list.splice(at, 1); toast(`Removed ${itemEx(item)?.name ?? 'exercise'}`, undo); }
     save(); render();
   },
   mobFinish: () => {
@@ -2788,14 +2852,21 @@ const actions = {
   removeBlock: d => {
     const { s, b } = findBlock(d.b);
     const logged = state.sets.some(x => x.blockId === b.id && x.done);
+    // Undo puts back exactly what was there: the blocks (with their supersets), the sets and the source.
+    const before = { blocks: structuredClone(s.blocks), sets: state.sets.filter(x => x.sessionId === s.id).map(x => ({ ...x })), source: s.source };
     state.sets = state.sets.filter(x => x.blockId !== b.id || x.done);
-    if (logged) toast('Logged sets kept; the rest removed');
-    else {
+    if (!logged) {
       s.blocks = s.blocks.filter(x => x !== b);
       const rest = s.blocks.filter(x => x.pairOf === b.id);
       if (rest.length) { delete rest[0].pairOf; for (const x of rest.slice(1)) x.pairOf = rest[0].id; }
     }
     if (s.source === 'suggested') s.source = 'swapped';
+    toast(logged ? 'Logged sets kept; the rest removed' : `Removed ${exOf(b.exerciseId)?.name ?? 'exercise'}`, () => {
+      s.blocks = before.blocks;
+      s.source = before.source;
+      state.sets = [...state.sets.filter(x => x.sessionId !== s.id), ...before.sets];
+      save(); render();
+    });
     save(); render();
   },
 

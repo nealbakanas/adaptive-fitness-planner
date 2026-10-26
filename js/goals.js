@@ -47,7 +47,7 @@ export function tierCost(state, tier) {
   if (tier === 'JUMP') return 0; // done during the warm-up
   const ms = L.schemeOptions(state, tier).map(s => s.minutes || 0).sort((a, b) => a - b);
   const mid = ms.length ? ms[ms.length >> 1] : 8;
-  return (mid + L.WARMUP[tier]) * (tier === 'T3' ? 0.75 : 1);
+  return (mid + L.overhead(state, tier)) * (tier === 'T3' ? 0.75 : 1);
 }
 
 // Your usual week: what you set (Week tab), else your workouts and check-in minutes over the last 4 weeks, else 3 × 45.

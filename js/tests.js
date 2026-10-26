@@ -1022,7 +1022,7 @@ test('the week budget: minutes your goals take, room for more T2/T3, from your s
   s.settings.week = { workouts: 5, minutes: 60 };
   const b2 = G.weekBudget(s);
   eq(b2.total, 300);
-  ok(b2.addT2 === Math.floor(b2.room / b2.cost.T2) && b2.addT3 > b2.addT2 && b2.addT2 > 10, JSON.stringify(b2));
+  ok(b2.addT2 === Math.floor(b2.room / b2.cost.T2) && b2.addT3 > b2.addT2 && b2.addT2 >= 8, JSON.stringify(b2));
   eq(b2.guide, { T1: [2, 5], T2: [5, 10], T3: [10, 20] });
   // From check-ins: 8 workouts in 4 weeks, 60 minutes each.
   const h = seed();
@@ -1053,7 +1053,7 @@ test('wrecked short day: at most one T2, the rest T3s; regenerate rotates the li
       const r = L.buildSuggestion(s, ci({ minutes: 30, fatigue, lean }));
       const names = r.blocks.map(b => `${b.tier} ${ex(b.exerciseId).name}`).join(', ');
       ok(r.blocks.filter(b => b.tier === 'T2').length <= 1, `${lean}, energy ${6 - fatigue}: one T2 at most: ${names}`);
-      if (!r.blocks.some(b => b.tier === 'T1')) ok(r.blocks.filter(b => b.tier === 'T3').length >= 2, `${lean}, energy ${6 - fatigue}: a bunch of T3s: ${names}`); // an urgent heavy goal may still take the slot
+      if (!r.blocks.some(b => b.tier === 'T1' || b.tier === 'TECH')) ok(r.blocks.filter(b => b.tier === 'T3').length >= 2, `${lean}, energy ${6 - fatigue}: a bunch of T3s: ${names}`); // an urgent heavy goal may still take the slot
       ok(r.minutesUsed <= 30 && r.minutesUsed >= 22, `fills the half hour: ${r.minutesUsed}`);
     }
   }
@@ -1069,12 +1069,12 @@ test('wrecked short day: at most one T2, the rest T3s; regenerate rotates the li
 test('chosen mix: the T2/T3 counts you ask for, for the half you lean toward, within the time', () => {
   const s = seed();
   const ex = id => s.exercises.find(e => e.id === id);
-  const c = { locationId: s.locations[1].id, minutes: 45, fatigue: 3, intent: 'auto', lean: 'lower' };
+  const c = { locationId: s.locations[1].id, minutes: 60, fatigue: 3, intent: 'auto', lean: 'lower' };
   const r = L.buildMix(s, c, { T1: 0, T2: 1, T3: 6 });
   const n = t => r.blocks.filter(b => b.tier === t).length;
   eq([n('T1'), n('T2'), n('T3')], [0, 1, 6]);
   ok(r.blocks.every(b => L.bodyRegion(s, ex(b.exerciseId)) !== 'upper'), 'lower lean: no upper-body blocks');
-  ok(r.minutesUsed <= 45, `within the time: ${r.minutesUsed}`);
+  ok(r.minutesUsed <= 60, `within the time: ${r.minutesUsed}`);
   const tight = L.buildMix(s, { ...c, minutes: 20 }, { T1: 0, T2: 1, T3: 10 });
   ok(tight.minutesUsed <= 20 && tight.notes.some(x => /^Only/.test(x)), 'what does not fit is dropped and said so');
 });
@@ -1149,6 +1149,50 @@ test('setup: a starter pick your gear hides (weighted dips, no dip station) is n
   d.locations[0].equipment.push('dip-station');
   ok(O.buildSlots(s, d).some(sl => sl.exerciseId === 'ex-wdip' && sl.tier === 'T2'), 'back once a location has the gear');
 });
+test('workout time counts warm-ups and the changeover to each exercise (Settings → You), not jumps', () => {
+  const s = seed();
+  const sc = id => s.schemes.find(x => x.id === id).minutes;
+  eq(L.blockMinutes(s, { tier: 'T1', schemeId: 's-t1-5x3' }), sc('s-t1-5x3') + 5 + 2, 'heavy: ramp-up and changeover');
+  eq(L.blockMinutes(s, { tier: 'T2', schemeId: 's-t2-3x8' }), sc('s-t2-3x8') + 2 + 2);
+  eq(L.blockMinutes(s, { tier: 'T3', schemeId: 's-t3-3x15', pairOf: 'x' }), (sc('s-t3-3x15') + 2) / 2, 'a superset partner at half');
+  eq(L.blockMinutes(s, { tier: 'JUMP', schemeId: 's-j-4x3' }), 0);
+  // 45 minutes, lower, energy 4, jumps: the jumps plus three or four exercises, not six.
+  const r = L.buildSuggestion(s, ci({ minutes: 45, fatigue: 2, lean: 'lower', jumps: true }));
+  const names = r.blocks.map(b => `${b.tier} ${s.exercises.find(e => e.id === b.exerciseId).name}`).join(', ');
+  ok(r.blocks.some(b => b.tier === 'JUMP') && r.blocks.filter(b => b.tier !== 'JUMP').length <= 4 && r.minutesUsed <= 45, `${r.minutesUsed} min: ${names}`);
+  s.settings.changeover = 0;
+  ok(Math.abs(L.blocksMinutes(s, r.blocks) - (r.minutesUsed - 2 * r.blocks.filter(b => b.tier !== 'JUMP').reduce((n, b) => n + (b.pairOf ? 0.5 : 1), 0))) < 1, 'the setting is the changeover per exercise');
+});
+test('progression: every prescribed rep at a load last time means +increment next time; short means the same load', () => {
+  const s = seed();
+  const ex = id => s.exercises.find(e => e.id === id);
+  const sc = id => s.schemes.find(x => x.id === id);
+  const log = (exerciseId, tier, schemeId, load, reps, daysAgo, sessionId) => reps.forEach((r, i) => s.sets.push({ id: L.uid(), sessionId, blockId: sessionId,
+    exerciseId, tier, schemeId, load, reps: r, done: true, loggedAt: NOON(daysAgo) + i, bw: 200 }));
+  log('ex-back-squat', 'T1', 's-t1-5x3', 300, [3, 3, 3, 3, 3], 7, 'a');
+  const squat = ex('ex-back-squat');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3')), 305, 'every rep at 300: 305');
+  const p = L.progression(s, squat, 'T1', sc('s-t1-5x3'));
+  ok(p.up && p.last.load === 300 && p.last.complete);
+  eq(L.progression(s, squat, 'T1', sc('s-t1-6x2')), null, 'another rep scheme: from your max instead');
+  eq(L.progression(s, squat, 'T1', sc('s-t1-5x3'), NOON(-70)), null, 'ten weeks later: from your max again');
+  log('ex-back-squat', 'T1', 's-t1-5x3', 305, [3, 3, 3, 2, 2], 3, 'b');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3')), 305, 'two reps short at 305: 305 again');
+  eq(L.lastOutcome(s, 'ex-back-squat', 'T1').short, 2);
+  // Today's own sets don't count as last time while you're doing it.
+  log('ex-back-squat', 'T1', 's-t1-5x3', 305, [3, 3, 3, 3, 3], 0, 'today');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3'), NOON(0) - 1), 305, 'during today: still 305');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3')), 310, 'next time: 310');
+  // T2 is tracked on its own: +5 from its own last time, not a jump to what the heavy squats imply.
+  log('ex-back-squat', 'T2', 's-t2-3x8', 225, [8, 8, 8], 2, 'c');
+  eq(L.targetLoad(s, squat, 'T2', sc('s-t2-3x8')), 230);
+  // The suggestion keeps last time's scheme for a T1/T2 lift so it can progress (no variety swap to 6×2).
+  eq(L.pickScheme(s, 'T1', squat, 60, ci({ fatigue: 2 }))?.id, 's-t1-5x3', 'same scheme as last time');
+  // Kettlebell moves go to the next bell you own.
+  s.exercises.push({ id: 'kb', name: 'KB press', familyId: 'fam-ohp', rank: 9, metric: 'load_reps', equipment: ['kettlebell'], role: 'main' });
+  log('kb', 'T2', 's-t2-3x8', 40, [8, 8, 8], 2, 'd');
+  eq(L.targetLoad(s, ex('kb'), 'T2', sc('s-t2-3x8')), 45);
+});
 test('v18: jumps move out of T2 into their own tier; goals keep their reps and this week keeps its credit', () => {
   const s = seed();
   s.version = 17;
@@ -1205,7 +1249,7 @@ test('Friday, every goal done: the hour still gets two complementary T2 lifts an
   const t1Lifts = s.slots.filter(sl => sl.tier === 'T1').map(sl => sl.exerciseId ?? s.families.find(f => f.id === sl.familyId).defaultExerciseId);
   ok(t2.every(e => !t1Lifts.includes(e.id) && e.familyId !== 'fam-arms'), `support lifts, not a T1 goal's lift or curls: ${names}`);
   const t3 = r.blocks.filter(b => b.tier === 'T3');
-  ok(t3.length >= 4 && t3.every(b => b.pairOf || r.blocks.some(x => x.pairOf === b.id)), `T3 supersets: ${names}`);
+  ok(t3.length >= 2 && t3.every(b => b.pairOf || r.blocks.some(x => x.pairOf === b.id)), `T3 supersets: ${names}`);
   ok(t3.every(b => !ex(b.exerciseId).equipment.includes('dip-belt')), `no weighted pull-ups or dips as pump work: ${names}`);
   ok(r.minutesUsed >= 50 && r.minutesUsed <= 60, `uses the hour: ${r.minutesUsed}`);
 });
@@ -1231,7 +1275,7 @@ test('goals nearly done: suggestion is thin but a focused workout still fills th
   const sug = L.buildSuggestion(s, ci({ minutes: 60 }));
   eq(sug.blocks.filter(b => b.slotId === 'sl-t2-incline').length, 1, 'the open goal is still in it');
   ok(sug.goalMinutes <= 15 && sug.minutesUsed >= 54 && sug.minutesUsed <= 60, `goals ${sug.goalMinutes} min, used ${sug.minutesUsed}: ${sug.blocks.map(b => name(b.exerciseId))}`);
-  ok(sug.blocks.some(b => b.tier === 'T2' && b.slotId !== 'sl-t2-incline') && sug.blocks.filter(b => b.tier === 'T3').length >= 3, 'T2 and T3 fill');
+  ok(sug.blocks.some(b => b.tier === 'T2' && b.slotId !== 'sl-t2-incline') && sug.blocks.filter(b => b.tier === 'T3').length >= 2, 'T2 and T3 fill');
   ok(/library/.test(sug.notes[0]), 'explained');
   // Leaning lower: the extra T2 lift is lower body and lower-body accessories come first.
   const low = L.buildSuggestion(s, ci({ minutes: 60, lean: 'lower' }));
