@@ -202,6 +202,20 @@ function genSets(session, block) {
   const done = blockSets(block).length;
   const load = L.targetLoad(state, ex, block.tier, sc, session.checkinAt);
   for (let i = done; i < sc.sets; i++) state.sets.push(newSet(session, block, ex, sc, load));
+  // AMRAP last set: on by default for a lift you did it on last time at this tier.
+  if (block.amrap === undefined && canAmrap(block, ex)) block.amrap = L.lastOutcome(state, ex.id, block.tier, session.checkinAt)?.amrap != null;
+  markAmrap(block);
+}
+
+// AMRAP (as many reps as possible) on the last working set: for loaded T1/T2 lifts, where it drives progression.
+const canAmrap = (b, ex) => (b.tier === 'T1' || b.tier === 'T2') && ex?.metric === 'load_reps';
+// Puts the AMRAP flag on the block's last working set (logged sets keep theirs), or clears it when AMRAP is off.
+function markAmrap(b) {
+  const sets = blockSets(b);
+  const on = b.amrap && canAmrap(b, exOf(b.exerciseId));
+  for (const st of sets) if (!st.done) delete st.amrap;
+  const last = sets.at(-1);
+  if (on && last && !last.done && !sets.some(x => x.done && x.amrap)) last.amrap = true;
 }
 
 function slotIdFor(exerciseId, tier) {
@@ -824,7 +838,7 @@ function viewBlock(s, b, credit, idea = null) {
   else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`no max yet: enter a load or <button class="link" data-act="maxSet" data-id="${ex.id}">set your 1RM</button>`);
   const lastDay = prog && new Date(prog.last.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const progLine = !prog ? '' : prog.up
-    ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()}: you hit every rep at ${prog.last.load} on ${lastDay}</div>`
+    ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()}: you hit every rep at ${prog.last.load} on ${lastDay}${prog.last.amrap != null ? `, ${prog.last.amrap} on the AMRAP set${prog.steps > 1 ? ' (more than double)' : ''}` : ''}</div>`
     : `<div class="dose prog">= ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} again: ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short on ${lastDay}. Hit them all to go up.</div>`;
   const restBtn = `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ rest ${clock(effectiveRest(b))}${b.restSec != null ? ' (set today)' : ex.restSec != null ? ' (exercise)' : ''}</button>`;
 
@@ -873,7 +887,7 @@ function viewBlock(s, b, credit, idea = null) {
     } else if (sx.metric === 'distance') {
       inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
     }
-    return `<div class="set ${st.done ? 'done' : ''}"><span class="n">${i + 1}</span>${inputs}${other}
+    return `<div class="set ${st.done ? 'done' : ''} ${st.amrap ? 'amrap' : ''}"><span class="n">${i + 1}</span>${inputs}${st.amrap ? '<span class="amraptag">AMRAP</span>' : ''}${other}
       <button class="check" data-act="check" data-id="${st.id}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
   }).join('');
 
@@ -902,6 +916,7 @@ function viewBlock(s, b, credit, idea = null) {
       ${canWarm(b, ex) ? `<button class="small" data-act="addWarm" data-b="${b.id}">+ warm-up</button>` : ''}
       <button class="small" data-act="addSet" data-b="${b.id}">+ set</button>
       <button class="small" data-act="removeSet" data-b="${b.id}">− set</button>
+      ${canAmrap(b, ex) ? `<button class="small ${b.amrap ? 'on' : ''}" data-act="amrapToggle" data-b="${b.id}" aria-pressed="${!!b.amrap}">AMRAP last</button>` : ''}
       <button class="small" data-act="timerStart" data-b="${b.id}">⏱ Rest</button>
       ${inPair(s, b) ? '' : `<button class="small" data-act="pairOpen" data-b="${b.id}">↔ Superset</button>`}
       <button class="small" data-act="exHist" data-id="${ex.id}">History</button>
@@ -2331,7 +2346,9 @@ const actions = {
     const ex = exOf(b.exerciseId), sc = schOf(b.schemeId);
     const ns = newSet(s, b, ex, sc, last?.load ?? L.targetLoad(state, ex, b.tier, sc, s.checkinAt));
     if (last && last.exerciseId === ex.id) ns.reps = last.reps;
+    if (last?.amrap) ns.reps = sc.reps; // the new last set is the AMRAP one; start it from the prescribed reps
     state.sets.push(ns);
+    markAmrap(b);
     save(); render();
   },
 
@@ -2350,7 +2367,16 @@ const actions = {
     const undone = blockSets(b).filter(x => !x.done);
     if (!undone.length) return toast('Only logged sets left');
     state.sets = state.sets.filter(x => x !== undone.at(-1));
+    markAmrap(b);
     save(); render();
+  },
+
+  amrapToggle: d => {
+    const { b } = findBlock(d.b);
+    b.amrap = !b.amrap;
+    markAmrap(b);
+    save(); render();
+    toast(b.amrap ? 'Last set is AMRAP: double the reps or more and next time goes up 10' : 'AMRAP off');
   },
 
   swapEx: d => openSheet({ type: 'swapEx', blockId: d.b, reason: null }),

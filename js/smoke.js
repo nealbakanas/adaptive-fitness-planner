@@ -146,6 +146,16 @@ step('supersets, real rest, pause and resume, more time', () => {
   click('[data-act=addExTier][data-t=T3]');
   click('[data-act=addExPick][data-id=ex-dead-bug]');
   check('a T3 added by hand joins a superset', qa('section.block.paired').some(b => /Dead bug/.test(b.innerText)));
+  // AMRAP last set on a loaded T1/T2 lift: one tap, the last set is marked, and it sticks to the last set.
+  const lift = () => qa('section.block').find(x => x.querySelector('[data-act=amrapToggle]'));
+  click(lift().querySelector('[data-act=amrapToggle]'));
+  const marked = () => [...lift().querySelectorAll('.set:not(.warm)')].map(x => x.classList.contains('amrap'));
+  check('AMRAP marks only the last set', marked().at(-1) === true && marked().filter(Boolean).length === 1, JSON.stringify(marked()));
+  click(lift().querySelector('[data-act=addSet]'));
+  check('AMRAP moves to the new last set', marked().at(-1) === true && marked().filter(Boolean).length === 1, JSON.stringify(marked()));
+  click(lift().querySelector('[data-act=removeSet]'));
+  click(lift().querySelector('[data-act=amrapToggle]'));
+  check('AMRAP off clears it', !marked().some(Boolean));
   // Remove sits in the exercise's header, not next to − set, and can be undone.
   const ringBlocks = () => qa('section.block').length;
   check('remove is in the header, away from the set buttons', !!q('section.block .bhead [data-act=removeBlock]') && !q('section.block .brow [data-act=removeBlock]'));
