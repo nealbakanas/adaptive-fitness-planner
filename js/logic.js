@@ -214,12 +214,53 @@ export function lastLoad(state, exerciseId) {
   return best ? Number(best.load) : null;
 }
 
+// ---------- progression ----------
+// GZCL-style: a T1/T2 lift you did every prescribed set and rep of last time goes up by your load increment the next
+// time you do it at that tier with the same reps per set; one you came up short on repeats the load. A different rep
+// scheme (5×3 after 10×2), or a last time over 8 weeks ago, has no like-for-like last time: the load comes from your max.
+
+// The most recent session of an exercise at a tier before `before`: its loaded working sets, the scheme they were
+// prescribed with, the load (the lightest working set), and whether every prescribed set hit its reps. Null if none.
+export function lastOutcome(state, exerciseId, tier, before = Infinity) {
+  const loaded = s => s.done && !s.warmup && s.exerciseId === exerciseId && s.tier === tier && s.loggedAt < before && s.load != null && s.load !== '';
+  let latest = null;
+  for (const s of state.sets) if (loaded(s) && (!latest || s.loggedAt > latest.loggedAt)) latest = s;
+  const scheme = latest && byId(state.schemes, latest.schemeId);
+  if (!scheme) return null;
+  const sets = state.sets.filter(s => loaded(s) && s.sessionId === latest.sessionId);
+  const repsDone = sets.reduce((n, s) => n + Math.min(Number(s.reps) || 0, scheme.reps), 0);
+  return {
+    at: latest.loggedAt, scheme, sets, load: Math.min(...sets.map(s => Number(s.load))),
+    complete: sets.length >= scheme.sets && sets.every(s => Number(s.reps) >= scheme.reps),
+    short: Math.max(0, scheme.sets * scheme.reps - repsDone),
+  };
+}
+
+export const PROGRESSION_WEEKS = 8;
+// Next load for a T1/T2 lift from last time: { load, up, last } (up: last time was complete), or null when there's no
+// like-for-like last time. Kettlebell moves go to the next bell you own.
+export function progression(state, ex, tier, scheme, before = Infinity) {
+  if (ex?.metric !== 'load_reps' || (tier !== 'T1' && tier !== 'T2') || !scheme) return null;
+  const last = lastOutcome(state, ex.id, tier, before);
+  // Last time was more than 8 weeks ago: start again from your max.
+  if (!last || last.scheme.reps !== scheme.reps || (before === Infinity ? Date.now() : before) - last.at > PROGRESSION_WEEKS * 7 * DAY) return null;
+  if (!last.complete) return { load: last.load, up: false, last };
+  const bells = state.settings.kettlebells || [];
+  const kb = ex.equipment?.includes('kettlebell') && !ex.equipment.includes('barbell') && bells.length;
+  const load = kb ? ([...bells].sort((a, b) => a - b).find(b => b > last.load) ?? last.load) : last.load + (state.settings.increment || 5);
+  return { load, up: true, last };
+}
+
 // Load to enter in the set row (added load for bodyweight moves). Never needs manual recalculation.
-export function targetLoad(state, ex, tier, scheme) {
+// `before`: the session's check-in, so its own sets don't count as "last time".
+export function targetLoad(state, ex, tier, scheme, before = Infinity) {
   if (ex.metric !== 'load_reps') return null;
   const cfg = state.tiers[tier];
   if (cfg.intMin == null) return lastLoad(state, ex.id);
-  const max = estimatedMax(state, ex.id);
+  // Like-for-like last time: up by the increment if complete, the same load if short. Otherwise from your max.
+  const p = progression(state, ex, tier, scheme, before);
+  if (p) return p.load;
+  const max = estimatedMax(state, ex.id, before);
   if (!max) return lastLoad(state, ex.id);
   let total = max * targetPct(cfg, scheme.reps);
   if (ex.bodyweight) {
@@ -434,6 +475,9 @@ const powerSets = sc => sc.sets >= 10 && sc.reps <= 3;
 // Time and the exercise's rep cap are hard filters; dose fit, energy, variety and chunkability are soft weights.
 export function pickScheme(state, tier, ex, budget, ci, dose = null) {
   const recent = recentSchemes(state, ex.id, 2);
+  // A loaded T1/T2 lift keeps last time's scheme, so it can progress (+increment after every rep; see progression).
+  const keep = (tier === 'T1' || tier === 'T2') && ex.metric === 'load_reps' ? lastOutcome(state, ex.id, tier) : null;
+  const keepId = keep && Date.now() - keep.at <= PROGRESSION_WEEKS * 7 * DAY ? keep.scheme.id : null;
   const e = energy(ci);
   let best = null, bestScore = -Infinity;
   for (const sc of schemeOptions(state, tier)) {
@@ -447,7 +491,8 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
     // T3 is already volume work: sets of 8-15 keep the reps good, so 2×25 is only for a tight squeeze on time.
     if (tier === 'T3') s -= Math.max(0, sc.reps - 15) * 0.15 + Math.max(0, 8 - sc.reps) * 0.1;
     if (ex.explosive && sc.reps <= 3) s += 1;          // power work: sets of 1-3 keep every rep fast
-    if (recent.includes(sc.id)) s -= 1;
+    if (keepId) { if (sc.id === keepId) s += 2; } // progressing beats variety for main lifts
+    else if (recent.includes(sc.id)) s -= 1;
     if (ci.split && sc.sets >= 5) s += 0.5;
     if (s > bestScore) { best = sc; bestScore = s; }
   }

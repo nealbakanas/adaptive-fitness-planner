@@ -133,6 +133,20 @@ step('supersets, real rest, pause and resume, more time', () => {
   click('[data-act=addExTier][data-t=T3]');
   click('[data-act=addExPick][data-id=ex-dead-bug]');
   check('a T3 added by hand joins a superset', qa('section.block.paired').some(b => /Dead bug/.test(b.innerText)));
+  // Remove sits in the exercise's header, not next to − set, and can be undone.
+  const ringBlocks = () => qa('section.block').length;
+  check('remove is in the header, away from the set buttons', !!q('section.block .bhead [data-act=removeBlock]') && !q('section.block .brow [data-act=removeBlock]'));
+  const nBefore = ringBlocks();
+  const dead = qa('section.block').find(b => /Dead bug/.test(b.innerText));
+  click(dead.querySelector('[data-act=removeBlock]'));
+  check('remove takes it out', ringBlocks() === nBefore - 1);
+  const undoBtn = [...document.querySelectorAll('.toast button')].find(x => x.textContent === 'Undo');
+  check('with an Undo', !!undoBtn);
+  undoBtn?.click();
+  check('undo puts it back', ringBlocks() === nBefore && qa('section.block').some(b => /Dead bug/.test(b.innerText)));
+  click(qa('section.block')[0].querySelector('[data-act=exHist]'));
+  check('history opens from the exercise', /session/i.test(sheet()) && /Full workouts/.test(sheet()), sheet().slice(0, 200));
+  click('#sheet [data-act=sheetClose]');
   click('[data-act=addEx]');
   click('[data-act=addExTier][data-t=T3]');
   click('[data-act=addExPick][data-id=ex-ring-curl]');
@@ -464,6 +478,8 @@ step('history lists logged workouts and searches by exercise', () => {
   check('back to the week', /This week/.test(text()));
   click('[data-act=nav][data-tab=library]');
   click('[data-act=libEdit][data-id=ex-sorensen]');
+  click('#sheet [data-act=exHist]');
+  check('an exercise\'s history lists its sessions', /Sorensen hold/.test(sheet()) && /session/i.test(sheet()), sheet().slice(0, 200));
   click('#sheet [data-act=histOpen]');
   check('history from an exercise opens filtered', q('#histq')?.value === 'Sorensen hold' && !q('#sheet:not([hidden])'));
   click('[data-act=nav][data-tab=week]');

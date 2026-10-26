@@ -1163,6 +1163,36 @@ test('workout time counts warm-ups and the changeover to each exercise (Settings
   s.settings.changeover = 0;
   ok(Math.abs(L.blocksMinutes(s, r.blocks) - (r.minutesUsed - 2 * r.blocks.filter(b => b.tier !== 'JUMP').reduce((n, b) => n + (b.pairOf ? 0.5 : 1), 0))) < 1, 'the setting is the changeover per exercise');
 });
+test('progression: every prescribed rep at a load last time means +increment next time; short means the same load', () => {
+  const s = seed();
+  const ex = id => s.exercises.find(e => e.id === id);
+  const sc = id => s.schemes.find(x => x.id === id);
+  const log = (exerciseId, tier, schemeId, load, reps, daysAgo, sessionId) => reps.forEach((r, i) => s.sets.push({ id: L.uid(), sessionId, blockId: sessionId,
+    exerciseId, tier, schemeId, load, reps: r, done: true, loggedAt: NOON(daysAgo) + i, bw: 200 }));
+  log('ex-back-squat', 'T1', 's-t1-5x3', 300, [3, 3, 3, 3, 3], 7, 'a');
+  const squat = ex('ex-back-squat');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3')), 305, 'every rep at 300: 305');
+  const p = L.progression(s, squat, 'T1', sc('s-t1-5x3'));
+  ok(p.up && p.last.load === 300 && p.last.complete);
+  eq(L.progression(s, squat, 'T1', sc('s-t1-6x2')), null, 'another rep scheme: from your max instead');
+  eq(L.progression(s, squat, 'T1', sc('s-t1-5x3'), NOON(-70)), null, 'ten weeks later: from your max again');
+  log('ex-back-squat', 'T1', 's-t1-5x3', 305, [3, 3, 3, 2, 2], 3, 'b');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3')), 305, 'two reps short at 305: 305 again');
+  eq(L.lastOutcome(s, 'ex-back-squat', 'T1').short, 2);
+  // Today's own sets don't count as last time while you're doing it.
+  log('ex-back-squat', 'T1', 's-t1-5x3', 305, [3, 3, 3, 3, 3], 0, 'today');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3'), NOON(0) - 1), 305, 'during today: still 305');
+  eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3')), 310, 'next time: 310');
+  // T2 is tracked on its own: +5 from its own last time, not a jump to what the heavy squats imply.
+  log('ex-back-squat', 'T2', 's-t2-3x8', 225, [8, 8, 8], 2, 'c');
+  eq(L.targetLoad(s, squat, 'T2', sc('s-t2-3x8')), 230);
+  // The suggestion keeps last time's scheme for a T1/T2 lift so it can progress (no variety swap to 6×2).
+  eq(L.pickScheme(s, 'T1', squat, 60, ci({ fatigue: 2 }))?.id, 's-t1-5x3', 'same scheme as last time');
+  // Kettlebell moves go to the next bell you own.
+  s.exercises.push({ id: 'kb', name: 'KB press', familyId: 'fam-ohp', rank: 9, metric: 'load_reps', equipment: ['kettlebell'], role: 'main' });
+  log('kb', 'T2', 's-t2-3x8', 40, [8, 8, 8], 2, 'd');
+  eq(L.targetLoad(s, ex('kb'), 'T2', sc('s-t2-3x8')), 45);
+});
 test('v18: jumps move out of T2 into their own tier; goals keep their reps and this week keeps its credit', () => {
   const s = seed();
   s.version = 17;
