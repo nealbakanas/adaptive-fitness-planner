@@ -100,6 +100,7 @@ step('choose the mix, then regenerate it', () => {
 step('supersets, real rest, pause and resume, more time', () => {
   check('energy scale: 5 is fresh', /Energy\s*1 wrecked · 5 fresh/i.test(text()), text().slice(0, 300));
   click('[data-k=locationId][data-v=loc-basement]');
+  click('[data-k=minutes][data-v="60"]'); // long enough for T3 supersets once warm-ups and changeovers count
   click('[data-k=energy][data-v="5"]');
   click('[data-act=suggest]');
   check('suggested T3s are all grouped', qa('section.block').filter(b => /^T3/.test(b.querySelector('.tier').innerText)).every(b => b.classList.contains('paired') || b.classList.contains('haspair')));

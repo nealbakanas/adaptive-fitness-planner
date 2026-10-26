@@ -5,7 +5,11 @@
 // JUMP is jumps and plyometrics, counted in contacts: their own category, only in a workout when you ask for them.
 export const TIERS = ['T1', 'T2', 'T3', 'TECH', 'JUMP'];
 const BUILD_ORDER = ['T1', 'JUMP', 'T2', 'TECH', 'T3'];
-export const WARMUP = { T1: 3, T2: 0, T3: 0, TECH: 0, JUMP: 0 }; // minutes added on top of a scheme
+// Minutes on top of a scheme: warm-up sets (a ramp for heavy work, a couple for moderate), then the changeover to each
+// exercise (moving, loading, setting up; Settings → You). Jumps take none: they're done during the warm-up.
+export const WARMUP = { T1: 5, T2: 2, T3: 0, TECH: 1, JUMP: 0 };
+export const changeover = state => Math.max(0, Number(state.settings?.changeover ?? 2) || 0);
+export const overhead = (state, tier) => tier === 'JUMP' ? 0 : WARMUP[tier] + changeover(state);
 export const EST_MAX_REP_CAP = 10;             // sets above this rep count don't feed estimated max
 const DAY = 864e5;
 
@@ -494,12 +498,12 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
       // tier order would still fill the session with it (sweat day, 5x5 squats).
       if (tier !== 'JUMP' && INTENT[ci.intent || 'auto'][tier] < 1 && c.score < 0.6 * top) { c.note = `${ci.intent} intent favors other work`; continue; }
       const exercise = tier === 'T3' ? variedAccessory(state, ci, c) : c.exercise;
-      const sc = pickScheme(state, tier, exercise, schemeRoom(tier, budget), ci, slotDose(state, c.slot));
+      const sc = pickScheme(state, tier, exercise, schemeRoom(state, tier, budget), ci, slotDose(state, c.slot));
       if (!sc) { c.note = 'no scheme fits remaining time'; continue; }
       blocks.push({ id: uid(), tier, slotId: c.slot.id, exerciseId: exercise.id, schemeId: sc.id, swaps: [] });
       c.picked = true;
       famUsed.add(c.slot.familyId);
-      if (tier !== 'JUMP') budget -= sc.minutes + WARMUP[tier];
+      if (tier !== 'JUMP') budget -= sc.minutes + overhead(state, tier);
       count[tier]++;
     }
   }
@@ -508,7 +512,9 @@ export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [
   const goalMinutes = Math.round(blocksMinutes(state, blocks));
   // Goals (nearly) done: use the rest of the time anyway.
   let notes = [];
-  if (fill && ci.minutes - goalMinutes >= 5) {
+  // Jumps take no time, so asking for them still adds them when the goals use it all.
+  const wantJump = ci.jumps && ![...sessionBlocks, ...blocks].some(b => b.tier === 'JUMP');
+  if (fill && (ci.minutes - goalMinutes >= 5 || wantJump)) {
     const f = fillTime(state, ci, t, blocks, ci.minutes - goalMinutes, [...famUsed], sessionBlocks);
     blocks.push(...f.blocks);
     notes = f.notes;
@@ -653,12 +659,12 @@ const tierOrder = tier => BUILD_ORDER.indexOf(tier);
 const sortBlocks = (state, blocks) => blocks.sort((a, b) => blockRank(state, a) - blockRank(state, b)
   || (blockRank(state, a) === 2 ? tierOrder(a.tier) - tierOrder(b.tier) : 0));
 
-// Minutes a block takes from the workout: scheme plus warm-up, a superset partner at half (its sets fit in the other's
+// Minutes a block takes from the workout: scheme, warm-up and changeover, a superset partner at half (its sets fit in the other's
 // rest). Jumps take none: they're done during the warm-up.
-export const blockMinutes = (state, b) => b.tier === 'JUMP' ? 0 : ((byId(state.schemes, b.schemeId)?.minutes || 0) + WARMUP[b.tier]) * (b.pairOf ? 0.5 : 1);
+export const blockMinutes = (state, b) => b.tier === 'JUMP' ? 0 : ((byId(state.schemes, b.schemeId)?.minutes || 0) + overhead(state, b.tier)) * (b.pairOf ? 0.5 : 1);
 export const blocksMinutes = (state, blocks) => blocks.reduce((m, b) => m + blockMinutes(state, b), 0);
 // Time a block's scheme may use: jumps fit any time left, since they don't count toward it.
-const schemeRoom = (tier, budget) => tier === 'JUMP' ? Infinity : budget - WARMUP[tier];
+const schemeRoom = (state, tier, budget) => tier === 'JUMP' ? Infinity : budget - overhead(state, tier);
 
 // When the library runs out before the time does: more sets on the T2 and T3 work (3×15 → 4×12, 3×10 → 5×5),
 // the cheapest step that fits first. Explosive and T1 work keep their schemes. On a tired day (with the check-in
@@ -766,7 +772,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
     count: tier => k.blocks.filter(b => b.tier === tier).length,
     add(e, tier, why, dose = null) {
       const slot = slotFor(state, e, tier);
-      const sc = pickScheme(state, tier, e, schemeRoom(tier, k.budget), ci, dose ?? slotDose(state, slot, tier));
+      const sc = pickScheme(state, tier, e, schemeRoom(state, tier, k.budget), ci, dose ?? slotDose(state, slot, tier));
       if (!sc) return false;
       // T3s go in supersets, and a partner's sets fit in the other's rest: every second one costs half.
       const share = tier === 'T3' && k.count('T3') % 2 === 1 ? 0.5 : 1;
@@ -774,7 +780,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
       famUsed.add(e.familyId);
       famPatterns.set(e.familyId, (famPatterns.get(e.familyId) ?? new Set()).add(pattern(e)));
       if ((tier === 'T1' || tier === 'T2') && !e.explosive) k.present.add(pattern(e));
-      if (tier !== 'JUMP') k.budget -= (sc.minutes + WARMUP[tier]) * share;
+      if (tier !== 'JUMP') k.budget -= (sc.minutes + overhead(state, tier)) * share;
       k.notes.push(`${tier} ${e.name}: ${why}`);
       return true;
     },
@@ -938,11 +944,11 @@ export function buildMix(state, ci, asked, t = Date.now(), { excludeFamilies = [
     for (const c of scored.filter(x => x.slot.tier === tier)) {
       if (n >= (mix[tier] || 0)) break;
       if (c.waits || famUsed.has(c.slot.familyId) || (other && bodyRegion(state, c.exercise) === other)) continue;
-      const sc = pickScheme(state, tier, c.exercise, budget - WARMUP[tier], ci, slotDose(state, c.slot));
+      const sc = pickScheme(state, tier, c.exercise, schemeRoom(state, tier, budget), ci, slotDose(state, c.slot));
       if (!sc) continue;
       blocks.push({ id: uid(), tier, slotId: c.slot.id, exerciseId: c.exercise.id, schemeId: sc.id, swaps: [] });
       famUsed.add(c.slot.familyId);
-      budget -= sc.minutes + WARMUP[tier];
+      budget -= sc.minutes + overhead(state, tier);
       notes.push(`${tier} ${c.exercise.name}: open goal`);
       n++;
     }
@@ -1025,10 +1031,10 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
     const want = [...sessionBlocks, ...blocks, ...k.blocks].some(b => b.tier === 'JUMP') ? 1 : 2;
     while (k.budget >= 12 && t2Count() < want && pick('T2', 'easy day, lighter'));
   }
-  // Fresh days (energy 4-5, not Easy) get more T2 strength work: 3 lifts from 45 minutes, 4 from 75. Otherwise 2.
+  // Fresh days (energy 4-5, not Easy) get more T2 strength work: 3 lifts from an hour, 4 from 90. Otherwise 2.
   // Goal ones count; jumps and cleans are power work and don't. Each from a pattern with no strength lift yet.
   const fresh = energy(ci) >= 3.5 && ci.intent !== 'easy';
-  const t2Target = ci.intent === 'easy' ? 0 : energy(ci) <= 2.5 ? 1 : !fresh ? 2 : ci.minutes >= 75 ? 4 : ci.minutes >= 45 ? 3 : 2;
+  const t2Target = ci.intent === 'easy' ? 0 : energy(ci) <= 2.5 ? 1 : !fresh ? 2 : ci.minutes >= 90 ? 4 : ci.minutes >= 60 ? 3 : 2;
   while (k.budget >= 15 && strengthIn('T2') < t2Target && pick('T2', 'to fill the time'));
   const all = () => [...blocks, ...k.blocks];
   const room = maxBlocks(ci.minutes) - blocks.length;

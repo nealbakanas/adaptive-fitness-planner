@@ -204,7 +204,7 @@ function slotIdFor(exerciseId, tier) {
 
 // Best scheme for an exercise added or re-tiered by hand: fits the time left if possible, never over its rep cap.
 function schemeForBlock(s, ex, tier, exceptBlock) {
-  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.WARMUP[tier]; // jumps are warm-up time
+  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.overhead(state, tier); // jumps are warm-up time
   const dose = L.slotDose(state, L.slotFor(state, ex, tier), tier);
   return L.pickScheme(state, tier, ex, Math.max(budget, 0), s, dose)
     || L.pickScheme(state, tier, ex, Infinity, s, dose)
@@ -1354,6 +1354,7 @@ function settingsYou() {
       ${frow('Units', `<select data-bind="settings.unit" data-rerender>${opts([['lb', 'lb'], ['kg', 'kg']], st.unit)}</select>`)}
       ${frow('Round loads to', numIn('settings.increment', st.increment), `Smallest jump you can load, in ${unit()}`)}
       ${frow(`Kettlebells (${unit()})`, `<input class="list" inputmode="decimal" data-kb value="${esc((st.kettlebells || []).join(', '))}" placeholder="30, 40, 53">`, 'Kettlebell loads use these')}
+      ${frow('Changeover (min)', numIn('settings.changeover', st.changeover ?? 2), 'Added per exercise in suggestions: moving, loading and setting up. Jumps take none.')}
       ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`, 'Weekly goals reset on this day')}
     </div>
     <div class="label">Suggestions</div>
@@ -1773,7 +1774,7 @@ function sheetSwapEx(sh) {
 function sheetSwapScheme(sh) {
   const { s, b } = findBlock(sh.blockId);
   const ex = exOf(b.exerciseId);
-  const budget = sessionBudget(s, b) - L.WARMUP[b.tier];
+  const budget = sessionBudget(s, b) - L.overhead(state, b.tier);
   return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${b.tier} · ${budget} min left in budget · loads recalculate automatically</div>
     <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {
