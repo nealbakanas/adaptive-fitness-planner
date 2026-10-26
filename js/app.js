@@ -2117,6 +2117,7 @@ function swapTo(exerciseId) {
   const { s, b } = findBlock(ui.sheet.blockId);
   b.swaps.push({ type: 'exercise', from: b.exerciseId, to: exerciseId, reason: ui.sheet.reason, at: Date.now() });
   b.exerciseId = exerciseId;
+  b.slotId = slotIdFor(exerciseId, b.tier); // the goal the new exercise counts toward, not the old one's
   if (s.source === 'suggested') s.source = 'swapped';
   genSets(s, b);
   ui.sheet = null;

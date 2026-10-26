@@ -92,6 +92,19 @@ step('choose the mix, then regenerate it', () => {
   const still = qa('section.block').find(b => b.querySelector('[data-act=swapEx]').innerText === name);
   check('started block keeps all its sets', !!still && still.querySelectorAll('.set:not(.warm)').length === sets && still.querySelectorAll('.set.done:not(.warm)').length === 1, `${name}: ${still?.querySelectorAll('.set:not(.warm)').length}/${sets}`);
   check('the mix still adds up with a started block', tiers().filter(t => /^T3/.test(t)).length <= t3count, tiers().join(','));
+  // Swapping a T3 into a family with a T3 goal counts toward that goal (it used to keep the old exercise's goal).
+  const chip = x => x.querySelector('[data-act=swapEx]').innerText.replace(' ▾', '');
+  if (!qa('section.block').some(x => chip(x) === 'Dead bug')) {
+    // A T3 from a family other than core, so the old exercise's goal can't look right by accident.
+    const notCore = new Set(state.exercises.filter(e => e.familyId !== 'fam-core').map(e => e.name));
+    const t3b = qa('section.block').filter(x => /^T3/.test(x.querySelector('.tier').innerText.trim()) && !x.querySelector('.set.done')
+      && notCore.has(chip(x))).at(-1);
+    click(t3b.querySelector('[data-act=swapEx]'));
+    click('#sheet [data-act=swapAny]');
+    click('#sheet [data-act=addExPick][data-id=ex-dead-bug]');
+    const db = qa('section.block').find(x => chip(x) === 'Dead bug');
+    check('a swapped-in T3 counts toward its own goal', !!db && /Toward T3 Core/.test(db.innerText), db?.innerText.slice(0, 200));
+  }
   click('[data-act=recheck]');
   const j2 = q('[data-ci-jumps]');
   if (j2?.checked) { j2.checked = false; j2.dispatchEvent(new Event('change', { bubbles: true })); }
