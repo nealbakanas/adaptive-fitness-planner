@@ -17,11 +17,12 @@ export const isNewUser = state => state.settings.onboarded === false && !state.s
 const goalLift = (state, sl) => sl.exerciseId ?? L.byId(state.families, sl.familyId)?.defaultExerciseId;
 const roleOf = e => e.role ?? L.guessRole(e.name, e.metric, e.explosive);
 
-// A draft prefilled from the current setup: the starter goals for a new user, your own goals when you set up again.
+// A draft prefilled from the current setup. A new user starts with nothing picked, so every lift and area is their
+// choice (the starter goals are only behind "Skip"); setting up again starts from your own goals.
 export function startDraft(state, now = Date.now()) {
   const wk = usualWeek(state, now);
   const t1 = {}, t2 = {}, power = {}, pump = {};
-  for (const sl of state.slots) {
+  for (const sl of state.settings.onboarded === false ? [] : state.slots) {
     const e = L.byId(state.exercises, goalLift(state, sl));
     if (sl.tier === 'T1' && e && roleOf(e) === 'main') t1[e.id] = sl.quota;
     else if ((sl.tier === 'T2' || sl.tier === 'JUMP') && POWER_FAMILIES.includes(sl.familyId)) power[sl.familyId] = sl.quota;
@@ -65,8 +66,9 @@ export const pumpChoices = (state, draft) => familiesWith(state, draft, PUMP_FAM
 // A starter pick whose gear no location has (weighted dips without a dip station) isn't shown, so it can't be turned
 // off; it's left out until a location has the gear, and then it's back.
 export function picks(state, draft, kind) {
+  const lifts = new Set(strengthChoices(state, draft).flatMap(([, list]) => list.map(e => e.id)));
   const ok = {
-    t1: id => { const e = L.byId(state.exercises, id); return !!e && usableHere(draft, e); },
+    t1: id => lifts.has(id), // one the heavy and support steps show, so you can always turn it off
     power: id => powerChoices(state, draft).some(f => f.id === id),
     pump: id => pumpChoices(state, draft).some(f => f.id === id),
   };

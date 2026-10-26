@@ -1129,8 +1129,17 @@ test('a 30-minute upper + explosive Basement day never makes pump work (chest-su
   eq(L.blocksMinutes(s, [{ tier: 'JUMP', schemeId: 's-j-5x3' }]), 0);
   eq(G.tierCost(s, 'JUMP'), 0, 'the week budget leaves jumps out');
 });
+test('setup: a new user starts with nothing picked; setting up again starts from your goals', () => {
+  const s = seed();
+  const d = O.startDraft(s);
+  eq([d.t1, d.t2, d.power, d.pump], [{}, {}, {}, {}]);
+  eq(O.buildSlots(s, d), []);
+  s.settings.onboarded = true;
+  ok(Object.keys(O.startDraft(s).t1).length === 2, 'your own (here the starter) goals when you set up again');
+});
 test('setup: a starter pick your gear hides (weighted dips, no dip station) is never saved as a goal', () => {
   const s = seed();
+  s.settings.onboarded = true; // set up again, starting from the starter goals
   const d = O.startDraft(s);
   ok('ex-wdip' in d.t2, 'the starter has a weighted-dip T2');
   const shown = O.strengthChoices(s, d).flatMap(([, l]) => l.map(e => e.id));
