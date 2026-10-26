@@ -6,6 +6,7 @@ import * as FN from './fitnotes.js';
 import * as G from './goals.js';
 import * as M from './mobility.js';
 import * as P from './programs.js';
+import * as O from './onboard.js';
 
 const results = [];
 const test = (name, fn) => {
@@ -1127,6 +1128,26 @@ test('a 30-minute upper + explosive Basement day never makes pump work (chest-su
   }
   eq(L.blocksMinutes(s, [{ tier: 'JUMP', schemeId: 's-j-5x3' }]), 0);
   eq(G.tierCost(s, 'JUMP'), 0, 'the week budget leaves jumps out');
+});
+test('setup: a new user starts with nothing picked; setting up again starts from your goals', () => {
+  const s = seed();
+  const d = O.startDraft(s);
+  eq([d.t1, d.t2, d.power, d.pump], [{}, {}, {}, {}]);
+  eq(O.buildSlots(s, d), []);
+  s.settings.onboarded = true;
+  ok(Object.keys(O.startDraft(s).t1).length === 2, 'your own (here the starter) goals when you set up again');
+});
+test('setup: a starter pick your gear hides (weighted dips, no dip station) is never saved as a goal', () => {
+  const s = seed();
+  s.settings.onboarded = true; // set up again, starting from the starter goals
+  const d = O.startDraft(s);
+  ok('ex-wdip' in d.t2, 'the starter has a weighted-dip T2');
+  const shown = O.strengthChoices(s, d).flatMap(([, l]) => l.map(e => e.id));
+  ok(!shown.includes('ex-wdip'), 'not offered: no location has a dip station');
+  ok(!('ex-wdip' in O.picks(s, d, 't2')), 'left out of the picks you see');
+  ok(!O.buildSlots(s, d).some(sl => sl.exerciseId === 'ex-wdip'), 'and of the saved goals');
+  d.locations[0].equipment.push('dip-station');
+  ok(O.buildSlots(s, d).some(sl => sl.exerciseId === 'ex-wdip' && sl.tier === 'T2'), 'back once a location has the gear');
 });
 test('v18: jumps move out of T2 into their own tier; goals keep their reps and this week keeps its credit', () => {
   const s = seed();

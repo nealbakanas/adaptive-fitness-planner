@@ -1017,16 +1017,17 @@ function viewOnboard(d) {
     const other = step === 'heavy' ? d.t2 : d.t1;
     const groups = O.strengthChoices(state, d);
     body = (step === 'heavy'
-      ? `<p class="meta">Pick 2–3 lifts to take heavy (sets of 1–3) and stick with for a few weeks. ${Object.keys(d.t1).length} picked.</p>`
+      ? `<p class="meta">Pick 2–3 lifts to take heavy (sets of 1–3) and stick with for a few weeks. ${Object.keys(O.picks(state, d, 't1')).length} picked.</p>`
       : `<p class="meta">Moderate lifts that complement your heavy ones (sets of 5–8). Pick any number; the review shows what fits.</p>`) +
       groups.map(([label, list]) => `<div class="label">${label}</div><div class="chips">${list.filter(e => !(e.id in other)).map(e => obChip(kind, e.id, e.name, e.id in d[kind])).join('')}</div>`).join('') +
+      `<button class="addblock" data-act="quickAdd" data-from="ob">+ Add an exercise</button>` +
       (step === 'support' ? `<div class="label">Power work (jumps, Olympic lifts)</div><div class="chips">${O.powerChoices(state, d).map(f => obChip('power', f.id, f.name, f.id in d.power)).join('')}</div>` : '') +
-      obPicked(kind, d[kind], exName) + (step === 'support' ? obPicked('power', d.power, famName) : '');
+      obPicked(kind, O.picks(state, d, kind), exName) + (step === 'support' ? obPicked('power', O.picks(state, d, 'power'), famName) : '');
   } else if (step === 'pump') {
     body = `<p class="meta">Accessory areas for pump and conditioning, done in supersets. The app picks the exercises and rotates them.</p>
-      <div class="chips">${O.pumpChoices(state, d).map(f => obChip('pump', f.id, f.name, f.id in d.pump)).join('')}</div>` + obPicked('pump', d.pump, famName);
+      <div class="chips">${O.pumpChoices(state, d).map(f => obChip('pump', f.id, f.name, f.id in d.pump)).join('')}</div>` + obPicked('pump', O.picks(state, d, 'pump'), famName);
   } else if (step === 'maxes') {
-    const ids = [...Object.keys(d.t1), ...Object.keys(d.t2)];
+    const ids = [...Object.keys(O.picks(state, d, 't1')), ...Object.keys(O.picks(state, d, 't2'))];
     body = ids.length
       ? `<p class="meta">Optional: a 1RM you've tested sets your heavy and moderate loads (${d.unit}). Leave blank and the app learns from your sets.</p>
         <div class="menu">${ids.map(id => frow(`${esc(exName(id))}${exOf(id)?.bodyweight ? ' <span class="hint">added load</span>' : ''}`,
@@ -1964,7 +1965,7 @@ function qaHint(typed, sh) {
 function sheetQuickAdd(sh) {
   const base = sh.baseId ? exOf(sh.baseId) : null;
   const d = qaDefaults(sh, base);
-  const label = sh.from === 'swap' ? 'Add and use' : sh.from === 'add' ? `Add to today as ${sh.tier}` : 'Add exercise';
+  const label = sh.from === 'swap' ? 'Add and use' : sh.from === 'ob' ? 'Add and pick' : sh.from === 'add' ? `Add to today as ${sh.tier}` : 'Add exercise';
   const radio = (name, value, text, on) => `<label><input type="radio" name="${name}" value="${value}" ${on ? 'checked' : ''}>${text}</label>`;
   return `<h3>${base ? `New variation of ${esc(base.name)}` : 'New exercise'}</h3>
     <div class="field"><label>Name</label><input id="qa-name" data-qaname autocomplete="off" value="${esc(sh.name ?? '')}"
@@ -2709,6 +2710,7 @@ const actions = {
       explosive: sheetEl.querySelector('#qa-expl').checked,
       rank: sameFam ? base.rank + (place === 'easier' ? 0.5 : -0.5) : null,
     });
+    if (sh.from === 'ob') return obAdded(e);
     const s = currentSession();
     // Gear you just added while training is gear you have here.
     if (s && sh.from !== 'lib') {
@@ -3091,6 +3093,20 @@ document.addEventListener('click', e => {
 });
 
 // Copies the onboarding step's typed values into the draft.
+// An exercise added from the setup's heavy or support step: you added it as a lift, so it's a main lift, and it's picked
+// on that step when it can be (a loaded, non-explosive lift with gear at one of your locations).
+function obAdded(e) {
+  const d = ui.onboard, kind = O.STEPS[d.step] === 'heavy' ? 't1' : 't2';
+  e.role = 'main';
+  save();
+  ui.sheet = null;
+  const missing = e.equipment.filter(eq => !d.locations.some(l => l.equipment.includes(eq)));
+  if (e.metric !== 'load_reps' || e.explosive) toast(`Added ${e.name} to your library. Heavy and support goals need a loaded lift that isn't explosive.`);
+  else if (missing.length) toast(`Added ${e.name}, but none of your locations has ${missing.join(', ')}. Go back to Where you train to add it.`);
+  else { d[kind][e.id] = 1; toast(`Added and picked ${e.name}`); }
+  render();
+}
+
 function readObInputs() {
   const d = ui.onboard;
   if (!d) return;

@@ -562,6 +562,14 @@ step('set up again: locations, week, lifts, maxes, review, save and undo', () =>
   check('heavy lifts prefilled from current goals', /Heavy lifts/.test(text()) && qa('[data-act=obToggle][data-k=t1].on').length === 2);
   click('[data-act=obToggle][data-k=t1][data-id=gs-bench-press]');
   check('a third heavy lift', qa('[data-act=obToggle][data-k=t1].on').length === 3);
+  // Adding your own lift right from the step picks it.
+  click('[data-act=quickAdd][data-from=ob]');
+  q('#qa-name').value = 'Pin press';
+  for (const eq of ['barbell', 'rack']) q(`input[name="qa-eq"][value="${eq}"]`).checked = true;
+  click('[data-act=qaSave]');
+  const pin = state.exercises.find(e => e.name === 'Pin press');
+  check('an exercise added in setup is picked on that step', !!pin && pin.role === 'main' && !!q(`[data-act=obToggle][data-k=t1][data-id="${pin.id}"].on`), text().slice(0, 300));
+  click(`[data-act=obToggle][data-k=t1][data-id="${pin.id}"]`); // and can be turned off like any other
   click('[data-act=obNext]');
   check('support step offers power work', /Support work/.test(text()) && !!q('[data-act=obToggle][data-k=power]'));
   click('[data-act=obNext]');
