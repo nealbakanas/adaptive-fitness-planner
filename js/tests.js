@@ -1188,6 +1188,15 @@ test('progression: every prescribed rep at a load last time means +increment nex
   eq(L.targetLoad(s, squat, 'T2', sc('s-t2-3x8')), 230);
   // The suggestion keeps last time's scheme for a T1/T2 lift so it can progress (no variety swap to 6×2).
   eq(L.pickScheme(s, 'T1', squat, 60, ci({ fatigue: 2 }))?.id, 's-t1-5x3', 'same scheme as last time');
+  // AMRAP last set: prescribed to double the reps is +5, more than double is +10, short of prescribed is the same load.
+  const amrap = (last, daysAgo, id) => { log('ex-front-squat', 'T1', 's-t1-6x3', 200, [3, 3, 3, 3, 3, last], daysAgo, id); s.sets.filter(x => x.sessionId === id).at(-1).amrap = true; };
+  const front = ex('ex-front-squat');
+  amrap(6, 9, 'f1');
+  eq([L.targetLoad(s, front, 'T1', sc('s-t1-6x3')), L.progression(s, front, 'T1', sc('s-t1-6x3')).steps], [205, 1], '6 on the AMRAP set of 3 (double): +5');
+  amrap(7, 8, 'f2');
+  eq(L.targetLoad(s, front, 'T1', sc('s-t1-6x3')), 210, '7 (more than double): +10');
+  amrap(2, 7, 'f3');
+  eq(L.targetLoad(s, front, 'T1', sc('s-t1-6x3')), 200, '2 on the AMRAP set: short, same load');
   // Kettlebell moves go to the next bell you own.
   s.exercises.push({ id: 'kb', name: 'KB press', familyId: 'fam-ohp', rank: 9, metric: 'load_reps', equipment: ['kettlebell'], role: 'main' });
   log('kb', 'T2', 's-t2-3x8', 40, [8, 8, 8], 2, 'd');

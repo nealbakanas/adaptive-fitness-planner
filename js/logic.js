@@ -233,22 +233,27 @@ export function lastOutcome(state, exerciseId, tier, before = Infinity) {
     at: latest.loggedAt, scheme, sets, load: Math.min(...sets.map(s => Number(s.load))),
     complete: sets.length >= scheme.sets && sets.every(s => Number(s.reps) >= scheme.reps),
     short: Math.max(0, scheme.sets * scheme.reps - repsDone),
+    amrap: sets.find(s => s.amrap)?.reps != null ? Number(sets.find(s => s.amrap).reps) : null, // reps on the AMRAP last set
   };
 }
 
 export const PROGRESSION_WEEKS = 8;
-// Next load for a T1/T2 lift from last time: { load, up, last } (up: last time was complete), or null when there's no
-// like-for-like last time. Kettlebell moves go to the next bell you own.
+// Next load for a T1/T2 lift from last time: { load, up, steps, last } (up: last time was complete), or null when there's
+// no like-for-like last time. An AMRAP last set with more than double the prescribed reps (7+ on a set of 3) is two
+// steps up (+10), else one (+5). Kettlebell moves go up a bell per step.
 export function progression(state, ex, tier, scheme, before = Infinity) {
   if (ex?.metric !== 'load_reps' || (tier !== 'T1' && tier !== 'T2') || !scheme) return null;
   const last = lastOutcome(state, ex.id, tier, before);
   // Last time was more than 8 weeks ago: start again from your max.
   if (!last || last.scheme.reps !== scheme.reps || (before === Infinity ? Date.now() : before) - last.at > PROGRESSION_WEEKS * 7 * DAY) return null;
-  if (!last.complete) return { load: last.load, up: false, last };
+  if (!last.complete) return { load: last.load, up: false, steps: 0, last };
+  const steps = last.amrap != null && last.amrap > 2 * last.scheme.reps ? 2 : 1;
   const bells = state.settings.kettlebells || [];
   const kb = ex.equipment?.includes('kettlebell') && !ex.equipment.includes('barbell') && bells.length;
-  const load = kb ? ([...bells].sort((a, b) => a - b).find(b => b > last.load) ?? last.load) : last.load + (state.settings.increment || 5);
-  return { load, up: true, last };
+  let load = last.load;
+  if (kb) { const up = [...bells].sort((a, b) => a - b).filter(b => b > last.load); load = up[Math.min(steps, up.length) - 1] ?? last.load; }
+  else load += steps * (state.settings.increment || 5);
+  return { load, up: true, steps, last };
 }
 
 // Load to enter in the set row (added load for bodyweight moves). Never needs manual recalculation.
