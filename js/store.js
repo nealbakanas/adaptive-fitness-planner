@@ -289,6 +289,10 @@ export function migrate(s) {
     // v21: pace (js/pace.js). Settings learnPace and paceSince arrive from the defaults above; it reads the sets as they are.
     s.version = 21;
   }
+  if (s.version < 22) {
+    // v22: weekly reviews (js/review.js). `reviews` arrives as [] from the defaults above; a goal with quota 0 is paused.
+    s.version = 22;
+  }
   return s;
 }
 

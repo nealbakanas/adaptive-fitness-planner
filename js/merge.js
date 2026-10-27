@@ -40,7 +40,7 @@ export function mergeById(base, local, remote, newer) {
   return out;
 }
 
-const ARRAYS = ['sessions', 'sets', 'exercises', 'families', 'slots', 'schemes', 'plans', 'locations'];
+const ARRAYS = ['sessions', 'sets', 'exercises', 'families', 'slots', 'schemes', 'plans', 'locations', 'reviews'];
 const OBJECTS = ['settings', 'tiers', 'programs', 'imports'];
 const MOBILITY_ARRAYS = ['exercises', 'routines', 'sessions'];
 

@@ -149,6 +149,14 @@ An optional 12-week jump program, kept separate like mobility: it never counts t
 - **Progress chart**: the 12-week table with days done per week and a vertical jump entry per week (in, or cm with kg units), like the sheet's progress chart.
 - Sessions show in History (*Air Alert 2 · week 1, day 1*) and as a line on the Week tab, not in the mobility body-part summary.
 
+## Weekly review
+
+`js/review.js` turns a week into numbers, reasons and goal changes (`weekReview(state, weekStart)`, pure). **Totals**: workout days, minutes trained (first set to last per workout, leaving out breaks over 30 minutes), working sets by tier, goal sessions filled out of quota, goals met (all from `creditWeek`). **Per goal**: filled / quota, weeks missed in a row (back to when you started using the app, so imported history doesn't count), last done, and **why it slipped**, first match wins: no location has the gear for it; suggested, then swapped away or removed; waited for a fresh day (power work); never fit the time; other goals came first (score or cap); jumps were off at check-in; not enough workouts; done but short of the reps; picked fewer times than its quota; not picked. The reasons come from the "Why this session" notes saved on suggested workouts (`session.why[]`, now with `slotId`). **Lifts**: each T1/T2 lift done that week went up, held, went down, or stalled (the same load 3 sessions running).
+
+**Proposals** (never applied on their own): *ease off* a goal missed 2 weeks running (quota −1; at 1, pause it: quota 0, kept but not suggested); *step up* one met by mid-week two weeks running when the week budget has room (+1); *can't be done* when no location has the gear (switch to a family exercise you can do, else make it T3, else remove it); *over budget* when the goals need more time than you train even after easing off (T3 quotas down, largest first); *stalled lift* (a flag only). Ease-off and step-up wait for the week to end. A proposal skipped twice for a goal isn't offered again.
+
+On a new week the Week tab shows a **Last week** card (goal sessions, workouts, the most common slip reason) with Review and Dismiss, until you do one; **Review this week** is always there. Accepting changes `state.slots`; **Undo** puts the goals back exactly (a `before-review` copy). **Copy review** gives a plain-text summary to paste to Claude or a coach. Reviews are kept in `state.reviews` (newest 26 weeks; v22).
+
 ## Suggested weekly goals
 
 Week → **Suggest from history** (also offered after a FitNotes import). It looks at the last 12 weeks (26 if that's thin) and proposes goals for review: untick or change any of them, then **Replace my goals** or **Add to my goals**, with Undo.

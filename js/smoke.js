@@ -789,6 +789,54 @@ step('pace: History shows planned and actual minutes; Settings shows the learned
   store.save();
 });
 
+step('weekly review: the Last week card, Review, Accept, Undo, Copy', () => {
+  const st = () => store.state;
+  const lastWeek = L.weekBounds(st(), L.weekBounds(st()).start - 864e5).start;
+  const sid = 'review-last-week', at = lastWeek + 864e5 + 12 * 3600e3;
+  const arms = L.familyMembers(st(), 'fam-arms')[0].id;
+  st().sessions.push({ id: sid, day: L.dayKey(at), status: 'done', source: 'suggested', locationId: 'loc-basement', minutes: 45, checkinAt: at - 6e5, firstSetAt: at, blocks: [] });
+  for (let i = 0; i < 3; i++) st().sets.push({ id: `${sid}-${i}`, sessionId: sid, blockId: null, exerciseId: arms, tier: 'T3', reps: 15, done: true, loggedAt: at + i * 6e4 });
+  const dip = st().slots.find(sl => sl.familyId === 'fam-dip' && sl.tier === 'T2') ?? (st().slots.push({ id: 'sl-review-dip', familyId: 'fam-dip', tier: 'T2', quota: 1, priority: 2 }), st().slots.at(-1));
+  // A goal naming an exercise whose gear is nowhere: the weighted-dip case.
+  st().exercises.push({ ...st().exercises.find(e => e.id === 'ex-wdip'), id: 'ex-review-nogear', name: 'Moon dip', equipment: ['moon-rig'] });
+  dip.exerciseId = 'ex-review-nogear';
+  st().reviews = [];
+  store.save();
+  click('[data-act=nav][data-tab=week]');
+  check('a new week shows the Last week card', !!q('.review-due') && /Last week/.test(q('.review-due').innerText) && /goal sessions/.test(q('.review-due').innerText), text().slice(0, 300));
+  check('and Review this week is always there', !!q('[data-act=reviewOpen][data-w="' + L.weekBounds(st()).start + '"]'));
+  click('.review-due [data-act=reviewOpen]');
+  check('the review lists goals with done and why', /Week of/.test(text()) && /Goals/.test(text()) && /No location has the gear for it/.test(text()), text().slice(0, 600));
+  const before = JSON.stringify(st().slots);
+  const accept = q('[data-act=reviewAccept][data-id^="gear:"]');
+  check('the weighted-dip goal has a Can’t be done fix to accept', !!accept && /no location has the gear/.test(accept.closest('.proposal').innerText), text().slice(-800));
+  click(accept);
+  check('Accept changes the goal', JSON.stringify(st().slots) !== before && st().slots.find(sl => sl.id === dip.id)?.exerciseId !== 'ex-review-nogear');
+  check('and marks it accepted', /accepted/.test(text()));
+  click('[data-act=reviewUndo]');
+  check('Undo restores the goals exactly', JSON.stringify(st().slots) === before);
+  check('and the proposal is open again', !!q('[data-act=reviewAccept][data-id^="gear:"]'));
+  Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }); // no clipboard: the sheet to copy from
+  click('[data-act=reviewCopy]');
+  delete navigator.clipboard;
+  check('Copy review gives the text to copy', /Goals:/.test(q('#review-text')?.value ?? '') && /Goal sessions: \d+ of \d+/.test(q('#review-text').value), q('#review-text')?.value);
+  if (q('#sheet:not([hidden])')) click('#sheet [data-act=sheetClose]');
+  click('[data-act=reviewClose]');
+  check('once reviewed, the Last week card is gone', !q('.review-due'));
+  // A skipped proposal stays skipped; Dismiss hides an unreviewed week's card.
+  st().reviews = []; store.save();
+  click('[data-act=nav][data-tab=week]');
+  click('.review-due [data-act=reviewDismiss]');
+  check('Dismiss hides the card', !q('.review-due'));
+  st().sessions = st().sessions.filter(x => x.id !== sid);
+  st().sets = st().sets.filter(x => x.sessionId !== sid);
+  delete dip.exerciseId;
+  st().exercises = st().exercises.filter(e => e.id !== 'ex-review-nogear');
+  st().reviews = [];
+  store.save();
+  click('[data-act=nav][data-tab=today]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
