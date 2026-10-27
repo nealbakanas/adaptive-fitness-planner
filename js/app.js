@@ -3,6 +3,7 @@ import { state, save, replaceState, resetState, loadProblem, lastSaveError, reso
 import * as Vault from './vault.js';
 import * as Cloud from './cloud.js';
 import * as Taste from './taste.js';
+import { MIN_CHANGEOVERS } from './pace.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -233,7 +234,7 @@ function slotIdFor(exerciseId, tier) {
 
 // Best scheme for an exercise added or re-tiered by hand: fits the time left if possible, never over its rep cap.
 function schemeForBlock(s, ex, tier, exceptBlock) {
-  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.overhead(state, tier); // jumps are warm-up time
+  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.overhead(state, tier, ex.id, s.locationId); // jumps are warm-up time
   const dose = L.slotDose(state, L.slotFor(state, ex, tier), tier);
   return L.pickScheme(state, tier, ex, Math.max(budget, 0), s, dose)
     || L.pickScheme(state, tier, ex, Infinity, s, dose)
@@ -328,7 +329,7 @@ function planBlocks(plan) {
 
 function sessionBudget(s, exceptBlock) {
   return Math.round(s.minutes - s.blocks.filter(b => b !== exceptBlock)
-    .reduce((m, b) => m + L.blockMinutes(state, b), 0));
+    .reduce((m, b) => m + L.blockMinutes(state, b, { blocks: s.blocks, loc: s.locationId ?? null }), 0));
 }
 
 // Only real web links: a javascript: link in an imported or restored library would run code when tapped.
@@ -792,8 +793,10 @@ function viewSession(s) {
   const est = s.minutes - sessionBudget(s);
   const intent = INTENTS.find(i => i[0] === s.intent)?.[1] ?? s.intent;
   const rest = restSummary(state.sets.filter(x => x.sessionId === s.id));
+  const paced = L.pacedBlocks(state, s.blocks, s.locationId ?? null);
+  const burst = L.paceFor(state)?.bursty && !state.sets.some(x => x.sessionId === s.id && x.done);
   let h = `<header class="top"><div><h1>Today</h1>
-    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)}${L.leanOf(s) ? ` · leaning ${L.leanOf(s)}` : ''} · est ${est} min</div>${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
+    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)}${L.leanOf(s) ? ` · leaning ${L.leanOf(s)}` : ''} · est ${est} min${paced ? ' (your pace)' : ''}</div>${burst ? '<div class="sub">Log each set as you finish it to teach the app your pace.</div>' : ''}${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
     ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
     <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   if (!s.blocks.length) {
@@ -933,7 +936,7 @@ function viewBlock(s, b, credit, idea = null) {
     ${pairHead}
     <div class="bhead"><button class="tier ${b.tier}" data-act="tierEdit" data-b="${b.id}" aria-label="Change tier">${b.tier} ▾</button>
       <button class="chip" data-act="swapEx" data-b="${b.id}">${esc(ex.name)} ▾</button>
-      <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${sc.minutes}m ▾</button>
+      <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${round(L.schemeTime(state, b.tier, b.exerciseId, sc, !!b.pairOf || s.blocks.some(x => x.pairOf === b.id)))}m ▾</button>
       <button class="icon bremove" data-act="removeBlock" data-b="${b.id}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
     <div class="meta">${info.join(' · ')} ${restBtn}</div>
     ${progLine}${dose}
@@ -1378,7 +1381,7 @@ function viewHistory(hs) {
       else {
         bits.push(L.byId(state.locations, s.locationId)?.name);
         const mins = Math.round((e.end - e.at) / 60e3);
-        if (mins > 0) bits.push(`${mins} min`);
+        if (mins > 0) bits.push(s.status === 'done' && s.minutes ? `planned ${s.minutes} · took ${mins} min` : `${mins} min`);
       }
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
       if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
@@ -1532,14 +1535,35 @@ function settingsYou() {
       ${frow('Units', `<select data-bind="settings.unit" data-rerender>${opts([['lb', 'lb'], ['kg', 'kg']], st.unit)}</select>`)}
       ${frow('Round loads to', numIn('settings.increment', st.increment), `Smallest jump you can load, in ${unit()}`)}
       ${frow(`Kettlebells (${unit()})`, `<input class="list" inputmode="decimal" data-kb value="${esc((st.kettlebells || []).join(', '))}" placeholder="30, 40, 53">`, 'Kettlebell loads use these')}
-      ${frow('Changeover (min)', numIn('settings.changeover', st.changeover ?? 2), 'Added per exercise in suggestions: moving, loading and setting up. Jumps take none.')}
+      ${frow('Changeover (min)', numIn('settings.changeover', st.changeover ?? 2), 'Added per exercise in suggestions: moving, loading and setting up. Jumps take none. Your own pace replaces it where learned (below).')}
       ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`, 'Weekly goals reset on this day')}
     </div>
     <div class="label">Suggestions</div>
     <div class="menu">${frow('Go easier on T1 the day after T1', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1))}
       ${frow('Learn from my swaps', switchIn('settings.learnTaste', st.learnTaste !== false), 'Suggestions follow what you swap to, swap away from and remove. Favorites and Never suggest always count')}
       <button class="menurow" data-act="tasteForget"><span class="grow"><span class="name">Forget what it learned</span>
-        <span class="meta">${st.tasteSince ? `Earlier swaps are ignored since ${esc(new Date(st.tasteSince).toLocaleDateString())}` : 'Starts it fresh; your history stays'}</span></span></button></div>`;
+        <span class="meta">${st.tasteSince ? `Earlier swaps are ignored since ${esc(new Date(st.tasteSince).toLocaleDateString())}` : 'Starts it fresh; your history stays'}</span></span></button></div>
+    <div class="label">Pace</div>
+    <div class="menu">${frow('Use my pace', switchIn('settings.learnPace', st.learnPace !== false) , 'Time estimates use how long you take per set and between exercises, from when you log sets')}
+      ${paceRows()}
+      <button class="menurow" data-act="paceReset"><span class="grow"><span class="name">Reset my pace</span>
+        <span class="meta">${st.paceSince ? `Learning since ${esc(new Date(st.paceSince).toLocaleDateString())}` : 'Earlier workouts stop counting; your history stays'}</span></span></button></div>`;
+}
+
+// What the estimates learned: changeover per location, and how many per-set times.
+function paceRows() {
+  if (state.settings.learnPace === false) return '';
+  const p = L.paceFor(state);
+  const rows = state.locations.map(l => {
+    const c = p.all.get(l.id);
+    const text = !c ? 'not learned yet' : p.change.has(l.id)
+      ? `${(Math.round(c.minutes * 2) / 2).toFixed(1)} min changeover, from ${c.sessions} workout${c.sessions === 1 ? '' : 's'}`
+      : `learning (${c.samples} of ${MIN_CHANGEOVERS} changeovers)`;
+    return `<div class="frow"><span class="grow"><span class="name">${esc(l.name)}</span><span class="meta">${esc(text)}</span></span></div>`;
+  });
+  const n = p.perSet.size;
+  rows.push(`<div class="frow"><span class="grow"><span class="name">Per-set times</span><span class="meta">${n ? `${n} exercise${n === 1 ? '' : 's'} learned from ${p.used} workout${p.used === 1 ? '' : 's'}` : 'after 3 cleanly logged workouts with an exercise'}</span></span></div>`);
+  return rows.join('');
 }
 
 function settingsTimer() {
@@ -2064,15 +2088,16 @@ function sheetSwapEx(sh) {
 function sheetSwapScheme(sh) {
   const { s, b } = findBlock(sh.blockId);
   const ex = exOf(b.exerciseId);
-  const budget = sessionBudget(s, b) - L.overhead(state, b.tier);
+  const budget = sessionBudget(s, b) - L.overhead(state, b.tier, b.exerciseId, s.locationId ?? null);
+  const time = sc => round(L.schemeTime(state, b.tier, b.exerciseId, sc, !!b.pairOf || s.blocks.some(x => x.pairOf === b.id)));
   return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${b.tier} · ${budget} min left in budget · loads recalculate automatically</div>
     <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {
       const load = L.targetLoad(state, ex, b.tier, sc, s.checkinAt);
-      const bits = [`${sc.minutes} min`, `${sc.sets * sc.reps} reps`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
-        load != null ? `${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : '', sc.minutes > budget ? 'over time' : '',
+      const bits = [`${time(sc)} min`, `${sc.sets * sc.reps} reps`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
+        load != null ? `${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : '', time(sc) > budget ? 'over time' : '',
         L.overRepCap(ex, sc) ? `over ${ex.maxReps}-rep cap` : ''].filter(Boolean);
-      const dim = sc.minutes > budget || L.overRepCap(ex, sc);
+      const dim = time(sc) > budget || L.overRepCap(ex, sc);
       return `<button class="row ${sc.id === b.schemeId ? 'on' : ''} ${dim ? 'dim' : ''}" data-act="pickScheme" data-id="${sc.id}">
         <span>${esc(sc.name)}</span><span class="meta">${esc(bits.join(' · '))}</span></button>`;
     }).join('')}</div>`;
@@ -2651,6 +2676,10 @@ const actions = {
     save(); renderSheet(); render();
     toast(e.pref === 'never' ? `${e.name} won’t be suggested` : e.pref === 'fav' ? `${e.name} is a favorite` : `${e.name} is back to normal`);
   },
+  paceReset: () => askConfirm('Reset your pace?', 'Time estimates go back to the usual guesses and learn again from your next workouts. Your history stays.', 'Reset', () => {
+    state.settings.paceSince = Date.now();
+    save(); render(); toast('Pace reset');
+  }),
   tasteForget: () => askConfirm('Forget what it learned?', 'Suggestions stop using your earlier swaps and removals and start fresh from here. Your history, favorites and Never suggest stay.', 'Forget', () => {
     state.settings.tasteSince = Date.now();
     save(); render(); toast('Starting fresh');

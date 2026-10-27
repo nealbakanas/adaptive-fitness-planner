@@ -747,6 +747,48 @@ step('taste: Learn from my swaps, Forget, favorites, Never suggest, and your usu
   if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
 });
 
+step('pace: History shows planned and actual minutes; Settings shows the learned changeover; estimates say your pace', () => {
+  const st = () => store.state;
+  const M = 6e4, added = [];
+  for (const d of [3, 4, 5]) {
+    const sid = `pace-${d}`, start = Date.now() - d * 864e5;
+    const blocks = [['ex-front-squat', 'T1', 's-t1-5x3', 5], ['ex-db-curl', 'T3', 's-t3-3x15', 3], ['ex-db-oh-tri', 'T3', 's-t3-3x15', 3]]
+      .map(([exerciseId, tier, schemeId, n], i) => ({ id: `${sid}-b${i}`, tier, exerciseId, schemeId, swaps: [], n }));
+    let t = start;
+    for (const b of blocks) {
+      for (let k = 0; k < b.n; k++) { st().sets.push({ id: `${b.id}-${k}`, sessionId: sid, blockId: b.id, exerciseId: b.exerciseId, tier: b.tier, reps: 5, load: 100, done: true, loggedAt: t }); t += 3 * M; }
+      t += 4 * M; // the last set's 3 minutes, then 4 to the next exercise (T3s: no warm-up)
+      delete b.n;
+    }
+    st().sessions.push({ id: sid, day: L.dayKey(start), status: 'done', source: 'suggested', locationId: 'loc-basement', minutes: 45, checkinAt: start - 600e3, firstSetAt: start, blocks, fatigue: 2, intent: 'auto' });
+    added.push(sid);
+  }
+  store.save();
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  check('a finished workout shows planned and actual minutes', /planned 45 · took 38 min/.test(text()), text().slice(0, 500));
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=you]');
+  check('Settings shows the learned changeover', /Basement[\s\S]*4\.0 min changeover, from 3 workouts/.test(text()), text().slice(text().indexOf('Pace'), text().indexOf('Pace') + 300));
+  const sw = q('input[data-bind="settings.learnPace"]');
+  check('Use my pace is on by default', sw?.checked && st().settings.learnPace !== false);
+  sw.checked = false; fire(sw, 'change');
+  check('the switch turns it off', st().settings.learnPace === false && L.changeoverAt(st(), 'loc-basement') === 2);
+  sw.checked = true; fire(sw, 'change');
+  check('and back on', L.changeoverAt(st(), 'loc-basement') === 4);
+  click('[data-act=paceReset]');
+  check('Reset asks first', /Reset your pace/.test(sheet()));
+  click('#sheet [data-act=sheetClose]');
+  click('[data-act=nav][data-tab=today]');
+  click('[data-k=locationId][data-v=loc-basement]');
+  click('[data-act=suggest]');
+  check('the session estimate says it used your pace', /est \d+ min \(your pace\)/.test(text()), text().slice(0, 300));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  st().sessions = st().sessions.filter(x => !added.includes(x.id));
+  st().sets = st().sets.filter(x => !added.includes(x.sessionId));
+  store.save();
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
