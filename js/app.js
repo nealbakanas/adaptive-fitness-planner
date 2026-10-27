@@ -767,8 +767,19 @@ function viewProgram(id) {
   return h;
 }
 
+// Today's "skip" chips: the categories your weekly goals use. Skipped ones are left out of every suggestion today.
+function skipField(ci) {
+  const fams = [...new Set(state.slots.filter(sl => sl.quota > 0).map(sl => sl.familyId))].map(famOf).filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!fams.length) return '';
+  const on = ci.skip || [];
+  return `<details class="skip" ${on.length || ui.skipOpen ? 'open' : ''} data-skip><summary>Skip today${on.length ? `: ${esc(on.map(id => famOf(id)?.name).filter(Boolean).join(', '))}` : ''} <span class="hint">sore or hurt? nothing from these today</span></summary>
+    <div class="chips">${fams.map(f => `<button class="chip ${on.includes(f.id) ? 'on' : ''}" data-act="ciSkip" data-v="${f.id}">${esc(f.name)}</button>`).join('')}</div></details>`;
+}
+
 function viewCheckin() {
   const ci = ui.ci;
+  if (ci.skip?.length && ci.skipDay !== L.dayKey()) { ci.skip = []; delete ci.skipDay; } // a skip is for the day
   const doneToday = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'done');
   const paused = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'paused');
   let h = `<header class="top"><h1>Check in</h1></header>`;
@@ -792,6 +803,7 @@ function viewCheckin() {
     <div class="field"><label>Sleep <span class="hint">optional · 1 poor · 5 great · tap again to clear</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
     <div class="field"><label>Intent</label>${seg('intent', INTENTS, ci.intent)}</div>
     <div class="field"><label>Lean <span class="hint">which half feels up for it today</span></label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
+    ${skipField(ci)}
     <label class="toggle"><input type="checkbox" data-ci-jumps ${ci.jumps ? 'checked' : ''}> Add jumps <span class="hint">one jumps block, toward your jumps goal</span></label>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
@@ -800,11 +812,7 @@ function viewCheckin() {
       <p class="meta">Uses the time, place and lean above.</p>
       <button class="primary" data-act="mixBuild">Build this mix</button></details>
     <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals${L.leanOf(ci) ? ` · leaning ${L.leanOf(ci)}` : ''}</span></label>${focusButtons(L.leanOf(ci))}</div>`;
-  h += programCards();
-  const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
-  h += `<div class="field"><label>Mobility <span class="hint">its own session, outside your weekly goals</span></label><div class="list">${state.mobility.routines.map(r =>
-    `<button class="row" data-act="mobStart" data-id="${r.id}"><span>${esc(r.name)}</span><span class="meta">${r.items.length} exercises${lastRoutine(r.id)}</span></button>`).join('')}
-    <button class="row add" data-act="mobPick" data-mode="new">Pick body parts ›</button></div></div>`;
+  h += `<p class="meta pad">Mobility and jump programs are under Plans.</p>`;
   if (state.plans.length) {
     h += `<div class="field"><label>Or start a saved plan</label><div class="list">${state.plans.map(p =>
       `<button class="row" data-act="startPlan" data-id="${p.id}"><span>${esc(p.name)}</span><span class="meta">${p.items.length} items</span></button>`).join('')}</div></div>`;
@@ -821,7 +829,7 @@ function viewSession(s) {
   const paced = L.pacedBlocks(state, s.blocks, s.locationId ?? null);
   const burst = L.paceFor(state)?.bursty && !state.sets.some(x => x.sessionId === s.id && x.done);
   let h = `<header class="top"><div><h1>Today</h1>
-    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)}${L.leanOf(s) ? ` · leaning ${L.leanOf(s)}` : ''} · est ${est} min${paced ? ' (your pace)' : ''}</div>${burst ? '<div class="sub">Log each set as you finish it to teach the app your pace.</div>' : ''}${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
+    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)}${L.leanOf(s) ? ` · leaning ${L.leanOf(s)}` : ''} · est ${est} min${paced ? ' (your pace)' : ''}</div>${s.skip?.length ? `<div class="sub">Skipping today: ${esc(s.skip.map(id => famOf(id)?.name).filter(Boolean).join(', '))}</div>` : ''}${burst ? '<div class="sub">Log each set as you finish it to teach the app your pace.</div>' : ''}${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
     ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
     <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   if (!s.blocks.length) {
@@ -1495,6 +1503,13 @@ function viewPlans() {
         <button data-act="planCancel">Cancel</button><button class="primary" data-act="planSave">Save plan</button></div>`;
   }
   let h = `<header class="top"><h1>Plans</h1><button class="primary" data-act="planNew">+ New plan</button></header>`;
+  // Starting points outside your weekly goals: jump programs and mobility.
+  h += programCards();
+  const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
+  h += `<div class="field"><label>Mobility <span class="hint">its own session, outside your weekly goals</span></label><div class="list">${state.mobility.routines.map(r =>
+    `<button class="row" data-act="mobStart" data-id="${r.id}"><span>${esc(r.name)}</span><span class="meta">${r.items.length} exercises${lastRoutine(r.id)}</span></button>`).join('')}
+    <button class="row add" data-act="mobPick" data-mode="new">Pick body parts ›</button></div></div>
+    <div class="sectionhead"><h3>Saved plans</h3></div>`;
   if (!state.plans.length) h += `<p class="muted">Hand-built sessions you can pick instead of the suggestion. Choosing one is logged as an override.</p>`;
   h += state.plans.map(p => `<button class="card row" data-act="planEdit" data-id="${p.id}"><span><b>${esc(p.name)}</b>
     <span class="meta">${esc(p.items.map(it => `${it.tier} ${exOf(it.exerciseId)?.name ?? '?'} ${schOf(it.schemeId)?.name ?? ''}`).join(' · '))}</span></span><span>›</span></button>`).join('');
@@ -1502,12 +1517,6 @@ function viewPlans() {
   h += state.mobility.routines.map(r => `<button class="card row" data-act="mobRoutineEdit" data-id="${r.id}"><span><b>${esc(r.name)}</b>
     <span class="meta">${esc(r.items.map(id => mobEx(id)?.name ?? '?').join(' · '))}</span></span><span>›</span></button>`).join('')
     || '<p class="muted">No mobility routines yet.</p>';
-  h += `<div class="sectionhead"><h3>Programs</h3></div>`;
-  h += P.PROGRAMS.map(d => {
-    const p = P.progress(state, d.id);
-    const where = !p ? `${P.weeksOf(d)} weeks · not started` : p.finished ? 'finished' : `week ${p.week}, day ${p.day}`;
-    return `<button class="card row" data-act="progOpen" data-id="${d.id}"><span><b>${esc(d.name)}</b><span class="meta">Jump program · ${where}</span></span><span>›</span></button>`;
-  }).join('');
   return h;
 }
 
@@ -2622,6 +2631,12 @@ const actions = {
     save(); render(); toast('Your previous goals are back');
   },
 
+  ciSkip: d => {
+    const on = new Set(ui.ci.skip || []);
+    if (on.has(d.v)) on.delete(d.v); else on.add(d.v);
+    ui.ci.skip = [...on]; ui.ci.skipDay = L.dayKey(); ui.skipOpen = true;
+    render();
+  },
   // Locations: tap to add or remove one; at least one stays. The first picked is the main one.
   ciLoc: d => {
     const ids = ui.ci.locationIds?.length ? [...ui.ci.locationIds] : [ui.ci.locationId];
@@ -2916,6 +2931,7 @@ const actions = {
     if (currentMobility()) { ui.showWorkout = false; render(); return toast('A mobility session is already open'); }
     const r = L.byId(state.mobility.routines, d.id);
     startMobility(r.items.map(mobEx).filter(e => e && !e.archived).map(e => M.newItem(state, e)), { routineId: r.id });
+    ui.tab = 'today';
     save(); render(); window.scrollTo(0, 0);
   },
   progOpen: d => { ui.program = d.id; ui.mobRoutine = null; ui.plan = null; ui.tab = 'plans'; render(); window.scrollTo(0, 0); },
@@ -3960,6 +3976,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('toggle', e => {
   if (e.target.hasAttribute?.('data-why')) ui.whyOpen = e.target.open;
   if (e.target.hasAttribute?.('data-mix')) ui.mixOpen = e.target.open;
+  if (e.target.hasAttribute?.('data-skip')) ui.skipOpen = e.target.open;
 }, true);
 
 function addEquipment(el) {

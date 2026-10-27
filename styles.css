@@ -452,6 +452,8 @@ nav[hidden] { display: none !important; }
 
 .mixer { margin: 12px 0; }
 .mixer summary { cursor: pointer; font-weight: 600; }
+.skip { margin: 8px 0 12px; }
+.skip summary { cursor: pointer; font-weight: 600; }
 .mixrow { display: flex; justify-content: space-between; align-items: center; }
 
 /* Remove sits in the exercise's top corner, away from the set buttons. */

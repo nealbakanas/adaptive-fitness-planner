@@ -215,7 +215,9 @@ step('video links must be web links', () => {
 
 step('mobility: routine session, body-part picks, mobility in a workout, library and routines', () => {
   click('[data-act=nav][data-tab=today]');
-  check('check-in lists your mobility routines', /Day 1: Long & Strong/.test(text()) && qa('[data-act=mobStart]').length === 4);
+  check('check-in no longer lists mobility', !q('[data-act=mobStart]') && /under Plans/.test(text()));
+  click('[data-act=nav][data-tab=plans]');
+  check('Plans lists your mobility routines', /Day 1: Long & Strong/.test(text()) && qa('[data-act=mobStart]').length === 4);
   click('[data-act=mobStart][data-id=mobr-day1]');
   check('routine session opens with its 4 moves', /Mobility/.test(q('#app h1').innerText) && qa('section.block.mob').length === 4 && /Jefferson curl/.test(text()));
   check('history notes and video link shown', /Week 1: 70 lb/.test(q('#app').textContent) && qa('section.block.mob a').some(a => a.href.startsWith('https://www.youtube.com/results')));
@@ -234,7 +236,9 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
   click('[data-act=mobFinish]');
   check('finish saves only what was logged', state.mobility.sessions.at(-1).status === 'done' && state.mobility.sessions.at(-1).items.length === 1
     && state.mobility.sessions.at(-1).items[0].note === 'left side tight');
+  click('[data-act=nav][data-tab=plans]');
   check('routine shows when it was last done', /Day 1: Long & Strong\s*4 exercises · last today/.test(text()), text().slice(0, 600));
+  click('[data-act=nav][data-tab=today]');
 
   onlyAt('loc-basement');
   click('[data-act=suggest]');
@@ -409,7 +413,9 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
 step('Air Alert 2: optional, started from Plans, one day per finished session', () => {
   click('[data-act=nav][data-tab=today]');
   if (q('[data-act=finish]')) { click('[data-act=finish]'); if (q('[data-act=finishNow]')) click('[data-act=finishNow]'); }
-  check('offered on check-in, not started', !!q('[data-act=progOpen][data-id=aa2]') && !q('[data-act=progSession]'));
+  check('not on check-in', !q('[data-act=progOpen][data-id=aa2]'));
+  click('[data-act=nav][data-tab=plans]');
+  check('offered under Plans, not started', !!q('[data-act=progOpen][data-id=aa2]') && !q('[data-act=progSession]'));
   click('[data-act=progOpen][data-id=aa2]');
   check('program page with the 12-week chart', /Air Alert 2/.test(text()) && qa('.progchart tbody tr').length === 12 && /1×1200/.test(text()));
   setVal(q('[data-vert="aa2|1"]'), '24');
@@ -422,7 +428,9 @@ step('Air Alert 2: optional, started from Plans, one day per finished session', 
   click(q('section.block.mob [data-act=mcheck]'));
   click('[data-act=mobFinish]');
   check('finishing moves to day 2', state.programs.aa2.week === 1 && state.programs.aa2.day === 2, JSON.stringify(state.programs.aa2));
-  check('check-in card shows the next day and done today', /week 1 of 12, day 2 of 5/.test(text()) && /Done today/.test(text()), text().slice(0, 500));
+  check('check-in shows done today', /Done today/.test(text()), text().slice(0, 500));
+  click('[data-act=nav][data-tab=plans]');
+  check('the Plans card shows the next day', /week 1 of 12, day 2 of 5/.test(text()) && /Done today ✓/.test(text()), text().slice(0, 500));
   click('[data-act=nav][data-tab=week]');
   check('week tab shows program days, not as mobility', /Air Alert 2/.test(text()) && /1 of 5 days this week/.test(text()));
   click('[data-act=histOpen]');
@@ -869,6 +877,28 @@ step('check-in at several locations', () => {
   click('[data-act=finish]');
   if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
   onlyAt('loc-basement');
+});
+
+step('skip a category today: nothing from it is suggested', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  const fam = st().slots.find(sl => sl.quota > 0 && sl.tier === 'T3')?.familyId;
+  check('check-in offers Skip today with your goal categories', !!q('[data-skip]') && !!q(`[data-act=ciSkip][data-v="${fam}"]`));
+  click(`[data-act=ciSkip][data-v="${fam}"]`);
+  check('tapping one skips it', q(`[data-act=ciSkip][data-v="${fam}"]`).classList.contains('on') && /Skip today: /.test(q('[data-skip] summary').innerText));
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  check('no block from it', !sess.blocks.some(b => st().exercises.find(e => e.id === b.exerciseId)?.familyId === fam));
+  check('the header says what is skipped', /Skipping today:/.test(text()));
+  click('[data-act=moreTime]');
+  if (q('#sheet [data-act=moreTimeGo]')) click('#sheet [data-act=moreTimeGo]');
+  check('+ Time keeps skipping it', !sess.blocks.some(b => st().exercises.find(e => e.id === b.exerciseId)?.familyId === fam));
+  if (q('#sheet:not([hidden])')) click('#sheet [data-act=sheetClose]');
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  click(`[data-act=ciSkip][data-v="${fam}"]`);
+  check('tap again to un-skip', !(store.state && q(`[data-act=ciSkip][data-v="${fam}"]`).classList.contains('on')));
 });
 
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
