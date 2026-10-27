@@ -280,6 +280,11 @@ export function migrate(s) {
     // The key arrives as null from the defaults above; the next save fills it in.
     s.version = 19;
   }
+  if (s.version < 20) {
+    // v20: taste (js/taste.js). Settings learnTaste and tasteSince arrive from the defaults above, exercise.pref
+    // ('fav' | 'never') and session.removed[] are optional, so nothing to move.
+    s.version = 20;
+  }
   return s;
 }
 

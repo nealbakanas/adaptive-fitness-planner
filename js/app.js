@@ -2,6 +2,7 @@ import { state, save, replaceState, resetState, loadProblem, lastSaveError, reso
   recover, getRecoveryCopy, useRecoveryCopy, dismissRecoveryCopy, snapshotNow, requestPersist, flushVault } from './store.js';
 import * as Vault from './vault.js';
 import * as Cloud from './cloud.js';
+import * as Taste from './taste.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -1535,7 +1536,10 @@ function settingsYou() {
       ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`, 'Weekly goals reset on this day')}
     </div>
     <div class="label">Suggestions</div>
-    <div class="menu">${frow('Go easier on T1 the day after T1', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1))}</div>`;
+    <div class="menu">${frow('Go easier on T1 the day after T1', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1))}
+      ${frow('Learn from my swaps', switchIn('settings.learnTaste', st.learnTaste !== false), 'Suggestions follow what you swap to, swap away from and remove. Favorites and Never suggest always count')}
+      <button class="menurow" data-act="tasteForget"><span class="grow"><span class="name">Forget what it learned</span>
+        <span class="meta">${st.tasteSince ? `Earlier swaps are ignored since ${esc(new Date(st.tasteSince).toLocaleDateString())}` : 'Starts it fresh; your history stays'}</span></span></button></div>`;
 }
 
 function settingsTimer() {
@@ -2044,14 +2048,17 @@ function sheetSwapEx(sh) {
   const { s, b } = findBlock(sh.blockId);
   const cur = exOf(b.exerciseId), fam = famOf(cur.familyId);
   const loc = L.byId(state.locations, s.locationId);
-  const alts = L.alternatives(state, cur, loc);
-  return `<h3>Swap ${esc(cur.name)}</h3><div class="meta">${esc(fam?.name)} at ${esc(loc?.name)} · closest first</div>
+  // What you usually swap this for comes first, marked; favorites carry a star.
+  const usual = new Map(Taste.replacements(Taste.taste(state), cur.id, b.tier).map(r => [r.id, r.count]));
+  const alts = L.alternatives(state, cur, loc).sort((x, y) => (usual.get(y.id) ?? 0) - (usual.get(x.id) ?? 0));
+  return `<h3>Swap ${esc(cur.name)}</h3><div class="meta">${esc(fam?.name)} at ${esc(loc?.name)} · ${usual.size ? 'your usual first, then ' : ''}closest first</div>
     <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
-    <div class="list">${alts.map(a => `<button class="row" data-act="pickEx" data-id="${a.id}"><span>${esc(a.name)}</span>
-      <span class="meta">${a.rank < cur.rank ? 'harder' : 'easier'}${a.metric !== 'load_reps' && !a.explosive && (b.tier === 'T1' || b.tier === 'T2') ? ' · won’t auto-count' : ''}</span></button>`).join('')
+    <div class="list">${alts.map(a => `<button class="row" data-act="pickEx" data-id="${a.id}"><span>${a.pref === 'fav' ? '★ ' : ''}${esc(a.name)}</span>
+      <span class="meta">${usual.has(a.id) ? `your usual (${usual.get(a.id)}×) · ` : ''}${a.rank < cur.rank ? 'harder' : 'easier'}${a.metric !== 'load_reps' && !a.explosive && (b.tier === 'T1' || b.tier === 'T2') ? ' · won’t auto-count' : ''}</span></button>`).join('')
       || '<p class="muted">No other family members available here.</p>'}
     <button class="row add" data-act="qaVariation" data-id="${cur.id}" data-from="swap">+ New variation of ${esc(cur.name)}</button>
-    <button class="row add" data-act="swapAny">Pick from all exercises ›</button></div>`;
+    <button class="row add" data-act="swapAny">Pick from all exercises ›</button>
+    <button class="row add" data-act="tastePref" data-id="${cur.id}" data-v="never">${cur.pref === 'never' ? `Suggest ${esc(cur.name)} again` : `Never suggest ${esc(cur.name)}`}</button></div>`;
 }
 
 function sheetSwapScheme(sh) {
@@ -2368,6 +2375,8 @@ function sheetEditEx(sh) {
     <label class="toggle"><input type="checkbox" id="ee-expl" ${e.explosive ? 'checked' : ''}> Explosive <span class="hint">jumps, throws, Olympic lifts: best done fresh</span></label>
     <div class="field"><label>Role <span class="hint">what suggestions may use it for</span></label>
       <select id="ee-role">${opts([['main', 'Main lift (T1/T2 strength)'], ['power', 'Power (explosive T1/T2)'], ['accessory', 'Accessory (T3 only)'], ['technique', 'Technique drill']], e.role ?? L.guessRole(e.name, e.metric, e.explosive))}</select></div>
+    <div class="field"><label>In suggestions <span class="hint">Never suggest still lets you pick it yourself</span></label>
+      <select id="ee-pref">${opts([['', 'Normal'], ['fav', 'Favorite: picked over equals'], ['never', 'Never suggest']], e.pref ?? '')}</select></div>
     <label class="toggle"><input type="checkbox" id="ee-arch" ${e.archived ? 'checked' : ''}> Archived <span class="hint">kept for history, left out of suggestions and pickers</span></label>
     <div class="field"><label>YouTube URL</label><input id="ee-yt" value="${esc(e.youtube)}" placeholder="https://youtu.be/..."></div>
     <div class="field"><label>Start time (m:ss)</label><input id="ee-start" value="${esc(fmtMSS(e.start))}" placeholder="0:42"></div>
@@ -2635,6 +2644,17 @@ const actions = {
   swapScheme: d => openSheet({ type: 'swapScheme', blockId: d.b, reason: null }),
   reason: d => { ui.sheet.reason = ui.sheet.reason === d.v ? null : d.v; renderSheet(); },
   pickEx: d => swapTo(d.id),
+  // Favorite or Never suggest for an exercise (tapping the same one again clears it).
+  tastePref: d => {
+    const e = exOf(d.id);
+    e.pref = e.pref === d.v ? null : d.v;
+    save(); renderSheet(); render();
+    toast(e.pref === 'never' ? `${e.name} won’t be suggested` : e.pref === 'fav' ? `${e.name} is a favorite` : `${e.name} is back to normal`);
+  },
+  tasteForget: () => askConfirm('Forget what it learned?', 'Suggestions stop using your earlier swaps and removals and start fresh from here. Your history, favorites and Never suggest stay.', 'Forget', () => {
+    state.settings.tasteSince = Date.now();
+    save(); render(); toast('Starting fresh');
+  }),
 
   pickScheme: d => {
     const { s, b } = findBlock(ui.sheet.blockId);
@@ -3135,7 +3155,10 @@ const actions = {
     // Undo puts back exactly what was there: the blocks (with their supersets), the sets and the source.
     const before = { blocks: structuredClone(s.blocks), sets: state.sets.filter(x => x.sessionId === s.id).map(x => ({ ...x })), source: s.source };
     state.sets = state.sets.filter(x => x.blockId !== b.id || x.done);
+    const removedBefore = s.removed;
     if (!logged) {
+      // A vote against it for what learns your taste (js/taste.js), unless you added it yourself.
+      s.removed = [...(s.removed ?? []), { exerciseId: b.exerciseId, tier: b.tier, at: Date.now(), wasSuggested: !(b.swaps || []).some(w => w.type === 'add') }];
       s.blocks = s.blocks.filter(x => x !== b);
       const rest = s.blocks.filter(x => x.pairOf === b.id);
       if (rest.length) { delete rest[0].pairOf; for (const x of rest.slice(1)) x.pairOf = rest[0].id; }
@@ -3144,6 +3167,7 @@ const actions = {
     toast(logged ? 'Logged sets kept; the rest removed' : `Removed ${exOf(b.exerciseId)?.name ?? 'exercise'}`, () => {
       s.blocks = before.blocks;
       s.source = before.source;
+      if (removedBefore) s.removed = removedBefore; else delete s.removed;
       state.sets = [...state.sets.filter(x => x.sessionId !== s.id), ...before.sets];
       save(); render();
     });
@@ -3228,6 +3252,7 @@ const actions = {
     e.region = q('#ee-region').value;
     e.explosive = q('#ee-expl').checked;
     e.role = q('#ee-role').value;
+    e.pref = q('#ee-pref').value || null;
     e.archived = q('#ee-arch').checked;
     e.youtube = q('#ee-yt').value.trim();
     e.start = parseMSS(q('#ee-start').value);

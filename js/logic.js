@@ -1,6 +1,18 @@
 // Pure rules: estimated max, dose crediting, slot scoring, scheme/exercise choice.
 // No DOM access here so it stays testable and tunable.
 
+import { taste, tasteOf, isExcluded, usualReplacement } from './taste.js';
+
+// The taste picture for the build in progress (computed once per build; the pickers run thousands of times). Outside a
+// build it's worked out fresh, which keeps tests and one-off calls honest.
+let activeTaste = null;
+const tasteFor = (state, t = Date.now()) => (activeTaste?.state === state ? activeTaste.tr : taste(state, t));
+function withTaste(state, t, fn) {
+  const prev = activeTaste;
+  activeTaste = { state, tr: taste(state, t) };
+  try { return fn(); } finally { activeTaste = prev; }
+}
+
 // TECH is technique work: explosive movements practiced when tired or after heavy work, with its own weekly goal.
 // JUMP is jumps and plyometrics, counted in contacts: their own category, only in a workout when you ask for them.
 export const TIERS = ['T1', 'T2', 'T3', 'TECH', 'JUMP'];
@@ -94,7 +106,10 @@ export function alternatives(state, cur, loc) {
 // Family's usual exercise if equipment allows, else closest available by rank.
 // T1/T2 need a load x reps exercise, otherwise the work could never fill the slot.
 // A goal's named exercise, else the family's usual exercise, else the closest available by rank.
-export function pickExercise(state, familyId, loc, tier, preferredId = null) {
+export const pickExercise = (state, familyId, loc, tier, preferredId = null) => pickExerciseWhy(state, familyId, loc, tier, preferredId)?.exercise ?? null;
+
+// Same, with a note when what you do (swaps, favorites, never-suggest) changed the pick: { exercise, note } or null.
+export function pickExerciseWhy(state, familyId, loc, tier, preferredId = null) {
   const fam = byId(state.families, familyId);
   let members = familyMembers(state, familyId).filter(e => !e.archived && isAvailable(e, loc));
   // Heavy and moderate work needs a load to measure, unless it's explosive (jumps count by reps).
@@ -116,11 +131,32 @@ export function pickExercise(state, familyId, loc, tier, preferredId = null) {
   }
   if (!members.length) return null;
   // A goal that names an exercise only takes that exercise (no goblet squats for a back-squat T1).
-  if (preferredId) return members.find(e => e.id === preferredId) ?? null;
-  const def = members.find(e => e.id === fam?.defaultExerciseId);
-  if (def) return def;
-  const defRank = byId(state.exercises, fam?.defaultExerciseId)?.rank ?? 0;
-  return [...members].sort((a, b) => Math.abs(a.rank - defRank) - Math.abs(b.rank - defRank) || a.rank - b.rank)[0];
+  if (preferredId) { const e = members.find(x => x.id === preferredId); return e ? { exercise: e } : null; }
+  // A family-wide goal (not heavy work, whose lifts are yours to name) follows your taste: it skips what you never want,
+  // prefers what you keep swapping to, and uses your usual replacement for what you keep swapping away.
+  const usualOf = list => {
+    const d = list.find(e => e.id === fam?.defaultExerciseId);
+    if (d) return d;
+    const defRank = byId(state.exercises, fam?.defaultExerciseId)?.rank ?? 0;
+    return [...list].sort((a, b) => Math.abs(a.rank - defRank) - Math.abs(b.rank - defRank) || a.rank - b.rank)[0];
+  };
+  const natural = usualOf(members); // what it would be without taste
+  let def = natural, note = null;
+  const tr = tier !== 'T1' ? tasteFor(state) : null;
+  if (tr) {
+    const ok = members.filter(e => !isExcluded(tr, e.id));
+    if (ok.length) members = ok;
+    def = usualOf(members);
+    const best = members.reduce((b, e) => tasteOf(tr, e.id) > tasteOf(tr, b.id) ? e : b, def);
+    if (tasteOf(tr, best.id) - tasteOf(tr, def.id) >= 1) def = best;
+    const usual = usualReplacement(tr, def.id, tier, members.map(e => e.id).filter(id => id !== def.id));
+    if (usual) def = byId(state.exercises, usual.id);
+    if (def.id !== natural.id) {
+      note = usualReplacement(tr, natural.id, tier, [def.id]) ? `taste: you usually swap ${natural.name} for ${def.name}`
+        : isExcluded(tr, natural.id) ? `taste: skipping ${natural.name}` : `taste: you pick ${def.name} over ${natural.name}`;
+    }
+  }
+  return { exercise: def, note };
 }
 
 // ---------- estimated max ----------
@@ -419,10 +455,12 @@ export function scoreSlots(state, ci, t = Date.now()) {
     const r = credit.slots.get(sl.id);
     const remaining = sl.quota - r.filled;
     if (remaining <= 0 || r.todayMet) continue;
-    const exercise = pickExercise(state, sl.familyId, loc, sl.tier, sl.exerciseId);
-    if (!exercise) continue;
+    const picked = pickExerciseWhy(state, sl.familyId, loc, sl.tier, sl.exerciseId);
+    if (!picked) continue;
+    const exercise = picked.exercise;
 
     const why = [];
+    if (picked.note) why.push(picked.note);
     let score = (sl.priority || 1) * remaining / daysLeft;
     why.push(`priority ${sl.priority} × ${remaining} left ÷ ${daysLeft}d`);
     const im = INTENT[ci.intent || 'auto'][sl.tier];
@@ -519,7 +557,8 @@ function variedAccessory(state, ci, c) {
   if (!ci.variant || c.slot.exerciseId) return c.exercise;
   const loc = byId(state.locations, ci.locationId);
   const main = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
-  const ok = e => !e.explosive && !main.has(e.id) && !(e.equipment || []).includes('dip-belt') && (e.role ?? guessRole(e.name, e.metric, e.explosive)) === 'accessory';
+  const tr = tasteFor(state);
+  const ok = e => !e.explosive && !main.has(e.id) && !isExcluded(tr, e.id) && !(e.equipment || []).includes('dip-belt') && (e.role ?? guessRole(e.name, e.metric, e.explosive)) === 'accessory';
   const opts = [c.exercise, ...alternatives(state, c.exercise, loc).filter(ok)].slice(0, 3);
   return opts[ci.variant % opts.length];
 }
@@ -527,7 +566,8 @@ function variedAccessory(state, ci, c) {
 // Build one session: T1, then T2, technique and T3 until the time budget runs out, then fill any time left.
 // `fill` (on by default) tops the session up from the library when the goals don't use all the time.
 // `sessionBlocks`: the workout so far, when this fills extra time (+ Time), so its lifts count.
-export function buildSuggestion(state, ci, t = Date.now(), { excludeFamilies = [], fill = true, sessionBlocks = [] } = {}) {
+export const buildSuggestion = (state, ci, t = Date.now(), opts = {}) => withTaste(state, t, () => buildSuggestionIn(state, ci, t, opts));
+function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, sessionBlocks = [] } = {}) {
   const scored = scoreSlots(state, ci, t);
   // Jumps are only in when you ask for them, and then whatever the scores say: they don't set the bar for other goals.
   const top = Math.max(0, ...scored.filter(c => c.slot.tier !== 'JUMP').map(c => c.score));
@@ -659,13 +699,14 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
   const t1Lifts = new Set(state.slots.filter(sl => sl.tier === 'T1').map(goalLift));
   // Families with a heavy or moderate goal hold the main lifts (squats before leg extensions, chin-ups before curls).
   const goalFamilies = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.familyId));
+  const tr = tasteFor(state);
   const since = Date.now() - 84 * DAY;
   const lately = state.sets.filter(x => x.done && !x.warmup && x.loggedAt >= since);
   const recent = new Set(lately.map(x => x.exerciseId));
   const heavyLately = new Set(lately.filter(x => x.tier === 'T1' || x.tier === 'T2').map(x => x.exerciseId));
   let best = null;
   for (const e of state.exercises) {
-    if (e.archived || skip.has(e.familyId) || mainLifts.has(e.id) || e.explosive || !isAvailable(e, loc)) continue;
+    if (e.archived || skip.has(e.familyId) || mainLifts.has(e.id) || e.explosive || !isAvailable(e, loc) || isExcluded(tr, e.id)) continue;
     if ((e.equipment || []).some(x => x === 'barbell' || x === 'rack')) continue;
     const fit = pairScore(state, mainEx, e);
     if (!fit) continue;
@@ -677,6 +718,7 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
     if (recent.has(e.id)) score += 1.5; // something you actually do beats filler
     if (heavyLately.has(e.id)) score -= 2; // trained heavy lately: a main lift, not rest-period filler
     if (byId(state.families, e.familyId)?.defaultExerciseId === e.id) score += 0.5;
+    score += tasteOf(tr, e.id) * 1.5; // what you like beats what you don't
     if (e.anytime) score += 0.5;
     const why = `${open ? 'open T3 goal · ' : ''}${pairWhy(state, mainEx, e)}`;
     if (!best || score > best.score) best = { exercise: e, score, why };
@@ -780,6 +822,11 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
   const famUsed = new Set(excludeFamilies);
   const variant = ci.variant || 0; // Regenerate bumps this to rotate equal picks
   const pattern = e => movementPattern(state, e);
+  // What you do shapes the picks (js/taste.js): tie-breaks follow it, and what you never want stays out. A goal that names
+  // an exercise, and your heavy goals' lifts, are never changed by it.
+  const tr = tasteFor(state, t);
+  const tv = e => tasteOf(tr, e.id);
+  const named = new Set(state.slots.filter(sl => sl.exerciseId).map(sl => sl.exerciseId));
   // When each exercise and pattern was last trained (pattern: heavy or moderate work only; patLastT1: heavy only).
   const exLast = new Map(), patLast = new Map(), patLastT1 = new Map();
   for (const s of state.sets) {
@@ -811,6 +858,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
   // movement (triceps after curls). Families from the goals or the session so far stay off limits.
   const famPatterns = new Map();
   // Last resort while time is left: any exercise not in the workout yet, from any family (a second core or upper-back move).
+  const blocked = e => !named.has(e.id) && !t1Core.has(e.id) && isExcluded(tr, e.id);
   const takenIds = new Set(taken);
   const spare = e => !e.archived && isAvailable(e, loc) && !takenIds.has(e.id) && !k.blocks.some(b => b.exerciseId === e.id);
   const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId) && !takenIds.has(e.id)
@@ -821,6 +869,15 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
     present: new Set(present.map(id => pattern(byId(state.exercises, id)))),
     count: tier => k.blocks.filter(b => b.tier === tier).length,
     add(e, tier, why, dose = null) {
+      // Something you keep swapping away from goes in as what you swap it for (not for heavy work with named T1 lifts).
+      if (!(tier === 'T1' && hasT1Goals) && !named.has(e.id)) {
+        const same = x => x.id !== e.id && !x.archived && isAvailable(x, loc) && !famUsed.has(x.familyId) && !isExcluded(tr, x.id)
+          && !k.blocks.some(b => b.exerciseId === x.id) && !takenIds.has(x.id)
+          && (tier === 'T3' ? !x.explosive && !(x.equipment || []).some(q => q === 'rack' || q === 'dip-belt' || q === 'barbell')
+            : tier === 'T1' || tier === 'T2' ? x.metric === 'load_reps' && (isMainLift(x) || x.explosive) : !!x.explosive);
+        const usual = usualReplacement(tr, e.id, tier, state.exercises.filter(same).map(x => x.id));
+        if (usual) { const y = byId(state.exercises, usual.id); why = `taste: you usually swap ${e.name} for ${y.name}`; e = y; }
+      }
       const slot = slotFor(state, e, tier);
       const sc = pickScheme(state, tier, e, schemeRoom(state, tier, k.budget), ci, dose ?? slotDose(state, slot, tier));
       if (!sc) return false;
@@ -831,24 +888,25 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
       famPatterns.set(e.familyId, (famPatterns.get(e.familyId) ?? new Set()).add(pattern(e)));
       if ((tier === 'T1' || tier === 'T2') && !e.explosive) k.present.add(pattern(e));
       if (tier !== 'JUMP') k.budget -= (sc.minutes + overhead(state, tier)) * share;
-      k.notes.push(`${tier} ${e.name}: ${why}`);
+      const liked = e.pref === 'fav' ? ' · a favorite' : tv(e) >= 1 ? ' · you like it' : '';
+      k.notes.push(`${tier} ${e.name}: ${why}${liked}`);
       return true;
     },
     // Explosive exercises for a region (whole-body lifts count for either). `sameFamily` allows a second clean variation.
     // Jumps are their own category (see addJump), so they're never power work here.
     explosives(region, { load = null, sameFamily = null, jumps = false } = {}) {
-      return state.exercises.filter(e => e.explosive && !e.archived && isAvailable(e, loc) && (e.role ?? 'power') === 'power' && isJump(e) === jumps
+      return state.exercises.filter(e => e.explosive && !e.archived && !blocked(e) && isAvailable(e, loc) && (e.role ?? 'power') === 'power' && isJump(e) === jumps
         && (!famUsed.has(e.familyId) || e.familyId === sameFamily) && !k.blocks.some(b => b.exerciseId === e.id)
         && (region === 'any' || e.region === region || e.region === 'full')
         && (load == null || (e.metric === 'load_reps') === load))
-        .sort((a, b) => anyGoalFamilies.has(b.familyId) - anyGoalFamilies.has(a.familyId) || (b.region === region) - (a.region === region)
+        .sort((a, b) => anyGoalFamilies.has(b.familyId) - anyGoalFamilies.has(a.familyId) || tv(b) - tv(a) || (b.region === region) - (a.region === region)
           || lately(b) - lately(a) || isDefault(b) - isDefault(a) || a.rank - b.rank);
     },
     // A loaded lift for a movement pattern. T1: one of your T1 goals' lifts when you have T1 goals, else one with a max
     // (T1 insists when any has one; `needMax` always). T2: your T2 goals' lifts first, and not a T1 goal's own lift when
     // another fits. Then lifts from goal families, ones you do, with a max, the family's usual one.
     main(p, tier, needMax = false) {
-      let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && isMainLift(e) && pattern(e) === p);
+      let c = state.exercises.filter(e => usable(e) && !e.explosive && e.metric === 'load_reps' && isMainLift(e) && pattern(e) === p && !blocked(e));
       if (tier === 'T1' && hasT1Goals) c = c.filter(e => t1Core.has(e.id));
       else if (needMax || (tier === 'T1' && c.some(e => estimatedMax(state, e.id) != null))) c = c.filter(e => estimatedMax(state, e.id) != null);
       // Moderate work stays in the families you set T1/T2 goals for: a family you only train as pump work (upper back:
@@ -857,10 +915,12 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
       const t1Goal = e => tier === 'T2' && t1Lifts.has(e.id);
       const chosen = e => tier === 'T2' && t2Chosen.has(e.id);
       const lead = (a, b) => t1Goal(a) - t1Goal(b) || chosen(b) - chosen(a) || goalFamilies.has(b.familyId) - goalFamilies.has(a.familyId);
-      c.sort((a, b) => lead(a, b) || lately(b) - lately(a)
+      // Your taste comes right after what you chose, but not for heavy work when you've named your T1 lifts.
+      const liked = tier === 'T1' && hasT1Goals ? () => 0 : e => tv(e);
+      c.sort((a, b) => lead(a, b) || liked(b) - liked(a) || lately(b) - lately(a)
         || (estimatedMax(state, b.id) != null) - (estimatedMax(state, a.id) != null) || isDefault(b) - isDefault(a) || a.rank - b.rank);
-      // Regenerate: rotate among the lifts that rank equally on what you chose, so the goals' lifts stay the core.
-      const tied = c.filter(x => lead(x, c[0]) === 0);
+      // Regenerate: rotate among the lifts that rank equally on what you chose and like about equally, so the goals' lifts stay the core.
+      const tied = c.filter(x => lead(x, c[0]) === 0 && Math.abs(liked(x) - liked(c[0])) < 0.5);
       return c.length ? tied[variant % Math.min(tied.length, 3)] : null;
     },
     // A lift from the patterns given that don't have a strength lift in the workout yet, trained heavy least recently.
@@ -881,12 +941,14 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
       const fits = [usable, reusable, spare][level];
       // Accessories may need a bar or plates; main lifts come in only without a barbell setup; drills never.
       const role = x => x.role ?? guessRole(x.name, x.metric, x.explosive);
-      const base = state.exercises.filter(x => fits(x) && !x.explosive && !mainLifts.has(x.id) && ['accessory', 'main'].includes(role(x))
+      const base = state.exercises.filter(x => fits(x) && !blocked(x) && !x.explosive && !mainLifts.has(x.id) && ['accessory', 'main'].includes(role(x))
         && !(x.equipment || []).some(q => q === 'rack' || q === 'dip-belt' || (q === 'barbell' && role(x) !== 'accessory')));
       const of = q => base.filter(x => pattern(x) === q);
       const c = p === 'back' ? (of('hinge').some(x => LOWER_BACK.test(x.name)) ? of('hinge').filter(x => LOWER_BACK.test(x.name)) : of('hinge')) : of(p);
-      c.sort((a, b) => lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank);
-      return c.length ? c[(variant * 2 + k.blocks.length) % (variant ? Math.min(c.length, 3) : 1)] : null; // regenerate: one of the top three
+      c.sort((a, b) => tv(b) - tv(a) || lately(b) - lately(a) || (exLast.get(a.id) ?? 0) - (exLast.get(b.id) ?? 0) || a.rank - b.rank);
+      // Regenerate: one of the top three, among those you like about as much as the best.
+      const pool = c.filter(x => tv(x) >= tv(c[0]) - 1);
+      return c.length ? pool[(variant * 2 + k.blocks.length) % (variant ? Math.min(pool.length, 3) : 1)] : null;
     },
     // Go round the rotation until the time is used (or nothing else fits), at each of `levels` in turn (see accessory).
     // `limit` caps how many this call adds; returns how many it added.
@@ -934,7 +996,8 @@ function explosiveLower(state, ci, t, k) {
 }
 
 // `sessionBlocks`: the workout so far, when this adds accessories for extra time (+ Time), so none is picked twice.
-export function buildFocus(state, ci, { region, explosive = false, accessoriesOnly = false }, t = Date.now(), { excludeFamilies = [], sessionBlocks = [] } = {}) {
+export const buildFocus = (state, ci, what, t = Date.now(), opts = {}) => withTaste(state, t, () => buildFocusIn(state, ci, what, t, opts));
+function buildFocusIn(state, ci, { region, explosive = false, accessoriesOnly = false }, t, { excludeFamilies = [], sessionBlocks = [] } = {}) {
   const k = libraryKit(state, ci, t, ci.minutes, excludeFamilies, [], sessionBlocks.map(b => b.exerciseId));
   const tired = energy(ci) <= 2.5;
   const easy = ci.intent === 'easy';
@@ -980,7 +1043,8 @@ export function buildFocus(state, ci, { region, explosive = false, accessoriesOn
 // A workout with the counts you ask for: `mix` = { T1, T2, T3 } blocks. Open goals fill each tier first (for the half you
 // lean toward), then the library does, with the same rules as the other builders. The counts are what you asked for, so
 // nothing tops up beyond them; only a T3 that doesn't fit the time is dropped.
-export function buildMix(state, ci, asked, t = Date.now(), { excludeFamilies = [], sessionBlocks = [] } = {}) {
+export const buildMix = (state, ci, asked, t = Date.now(), opts = {}) => withTaste(state, t, () => buildMixIn(state, ci, asked, t, opts));
+function buildMixIn(state, ci, asked, t, { excludeFamilies = [], sessionBlocks = [] } = {}) {
   const lean = leanOf(ci);
   // Regenerating a mix you've started: blocks you've logged count toward it.
   const mix = Object.fromEntries(['T1', 'T2', 'T3'].map(tier => [tier, Math.max(0, (asked[tier] || 0) - sessionBlocks.filter(b => b.tier === tier).length)]));
