@@ -641,6 +641,14 @@ step('editing a past workout from History', () => {
   const mine = () => st().sets.filter(x => x.sessionId === id && x.done);
   click(edits[0]);
   check('the editor opens with date, place and the exercises', /Edit workout/.test(text()) && !!q('#hist-date') && qa('.histedit').length > 0, text().slice(0, 200));
+  // How long: typed in for a workout logged after the fact, shown in History; empty goes back to first set to last.
+  setVal(q('#hist-dur'), '52');
+  check('How long is saved on the workout', sess().durationMin === 52);
+  click('[data-act=histEditDone]');
+  check('and History shows it', new RegExp(`took 52 min|· 52 min`).test(text()), text().slice(0, 300));
+  click(qa('[data-act=histEdit]').find(b => b.dataset.id === id));
+  setVal(q('#hist-dur'), '');
+  check('clearing it goes back to the logged times', sess().durationMin === undefined);
   // A value: type it and it is saved.
   const reps = q('.histedit [data-f=reps]') ?? q('.histedit [data-f=time]');
   const sid = reps.dataset.set;

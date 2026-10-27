@@ -32,7 +32,7 @@ export function sessionPace(sess, sets, warmDefault = {}) {
   const mine = sets.filter(s => s.done && s.loggedAt && byId.has(s.blockId));
   const work = mine.filter(s => !s.warmup).sort((a, b) => a.loggedAt - b.loggedAt);
   const out = { skipped: true, bursty: false, gaps: 0, kept: 0, perSet: [], warm: [], changeovers: [] };
-  if (work.length < 2) return out;
+  if (work.length < 2 || sess.durationMin != null) return out; // a length typed in: the set times aren't real
   const gaps = [];
   let bursts = 0;
   for (let i = 1; i < work.length; i++) {

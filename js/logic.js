@@ -20,7 +20,9 @@ export function paceFor(state, t = Date.now()) {
   if (activeBuild?.state === state && activeBuild.pace) return activeBuild.pace;
   let sum = 0;
   for (const x of state.sets) sum += x.loggedAt || 0;
-  const key = `${state.sets.length}|${sum}|${state.sessions.length}|${state.settings?.paceSince ?? ''}|${dayKey(t)}`;
+  let typed = 0;
+  for (const x of state.sessions) typed += x.durationMin ?? 0;
+  const key = `${state.sets.length}|${sum}|${state.sessions.length}|${typed}|${state.settings?.paceSince ?? ''}|${dayKey(t)}`;
   if (paceMemo?.state !== state || paceMemo.key !== key) paceMemo = { state, key, table: pace(state, t, WARMUP) };
   return paceMemo.table;
 }

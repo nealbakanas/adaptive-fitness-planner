@@ -93,7 +93,9 @@ function weekFacts(state, start, end) {
   for (const s of sets) bySession.set(s.sessionId, [...(bySession.get(s.sessionId) || []), s.loggedAt]);
   // First set to last per workout, leaving out breaks over half an hour (a workout picked up again later in the day).
   let minutes = 0;
-  for (const ts of bySession.values()) {
+  for (const [sid, ts] of bySession) {
+    const typed = state.sessions.find(s => s.id === sid)?.durationMin;
+    if (typed != null) { minutes += typed; continue; } // the length you entered for a workout logged after the fact
     ts.sort((a, b) => a - b);
     for (let i = 1; i < ts.length; i++) { const g = (ts[i] - ts[i - 1]) / 6e4; if (g <= BREAK_MIN) minutes += g; }
   }
