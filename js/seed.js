@@ -203,7 +203,7 @@ export function seed() {
   ];
 
   return {
-    version: 21,
+    version: 22,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -244,6 +244,7 @@ export function seed() {
     sessions: [],
     sets: [],
     timer: null, // running rest timer: { endsAt, total, blockId, setId, next, warned, alerted }
+    reviews: [], // weekly reviews (js/review.js): { id, weekStart, summary, proposals: [{ id, kind, text, status }], status }, newest 26
     imports: {}, // history brought in from other apps, e.g. fitnotes: { at, cutoff, map: { fitnotesExerciseId: exerciseId } }
   };
 }

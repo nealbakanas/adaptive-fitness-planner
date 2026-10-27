@@ -4,6 +4,7 @@ import * as Vault from './vault.js';
 import * as Cloud from './cloud.js';
 import * as Taste from './taste.js';
 import { MIN_CHANGEOVERS } from './pace.js';
+import * as R from './review.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -306,7 +307,28 @@ function keepStarted(s) {
 }
 
 // "Why this session" rows from buildSuggestion's scores.
-const whyRows = res => res.scored.map(c => ({ label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
+// Accepting or skipping review proposals. The goals as they were before the first change are kept for Undo.
+function reviewDecide(ids, status) {
+  const rv = ui.review;
+  const rec = R.recordReview(state, rv.data, 'reviewed');
+  let changed = false;
+  for (const id of ids) {
+    const p = rv.data.proposals.find(x => x.id === id), r = rec.proposals.find(x => x.id === id);
+    if (!p || !r || r.status !== 'open') continue;
+    if (status === 'accepted' && p.change) {
+      if (!ui.reviewUndo) { ui.reviewUndo = { slots: structuredClone(state.slots), accepted: [] }; }
+      R.applyProposal(state, p);
+      ui.reviewUndo.accepted.push(`${rec.id}/${id}`);
+      changed = true;
+    }
+    r.status = status;
+  }
+  if (changed) keepCopy('before-review', ui.reviewUndo);
+  save(); render();
+  if (changed) toast(ids.length > 1 ? 'Goals changed' : 'Goal changed');
+}
+
+const whyRows = res => res.scored.map(c => ({ slotId: c.slot.id, label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
 
 function createSession(blocks, source, extra = {}) {
   const s = {
@@ -1131,12 +1153,15 @@ function weekBudgetCard() {
 function viewWeek() {
   if (ui.history) return viewHistory(ui.history);
   if (ui.goalSuggest) return viewGoalSuggest(ui.goalSuggest);
+  if (ui.review) return viewReview(ui.review);
   const c = L.creditWeek(state);
   const fmt = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const dayName = k => new Date(k + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' });
   let h = `<header class="top"><div><h1>This week</h1><div class="sub">${fmt(c.start)} – ${fmt(c.end - 864e5)} · ${L.daysLeftInWeek(state)} day(s) left</div></div>
     <button class="small" data-act="histOpen">History</button></header>`;
   if (ui.goalsUndo) h += `<div class="banner">Goals updated. <button class="link" data-act="gsUndo">Undo</button></div>`;
+  if (ui.reviewUndo) h += `<div class="banner">Goals changed from your review. <button class="link" data-act="reviewUndo">Undo</button></div>`;
+  h += lastWeekCard();
 
   const slots = [...c.slots.values()].sort((a, b) => a.slot.tier.localeCompare(b.slot.tier) || (b.slot.priority - a.slot.priority));
   h += `<div class="sectionhead"><h3>Weekly goals</h3><div class="brow"><button class="small" data-act="gsOpen">Suggest from history</button><button class="small" data-act="goalNew">+ Add goal</button></div></div>
@@ -1145,11 +1170,12 @@ function viewWeek() {
     const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? a.reps + ' reps' : a.sets + ' sets'}${a.met ? ' ✓' : ' (partial)'}`).join(' · ');
     const ex = exOf(r.slot.exerciseId);
     const name = ex?.name ?? famOf(r.slot.familyId)?.name;
-    const sub = [ex ? famOf(r.slot.familyId)?.name : 'any exercise in family', days].filter(Boolean).join(' · ');
+    const sub = [r.slot.quota ? '' : 'paused', ex ? famOf(r.slot.familyId)?.name : 'any exercise in family', days].filter(Boolean).join(' · ');
     return `<button class="slotrow" data-act="goalEdit" data-id="${r.slot.id}"><span class="tier ${r.slot.tier}">${r.slot.tier}</span>
       <span class="grow"><span class="name">${esc(name)}</span><span class="meta">${esc(sub)}</span></span>
       <span class="pips">${pips}</span></button>`;
   }).join('') || '<p class="muted pad">No weekly goals yet. Add one to get suggestions.</p>'}</div>`;
+  h += `<div class="brow pad"><button class="small" data-act="reviewOpen" data-w="${c.start}">Review this week</button></div>`;
   h += weekBudgetCard();
 
   const wk = L.sessionStats(state, c.start, c.end), all = L.sessionStats(state);
@@ -1875,6 +1901,58 @@ function fnDone(f) {
 
 const PRIORITY_LABEL = { 1: 'low', 2: 'medium', 3: 'high' };
 
+// ---------- weekly review (js/review.js) ----------
+
+const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+// On a new week: last week in one line, until you review or dismiss it.
+function lastWeekCard() {
+  const w = R.lastWeekDue(state);
+  if (w == null) return '';
+  const r = R.weekReview(state, w);
+  const t = r.totals;
+  return `<div class="card review-due"><h3>Last week</h3>
+    <p>${t.filled} of ${t.quota} goal sessions · ${t.workouts} workout${t.workouts === 1 ? '' : 's'}${r.topReason ? ` · mostly: ${esc(R.REASONS[r.topReason].toLowerCase())}` : ''}</p>
+    <div class="brow"><button class="primary small" data-act="reviewOpen" data-w="${w}">Review</button><button class="small" data-act="reviewDismiss" data-w="${w}">Dismiss</button></div></div>`;
+}
+
+function viewReview(rv) {
+  const r = rv.data;
+  const rec = R.reviewRecord(state, r.weekStart);
+  const status = id => rec?.proposals.find(p => p.id === id)?.status ?? 'open';
+  const t = r.totals;
+  const tiers = L.TIERS.filter(x => t.byTier[x]).map(x => `${x} ${t.byTier[x]}`).join(' · ') || 'none';
+  const ago = at => at == null ? 'never' : shortDate(at);
+  let h = `<header class="top sub"><button class="back" data-act="reviewClose">‹ This week</button></header>
+    <h1 class="pagetitle">Week of ${shortDate(r.weekStart)}${r.finished ? '' : ' (so far)'}</h1>`;
+  if (ui.reviewUndo) h += `<div class="banner">Goals changed. <button class="link" data-act="reviewUndo">Undo</button></div>`;
+  h += `<div class="card"><div class="kv"><span>Goal sessions</span><b>${t.filled} of ${t.quota}</b></div>
+    <div class="kv"><span>Goals met</span><b>${t.goalsMet} of ${t.goals}</b></div>
+    <div class="kv"><span>Workouts</span><b>${t.workouts} · ${t.minutes} min</b></div>
+    <div class="kv"><span>Working sets</span><b>${t.sets} (${esc(tiers)})</b></div></div>`;
+  h += `<h3>Goals</h3><div class="card flush">${r.goals.map(g => `<div class="slotrow"><span class="tier ${g.tier}">${g.tier}</span>
+      <span class="grow"><span class="name">${esc(g.label.slice(g.tier.length + 1))}</span>
+      <span class="meta">${g.met ? 'met' : esc(R.REASONS[g.reason])}${g.missed >= 2 ? ` · missed ${g.missed} weeks running` : ''} · last done ${esc(ago(g.lastDone))}</span></span>
+      <b class="${g.met ? 'good' : ''}">${g.filled}/${g.quota}</b></div>`).join('') || '<p class="muted pad">No weekly goals.</p>'}</div>`;
+  if (r.lifts.length) {
+    const word = { up: 'up', held: 'held', down: 'down', stalled: 'stalled', new: 'first time' };
+    h += `<h3>Lifts</h3><div class="card flush">${r.lifts.map(l => `<div class="slotrow"><span class="tier ${l.tier}">${l.tier}</span>
+      <span class="grow"><span class="name">${esc(l.name)}</span><span class="meta">${l.load} ${unit()}${l.prev != null ? ` (was ${l.prev})` : ''}${l.complete ? '' : ' · reps missed'}</span></span>
+      <b>${word[l.trend]}</b></div>`).join('')}</div>`;
+  }
+  const open = r.proposals.filter(p => status(p.id) === 'open');
+  h += `<div class="sectionhead"><h3>Proposed changes</h3>${open.some(p => p.change) ? '<button class="small" data-act="reviewAcceptAll">Accept all</button>' : ''}</div>`;
+  h += r.proposals.length ? `<div class="card flush">${r.proposals.map(p => {
+    const st = status(p.id);
+    const btns = st !== 'open' ? `<span class="meta">${st === 'accepted' ? 'accepted' : 'skipped'}</span>`
+      : `${p.change ? `<button class="small primary" data-act="reviewAccept" data-id="${esc(p.id)}">Accept</button>` : ''}<button class="small" data-act="reviewSkip" data-id="${esc(p.id)}">${p.change ? 'Skip' : 'OK'}</button>`;
+    return `<div class="slotrow proposal"><span class="grow"><span class="name">${esc(p.text)}</span></span><span class="brow">${btns}</span></div>`;
+  }).join('')}</div>` : `<p class="muted pad">${r.finished ? 'Nothing to change: the goals fit.' : 'Changes to quotas are proposed once the week is over.'}</p>`;
+  h += `<div class="brow pad"><button class="small" data-act="reviewCopy">Copy review</button></div>
+    <p class="meta pad">Copies a plain-text summary to paste to Claude or a coach. Nothing changes unless you accept it.</p>`;
+  return h;
+}
+
 function viewGoalSuggest(g) {
   const head = `<header class="top sub"><button class="back" data-act="gsCancel">‹ This week</button></header><h1 class="pagetitle">Suggested goals</h1>`;
   if (!g.rows.length) {
@@ -1950,7 +2028,7 @@ function renderSheet() {
   const s = ui.sheet;
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
-    confirm: sheetConfirm, backupText: sheetBackupText, pasteImport: sheetPasteImport,
+    confirm: sheetConfirm, backupText: sheetBackupText, reviewText: sheetReviewText, pasteImport: sheetPasteImport,
     addEx: sheetAddEx, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist, cloudAsk: sheetCloudAsk }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
   sheetEl.hidden = false;
@@ -2024,7 +2102,8 @@ function sheetGoal(sh) {
     <div class="field"><label>Exercise</label><select data-gdraft="exerciseId">${opts([['', `Any${usual ? ` (usually ${usual})` : ''}`], ...members.map(e => [e.id, e.name])], g.exerciseId ?? '')}</select>
       <p class="meta">Pick an exercise to make the goal about it, like T1 Weighted dip plus T3 Bar dip in the same week.</p></div>
     <div class="field"><label>Times per week</label><div class="stepper">
-      <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div></div>
+      <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota || 'Paused'}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div>
+      ${sh.isNew ? '' : '<p class="meta">Go down to Paused to keep the goal without it being suggested.</p>'}</div>
     <div class="field"><label>Reps per session <span class="hint">optional · ${L.slotDose(state, null, g.tier).repMin} by default for ${g.tier}</span></label>
       <input id="g-reps" inputmode="numeric" value="${esc(g.repMin ?? '')}" placeholder="${L.slotDose(state, null, g.tier).repMin}"></div>
     <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${g.priority === v ? 'on' : ''}" data-act="goalSet" data-k="priority" data-v="${v}">${t}</button>`).join('')}</div></div>
@@ -2240,6 +2319,11 @@ function sheetConfirm(sh) {
     <div class="actions"><button data-act="sheetClose">Cancel</button><button class="danger solid" data-act="confirmYes">${esc(sh.yes)}</button></div>`;
 }
 
+function sheetReviewText(sh) {
+  return `<h3>Copy review</h3><p class="meta">Copying was blocked here. Select the text below and copy it.</p>
+    <textarea id="review-text" rows="12" readonly>${esc(sh.text)}</textarea>`;
+}
+
 function sheetBackupText(sh) {
   return `<h3>Copy your backup</h3><p class="meta">Copying was blocked here. Select all of the text below, copy it, and paste it into a note.</p>
     <textarea id="backup-json" rows="8" readonly>${esc(sh.json)}</textarea>`;
@@ -2436,6 +2520,8 @@ const actions = {
     ui.setPage = null;
     if (d.tab !== 'week') ui.goalsUndo = null;
     ui.history = null;
+    ui.review = null;
+    if (d.tab !== 'week') ui.reviewUndo = null;
     if (d.tab !== 'plans') ui.program = null;
     render(); window.scrollTo(0, 0);
   },
@@ -2483,6 +2569,39 @@ const actions = {
     toast(d.mode === 'replace' ? 'Goals replaced' : 'Goals added');
   },
   gsCancel: () => { ui.goalSuggest = null; render(); window.scrollTo(0, 0); },
+  reviewOpen: d => {
+    const data = R.weekReview(state, Number(d.w));
+    ui.review = { data };
+    ui.goalSuggest = null; ui.history = null;
+    R.recordReview(state, data, data.finished ? 'reviewed' : 'open');
+    save(); render(); window.scrollTo(0, 0);
+  },
+  reviewClose: () => { ui.review = null; render(); window.scrollTo(0, 0); },
+  reviewDismiss: d => {
+    R.recordReview(state, R.weekReview(state, Number(d.w)), 'dismissed');
+    save(); render();
+  },
+  reviewAccept: d => reviewDecide([d.id], 'accepted'),
+  reviewAcceptAll: () => {
+    const rec = R.reviewRecord(state, ui.review.data.weekStart);
+    reviewDecide(ui.review.data.proposals.filter(p => p.change && rec?.proposals.find(x => x.id === p.id)?.status === 'open').map(p => p.id), 'accepted');
+  },
+  reviewSkip: d => reviewDecide([d.id], 'skipped'),
+  reviewUndo: () => {
+    const before = ui.reviewUndo ?? readCopy('before-review');
+    if (!before) return;
+    state.slots = before.slots;
+    for (const r of state.reviews) for (const p of r.proposals) if (before.accepted.includes(`${r.id}/${p.id}`)) p.status = 'open';
+    dropCopy('before-review');
+    ui.reviewUndo = null;
+    save(); render(); toast('Your previous goals are back');
+  },
+  reviewCopy: () => {
+    const text = R.reviewText(state, ui.review.data);
+    const fallback = () => openSheet({ type: 'reviewText', text });
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => toast('Review copied'), fallback);
+    else fallback();
+  },
   gsUndo: () => {
     if (!ui.goalsUndo) return;
     state.slots = ui.goalsUndo;
@@ -3187,7 +3306,7 @@ const actions = {
     const removedBefore = s.removed;
     if (!logged) {
       // A vote against it for what learns your taste (js/taste.js), unless you added it yourself.
-      s.removed = [...(s.removed ?? []), { exerciseId: b.exerciseId, tier: b.tier, at: Date.now(), wasSuggested: !(b.swaps || []).some(w => w.type === 'add') }];
+      s.removed = [...(s.removed ?? []), { exerciseId: b.exerciseId, tier: b.tier, slotId: b.slotId ?? null, at: Date.now(), wasSuggested: !(b.swaps || []).some(w => w.type === 'add') }];
       s.blocks = s.blocks.filter(x => x !== b);
       const rest = s.blocks.filter(x => x.pairOf === b.id);
       if (rest.length) { delete rest[0].pairOf; for (const x of rest.slice(1)) x.pairOf = rest[0].id; }
@@ -3406,7 +3525,7 @@ const actions = {
     openSheet({ type: 'goal', id: sl.id, draft: { familyId: sl.familyId, exerciseId: sl.exerciseId ?? null, tier: sl.tier, quota: sl.quota, priority: sl.priority ?? 1, repMin: sl.repMin ?? null } });
   },
   goalSet: d => { readGoalReps(); ui.sheet.draft[d.k] = d.k === 'priority' ? Number(d.v) : d.v; renderSheet(); },
-  goalStep: d => { readGoalReps(); const g = ui.sheet.draft; g.quota = Math.min(7, Math.max(1, g.quota + Number(d.d))); renderSheet(); },
+  goalStep: d => { readGoalReps(); const g = ui.sheet.draft; g.quota = Math.min(7, Math.max(ui.sheet.isNew ? 1 : 0, g.quota + Number(d.d))); renderSheet(); },
   goalSave: () => {
     readGoalReps();
     const { draft, id, isNew } = ui.sheet;
