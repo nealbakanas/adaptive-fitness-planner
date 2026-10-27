@@ -631,6 +631,9 @@ function globalBanners() {
     h += `<div class="banner">A newer copy of your data was found on this device (saved ${esc(fmtDateTime(copy.at))}, ${copy.summary.workouts} workouts, ${copy.summary.sets} sets).
       <button class="link" data-act="recoveryUse">Use it</button> <button class="link" data-act="recoveryIgnore">Ignore</button></div>`;
   }
+  if (ui.updateReady) {
+    h += `<div class="banner">A newer version of the app is ready. <button class="link" data-act="reloadApp">Reload</button></div>`;
+  }
   if (ui.cloud?.ask && !(ui.sheet?.type === 'cloudAsk')) {
     h += `<div class="banner">Your account has a saved backup. <button class="link" data-act="cloudAsk">Choose what to do</button></div>`;
   }
@@ -1244,7 +1247,123 @@ function histSets(g) {
   return [w && `warm-up ${w}`, work.length && setsText(g.ex, work)].filter(Boolean).join(' · ');
 }
 
+// ---------- editing a past workout ----------
+
+// A past workout's exercises as { key, ex, tier, sets }: the sets logged for one exercise at one tier, in the order logged.
+function histGroups(s) {
+  const groups = new Map();
+  for (const st of state.sets.filter(x => x.sessionId === s.id && x.done).sort((a, b) => a.loggedAt - b.loggedAt)) {
+    const key = `${st.exerciseId}|${st.tier}`;
+    if (!groups.has(key)) groups.set(key, { key, ex: exOf(st.exerciseId), tier: st.tier, sets: [] });
+    groups.get(key).sets.push(st);
+  }
+  return [...groups.values()];
+}
+
+// After an edit: a block with no sets left goes, the rest follow their sets, and a superset link to a gone block is dropped.
+function tidyBlocks(s) {
+  const blocks = (s.blocks || []).filter(b => state.sets.some(x => x.blockId === b.id));
+  for (const b of blocks) {
+    const first = state.sets.find(x => x.blockId === b.id);
+    b.exerciseId = first.exerciseId; b.tier = first.tier;
+    if (b.pairOf && !blocks.some(x => x.id === b.pairOf)) delete b.pairOf;
+  }
+  s.blocks = blocks;
+}
+
+// What undo needs to put a workout back exactly: the session and its sets.
+const sessionSnap = s => ({ at: state.sessions.indexOf(s), session: structuredClone(s), sets: state.sets.filter(x => x.sessionId === s.id).map(x => ({ ...x })) });
+function restoreSnap(snap) {
+  const id = snap.session.id;
+  state.sessions = state.sessions.filter(x => x.id !== id);
+  state.sessions.splice(Math.min(snap.at, state.sessions.length), 0, snap.session);
+  state.sets = [...state.sets.filter(x => x.sessionId !== id), ...snap.sets];
+  save(); render();
+}
+
+// A finished set for an exercise added to (or extended in) a past workout, prefilled from `from` or your last time.
+function histNewSet(s, block, ex, at, from = null) {
+  const loaded = ex?.metric === 'load_reps';
+  return {
+    id: L.uid(), sessionId: s.id, blockId: block.id, exerciseId: ex.id, tier: block.tier, schemeId: null,
+    load: loaded ? (from?.load ?? L.lastLoad(state, ex.id)) : null,
+    reps: ['load_reps', 'reps'].includes(ex.metric) ? from?.reps ?? null : null,
+    time: ex.metric === 'time' ? from?.time ?? lastTime(ex.id) : null, distance: ex.metric === 'distance' ? from?.distance ?? null : null,
+    done: true, loggedAt: at, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}),
+  };
+}
+
+// Picking an exercise in the sheet: change a group to it, or add it as a new group with one set.
+function histPick(exerciseId) {
+  const sh = ui.sheet, s = L.byId(state.sessions, sh.sessionId), ex = exOf(exerciseId);
+  if (!s || !ex) return;
+  const snap = sessionSnap(s);
+  if (sh.mode === 'histSwap') {
+    for (const st of histGroups(s).find(g => g.key === sh.group)?.sets ?? []) st.exerciseId = exerciseId;
+    tidyBlocks(s);
+  } else {
+    const last = state.sets.filter(x => x.sessionId === s.id && x.done).reduce((m, x) => Math.max(m, x.loggedAt), s.firstSetAt ?? s.checkinAt ?? Date.now());
+    const block = { id: L.uid(), tier: sh.tier, slotId: slotIdFor(ex.id, sh.tier), exerciseId: ex.id, schemeId: null, swaps: [{ type: 'add', to: ex.id, at: Date.now() }] };
+    (s.blocks ??= []).push(block);
+    state.sets.push(histNewSet(s, block, ex, last + 1000));
+  }
+  ui.sheet = null; renderSheet();
+  save(); render();
+  toast(sh.mode === 'histSwap' ? `Changed to ${ex.name}` : `Added ${ex.name} as ${sh.tier}`, () => restoreSnap(snap));
+}
+
+// Moves a workout to another day, keeping its time of day: its sets, check-in and any mobility in it move together.
+function moveWorkout(dateStr) {
+  const s = L.byId(state.sessions, ui.history?.edit), m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(dateStr);
+  if (!s || !m) return;
+  const old = new Date(s.firstSetAt ?? s.checkinAt);
+  const to = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), old.getHours(), old.getMinutes(), old.getSeconds());
+  if (to.getTime() > Date.now()) { toast('That day hasn\'t happened yet'); return render(); }
+  const delta = to.getTime() - old.getTime();
+  if (!delta) return;
+  for (const st of state.sets) if (st.sessionId === s.id) st.loggedAt += delta;
+  s.checkinAt += delta;
+  if (s.firstSetAt) s.firstSetAt += delta;
+  for (const it of s.mobility || []) for (const x of it.sets || []) if (x.at) x.at += delta;
+  s.day = L.dayKey(s.checkinAt);
+  save(); render();
+}
+
+function viewHistoryEdit(hs) {
+  const s = L.byId(state.sessions, hs.edit);
+  if (!s) { delete hs.edit; return viewHistory(hs); }
+  const when = s.firstSetAt ?? s.checkinAt;
+  const setRow = (g, st, i) => {
+    const sx = exOf(st.exerciseId) || g.ex;
+    let inputs = '';
+    if (sx?.metric === 'load_reps') inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="load" value="${esc(st.load)}" placeholder="—"><span class="u">${sx.bodyweight ? '+' : ''}${unit()}</span>
+      <span class="x">×</span><input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}">`;
+    else if (sx?.metric === 'time') inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>`;
+    else if (sx?.metric === 'distance') inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
+    else inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">reps</span>`;
+    return `<div class="set ${st.warmup ? 'warm' : ''}"><span class="n" ${st.warmup ? 'title="Warm-up"' : ''}>${st.warmup ? 'W' : i + 1}</span>${inputs}
+      <button class="icon setdel" data-act="histDelSet" data-id="${st.id}" aria-label="Delete this set">✕</button></div>`;
+  };
+  const groups = histGroups(s).map(g => {
+    let n = 0;
+    return `<section class="card histedit">
+      <div class="bhead"><select class="tierpick ${g.tier}" data-hgtier="${esc(g.key)}" aria-label="Tier">${L.TIERS.map(t => `<option value="${t}" ${t === g.tier ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <button class="chip" data-act="histSwap" data-g="${esc(g.key)}">${esc(g.ex?.name ?? '?')} ▾</button>
+        <button class="icon bremove" data-act="histDelGroup" data-g="${esc(g.key)}" aria-label="Remove ${esc(g.ex?.name ?? 'exercise')} from this workout" title="Remove exercise">✕</button></div>
+      <div class="sets">${g.sets.map(st => setRow(g, st, st.warmup ? 0 : n++)).join('')}</div>
+      <div class="brow"><button class="small" data-act="histAddSet" data-g="${esc(g.key)}">+ set</button></div></section>`;
+  }).join('');
+  return `<header class="top sub"><button class="back" data-act="histEditDone">‹ History</button></header><h1 class="pagetitle">Edit workout</h1>
+    <p class="meta pad">Changes save as you type. Weekly goals and estimated maxes follow.</p>
+    <div class="card"><div class="field"><label for="hist-date">Date</label><input id="hist-date" type="date" data-hdate max="${L.dayKey()}" value="${L.dayKey(when)}"></div>
+      <div class="field"><label for="hist-loc">Where</label><select id="hist-loc" data-hloc>${[['', '—'], ...state.locations.map(l => [l.id, l.name])].map(([v, t]) => `<option value="${esc(v)}" ${v === (s.locationId ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>
+    ${groups || '<p class="muted">No exercises left in this workout.</p>'}
+    <button class="addblock" data-act="histAddEx">+ Add exercise</button>
+    <div class="actions"><button class="danger" data-act="histDeleteWorkout">Delete workout</button><button class="primary" data-act="histEditDone">Done</button></div>`;
+}
+
 function viewHistory(hs) {
+  if (hs.edit) return viewHistoryEdit(hs);
   const q = hs.q.trim().toLowerCase();
   const all = historyEntries(q);
   const shown = all.slice(0, hs.limit);
@@ -1273,7 +1392,9 @@ function viewHistory(hs) {
         return `<div class="histex"><span class="tier MOB">${it.def ? 'JUMP' : 'MOB'}</span><span class="grow"><span class="name">${esc(ex?.name ?? '?')}</span>
           <span class="meta">${esc(ex ? M.itemText(ex, it, unit()) : '')}${it.note ? ` · “${esc(it.note)}”` : ''}</span></span></div>`;
       }).join('');
-    return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span></div>${lines}</div>`;
+    const editable = s && s.status !== 'open' && s.status !== 'paused';
+    return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span>
+      ${editable ? `<button class="small" data-act="histEdit" data-id="${s.id}">Edit</button>` : ''}</div>${lines}</div>`;
   };
   return `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
     <input class="search" id="histq" placeholder="Search an exercise" value="${esc(hs.q)}" data-histq>
@@ -1388,7 +1509,10 @@ function viewSettingsMenu() {
     <div class="menu">${SETTINGS_PAGES.slice(3, 6).map(([k, t]) => menuRow(k, t, summary[k])).join('')}</div>
     <div class="menu">${menuRow('data', 'Backup and data', summary.data)}
       <button class="menurow" data-act="setupAgain"><span class="grow"><span class="name">Set up again</span>
-        <span class="meta">Walk through locations, your week, lifts and maxes; replaces your goals</span></span><span class="chev">›</span></button></div>`;
+        <span class="meta">Walk through locations, your week, lifts and maxes; replaces your goals</span></span><span class="chev">›</span></button></div>
+    <div class="label">App</div>
+    <div class="menu"><button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
+      <span class="meta">${ui.swVersion ? `You have ${esc(String(ui.swVersion).replace(/^afp-/, ''))}. ` : ''}Reloads the app fresh from the server; your data stays</span></span></button></div>`;
 }
 
 const menuRow = (k, t, sub) => `<button class="menurow" data-act="setPage" data-p="${k}"><span class="grow"><span class="name">${esc(t)}</span>
@@ -1810,25 +1934,26 @@ const TIER_DESC = {
 
 // Pick any exercise, from any family: mode 'add' adds a block, mode 'swap' replaces one.
 function sheetAddEx(sh) {
-  const s = currentSession();
-  const loc = L.byId(state.locations, s.locationId);
+  const past = sh.mode === 'histAdd' || sh.mode === 'histSwap'; // editing a past workout: any exercise, wherever it was done
+  const s = past ? L.byId(state.sessions, sh.sessionId) : currentSession();
+  const loc = past ? null : L.byId(state.locations, s.locationId);
   const q = (sh.q || '').trim().toLowerCase();
   const matches = state.exercises.filter(e => !e.archived && (!q || e.name.toLowerCase().includes(q) || famOf(e.familyId)?.name.toLowerCase().includes(q)));
-  const here = matches.filter(e => L.isAvailable(e, loc));
-  const away = matches.length - here.length;
+  const here = past ? matches : matches.filter(e => L.isAvailable(e, loc));
+  const away = past ? 0 : matches.length - here.length;
   const groups = new Map();
   for (const e of here.sort((a, b) => a.rank - b.rank)) {
     const f = famOf(e.familyId)?.name ?? '';
     groups.set(f, [...(groups.get(f) || []), e]);
   }
   const tier = sh.mode === 'swap' ? findBlock(sh.blockId).b.tier : sh.tier;
-  const title = sh.mode === 'add' ? 'Add an exercise' : sh.mode === 'pair' ? `Superset with ${esc(exOf(findBlock(sh.blockId).b.exerciseId)?.name)}` : 'Swap to any exercise';
+  const title = sh.mode === 'add' || sh.mode === 'histAdd' ? 'Add an exercise' : sh.mode === 'histSwap' ? 'Change to another exercise' : sh.mode === 'pair' ? `Superset with ${esc(exOf(findBlock(sh.blockId).b.exerciseId)?.name)}` : 'Swap to any exercise';
   const rows = [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([f, list]) =>
     `<div class="label">${esc(f)}</div>${list.map(e => `<button class="row" data-act="addExPick" data-id="${e.id}"><span>${esc(e.name)}</span>
       <span class="meta">${(tier === 'T1' || tier === 'T2') && e.metric !== 'load_reps' && !e.explosive ? 'reps only' : ''}</span></button>`).join('')}`).join('');
   const raw = (sh.q || '').trim();
   return `<h3>${title}</h3>
-    ${sh.mode !== 'swap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>
+    ${sh.mode !== 'swap' && sh.mode !== 'histSwap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>
       <p class="meta">${TIER_DESC[sh.tier]}</p>` : ''}
     <input class="search" id="sheetq" data-sheetq value="${esc(sh.q || '')}" placeholder="Search, or type a new name" autocomplete="off">
     <div class="list">${rows || '<p class="muted">No matches here.</p>'}
@@ -2965,6 +3090,7 @@ const actions = {
   addExTier: d => { ui.sheet.tier = d.t; renderSheet(); },
   addExPick: d => {
     const sh = ui.sheet;
+    if (sh.mode === 'histSwap' || sh.mode === 'histAdd') return histPick(d.id);
     if (sh.mode === 'swap') return swapTo(d.id);
     const s = currentSession();
     const nb = addBlock(s, exOf(d.id), sh.tier);
@@ -3356,6 +3482,54 @@ const actions = {
     render();
     handleSync(await Sync.resolve(d.c));
   },
+  histEdit: d => { ui.history.edit = d.id; render(); window.scrollTo(0, 0); },
+  histEditDone: () => { delete ui.history.edit; render(); window.scrollTo(0, 0); },
+  histDelSet: d => {
+    const st = L.byId(state.sets, d.id), s = L.byId(state.sessions, st?.sessionId);
+    if (!s) return;
+    const snap = sessionSnap(s);
+    state.sets = state.sets.filter(x => x !== st);
+    tidyBlocks(s);
+    save(); render();
+    toast('Set deleted', () => restoreSnap(snap));
+  },
+  histDelGroup: d => {
+    const s = L.byId(state.sessions, ui.history.edit), g = s && histGroups(s).find(x => x.key === d.g);
+    if (!g) return;
+    const snap = sessionSnap(s);
+    state.sets = state.sets.filter(x => !g.sets.includes(x));
+    tidyBlocks(s);
+    save(); render();
+    toast(`Removed ${g.ex?.name ?? 'exercise'}`, () => restoreSnap(snap));
+  },
+  histAddSet: d => {
+    const s = L.byId(state.sessions, ui.history.edit), g = s && histGroups(s).find(x => x.key === d.g);
+    if (!g) return;
+    const from = [...g.sets].reverse().find(x => !x.warmup) ?? g.sets.at(-1);
+    state.sets.push(histNewSet(s, { id: from.blockId, tier: g.tier }, g.ex, from.loggedAt + 1000, from));
+    save(); render();
+  },
+  histSwap: d => openSheet({ type: 'addEx', mode: 'histSwap', sessionId: ui.history.edit, group: d.g, q: '' }),
+  histAddEx: () => openSheet({ type: 'addEx', mode: 'histAdd', sessionId: ui.history.edit, tier: 'T3', q: '' }),
+  histDeleteWorkout: () => askConfirm('Delete this workout?', 'Its sets, and any mobility logged in it, are removed. Goals and estimated maxes recalculate. You can undo right after.', 'Delete workout', () => {
+    const s = L.byId(state.sessions, ui.history.edit);
+    if (!s) return;
+    const snap = sessionSnap(s);
+    state.sessions = state.sessions.filter(x => x !== s);
+    state.sets = state.sets.filter(x => x.sessionId !== s.id);
+    delete ui.history.edit;
+    save(); render(); window.scrollTo(0, 0);
+    toast('Workout deleted', () => restoreSnap(snap));
+  }),
+  reloadApp: () => location.reload(),
+  // Throws away the saved app files and loads everything fresh. Needs the network: the saved copy is what works offline.
+  refreshApp: async () => {
+    if (navigator.onLine === false) return toast('You\'re offline, so there\'s nothing newer to get.');
+    toast('Getting the latest version…');
+    try { await (await navigator.serviceWorker?.getRegistration())?.update(); } catch { /* reload anyway */ }
+    try { for (const k of await caches.keys()) await caches.delete(k); } catch { /* nothing saved */ }
+    location.reload();
+  },
   backupSnooze: () => { state.settings.backupSnoozeUntil = Date.now() + 3 * 864e5; save(); render(); },
   recoveryUse: () => {
     useRecoveryCopy();
@@ -3441,6 +3615,14 @@ document.addEventListener('change', e => {
     const st = L.byId(state.sets, d.set);
     st[d.f] = el.value === '' ? null : Number(el.value);
     save();
+  } else if (d.hgtier !== undefined) {
+    const s = L.byId(state.sessions, ui.history?.edit), g = s && histGroups(s).find(x => x.key === d.hgtier);
+    if (g) { for (const st of g.sets) st.tier = el.value; tidyBlocks(s); save(); render(); }
+  } else if (d.hdate !== undefined) {
+    moveWorkout(el.value);
+  } else if (d.hloc !== undefined) {
+    const s = L.byId(state.sessions, ui.history?.edit);
+    if (s) { s.locationId = el.value || null; save(); }
   } else if (d.mset) {
     const [iid, sid] = d.mset.split('|');
     const st = findMobItem(iid).item?.sets.find(x => x.id === sid);
@@ -3629,8 +3811,25 @@ function importText(text) {
   });
 }
 
+// Which version of the app is running (the service worker's cache name), for Settings. Resolves null without a worker.
+function swVersion() {
+  const c = navigator.serviceWorker?.controller;
+  if (!c) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = e => resolve(e.data);
+    c.postMessage({ type: 'version' }, [ch.port2]);
+    setTimeout(() => resolve(null), 1000);
+  });
+}
+
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
+  // On a slow signal the saved copy loads first; the worker says when the newer one has arrived.
+  navigator.serviceWorker.addEventListener('message', e => { if (e.data?.type === 'update-ready' && !ui.updateReady) { ui.updateReady = true; render(); } });
+  // A home-screen app can resume without reloading: look for a new version whenever you come back to it.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') navigator.serviceWorker.getRegistration().then(r => r?.update()).catch(() => {}); });
+  swVersion().then(v => { ui.swVersion = v; });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(err => console.warn('Service worker not registered', err));
   // A new version took over: reload once so every file comes from the same version.
   let reloading = false;

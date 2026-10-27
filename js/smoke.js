@@ -630,6 +630,68 @@ step('set up again: locations, week, lifts, maxes, review, save and undo', () =>
   check('undo restores the old goals', JSON.stringify(now.slots) === before && !now.locations.some(l => l.name === 'Hotel') && !/Undo/.test(text()));
 });
 
+step('editing a past workout from History', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  const edits = qa('[data-act=histEdit]');
+  check('finished workouts offer Edit', edits.length > 0);
+  const id = edits[0].dataset.id;
+  const sess = () => st().sessions.find(x => x.id === id);
+  const mine = () => st().sets.filter(x => x.sessionId === id && x.done);
+  click(edits[0]);
+  check('the editor opens with date, place and the exercises', /Edit workout/.test(text()) && !!q('#hist-date') && qa('.histedit').length > 0, text().slice(0, 200));
+  // A value: type it and it is saved.
+  const reps = q('.histedit [data-f=reps]') ?? q('.histedit [data-f=time]');
+  const sid = reps.dataset.set;
+  setVal(reps, '11');
+  check('editing a number saves it', Number(st().sets.find(x => x.id === sid)[reps.dataset.f]) === 11);
+  // A set: add, then delete and undo.
+  const n0 = mine().length;
+  click(q('.histedit [data-act=histAddSet]'));
+  check('+ set adds one, copied from the last', mine().length === n0 + 1);
+  click(qa('.histedit [data-act=histDelSet]').at(-1));
+  check('deleting a set removes it', mine().length === n0);
+  const undo = [...document.querySelectorAll('.toast button')].filter(x => x.textContent === 'Undo').at(-1);
+  undo.click();
+  check('Undo puts it back', mine().length === n0 + 1);
+  click(qa('.histedit [data-act=histDelSet]').at(-1));
+  // A tier change moves the whole exercise.
+  const sel = q('.histedit select[data-hgtier]');
+  const before = sel.value, other = before === 'T3' ? 'T2' : 'T3';
+  setVal(sel, other);
+  check('changing the tier changes its sets', mine().some(x => x.tier === other) && qa('.histedit select[data-hgtier]').some(x => x.value === other));
+  // Another exercise, from the whole library.
+  click('[data-act=histAddEx]');
+  check('adding offers the whole library', /Add an exercise/.test(sheet()) && !!q('#sheet [data-act=addExPick][data-id=ex-dead-bug]'));
+  const groups0 = qa('.histedit').length;
+  click('#sheet [data-act=addExPick][data-id=ex-dead-bug]');
+  check('the new exercise has a set to fill in', qa('.histedit').length === groups0 + 1 && mine().some(x => x.exerciseId === 'ex-dead-bug'));
+  // Another day (keeping the time of day).
+  const t0 = sess().firstSetAt ?? sess().checkinAt;
+  const d = new Date(t0 - 3 * 864e5);
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  setVal(q('#hist-date'), iso);
+  check('moving the date shifts the workout by whole days', Math.abs((t0 - (sess().firstSetAt ?? sess().checkinAt)) - 3 * 864e5) < 3700e3 && sess().day === iso, `${sess().day} ${iso}`);
+  const future = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10);
+  const keep = sess().firstSetAt ?? sess().checkinAt;
+  setVal(q('#hist-date'), future);
+  check('a day that hasn\'t happened is refused', (sess().firstSetAt ?? sess().checkinAt) === keep);
+  // Remove an exercise, then the whole workout; both undo.
+  const g0 = qa('.histedit').length;
+  click(q('.histedit [data-act=histDelGroup]'));
+  check('removing an exercise takes its sets', qa('.histedit').length === g0 - 1);
+  [...document.querySelectorAll('.toast button')].filter(x => x.textContent === 'Undo').at(-1).click();
+  check('and Undo brings it back', qa('.histedit').length === g0);
+  const total = mine().length;
+  click('[data-act=histDeleteWorkout]');
+  click('#sheet [data-act=confirmYes]');
+  check('deleting the workout removes it and returns to History', !sess() && /History/.test(text()) && !q('#hist-date'));
+  [...document.querySelectorAll('.toast button')].filter(x => x.textContent === 'Undo').at(-1).click();
+  check('Undo restores the workout and its sets', !!sess() && mine().length === total);
+  click('[data-act=nav][data-tab=today]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
@@ -691,6 +753,19 @@ try {
   await store.flushVault();
 } catch (e) {
   out.push(['FAIL', `backup and data — ${e.message}`]);
+}
+
+// ---------- getting updates ----------
+try {
+  click('[data-act=nav][data-tab=today]'); click('[data-act=nav][data-tab=more]');
+  check('Settings has a way to get the latest version', !!q('[data-act=refreshApp]') && /Get the latest version/.test(text()));
+  check('no update banner at first', !q('[data-act=reloadApp]'));
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'update-ready' } }));
+    check('a newer version arriving shows a Reload banner', !!q('[data-act=reloadApp]') && /newer version of the app is ready/.test(text()), text().slice(0, 200));
+  }
+} catch (e) {
+  out.push(['FAIL', `updates — ${e.message}`]);
 }
 
 // ---------- the account (the fake Supabase stands in for the server) ----------
