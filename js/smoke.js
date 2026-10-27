@@ -692,6 +692,61 @@ step('editing a past workout from History', () => {
   click('[data-act=nav][data-tab=today]');
 });
 
+step('taste: Learn from my swaps, Forget, favorites, Never suggest, and your usual swap', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=you]');
+  check('Settings has Learn from my swaps and a way to forget', /Learn from my swaps/.test(text()) && !!q('[data-act=tasteForget]'), text().slice(0, 300));
+  const sw = q('input[data-bind="settings.learnTaste"]');
+  check('learning is on by default', sw.checked && st().settings.learnTaste !== false);
+  sw.checked = false; fire(sw, 'change');
+  check('the switch turns it off', st().settings.learnTaste === false);
+  sw.checked = true; fire(sw, 'change');
+  click('[data-act=tasteForget]');
+  check('Forget asks first', /Forget what it learned/.test(sheet()));
+  click('#sheet [data-act=confirmYes]');
+  check('and starts fresh from now', st().settings.tasteSince > Date.now() - 5000);
+  st().settings.tasteSince = null;
+  // The exercise editor.
+  click('[data-act=nav][data-tab=library]');
+  click('[data-act=libEdit][data-id=ex-leg-ext]');
+  check('the editor has In suggestions', !!q('#ee-pref') && /Never suggest/.test(sheet()));
+  setVal(q('#ee-pref'), 'never');
+  click('#sheet [data-act=exSave]');
+  check('Never suggest is saved on the exercise', st().exercises.find(e => e.id === 'ex-leg-ext').pref === 'never');
+  click('[data-act=libEdit][data-id=ex-leg-ext]'); setVal(q('#ee-pref'), ''); click('#sheet [data-act=exSave]');
+  check('and Normal clears it', !st().exercises.find(e => e.id === 'ex-leg-ext').pref);
+  // The swap sheet: your usual first, and Never suggest the one you're swapping away from.
+  click('[data-act=nav][data-tab=today]');
+  click('[data-k=locationId][data-v=loc-basement]');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  const block = sess.blocks.find(b => b.tier === 'T3') ?? sess.blocks.at(-1);
+  const cur = st().exercises.find(e => e.id === block.exerciseId);
+  const alts = L.alternatives(st(), cur, st().locations.find(l => l.id === sess.locationId));
+  check('the block has other family members to swap to', alts.length >= 2, cur.name);
+  const usual = alts.at(-1); // not the closest one, so "your usual first" is visible
+  for (let i = 0; i < 2; i++) block.swaps.push({ type: 'exercise', from: cur.id, to: usual.id, reason: null, at: Date.now() - 1000 });
+  store.save();
+  click(`[data-act=swapEx][data-b="${block.id}"]`);
+  const first = q('#sheet [data-act=pickEx]');
+  check('your usual replacement is listed first, marked', first?.dataset.id === usual.id && /your usual \(2×\)/.test(first.innerText), first?.innerText);
+  click(`#sheet [data-act=tastePref][data-id="${cur.id}"]`);
+  check('Never suggest the exercise you are swapping away from', st().exercises.find(e => e.id === cur.id).pref === 'never');
+  check('and the sheet offers to undo it', new RegExp(`Suggest ${cur.name.replace(/[()+.]/g, '.')} again`).test(sheet()));
+  click(`#sheet [data-act=tastePref][data-id="${cur.id}"]`);
+  check('tapping again clears it', !st().exercises.find(e => e.id === cur.id).pref);
+  click('#sheet [data-act=sheetClose]');
+  // Removing an unlogged suggested exercise leaves a vote against it.
+  const victim = sess.blocks.find(b => !(b.swaps || []).length && !st().sets.some(x => x.blockId === b.id && x.done));
+  click(`[data-act=removeBlock][data-b="${victim.id}"]`);
+  const rec = (sess.removed ?? []).at(-1);
+  check('a removal is recorded as a suggested one', rec?.exerciseId === victim.exerciseId && rec.wasSuggested === true, JSON.stringify(sess.removed));
+  [...document.querySelectorAll('.toast button')].filter(x => x.textContent === 'Undo').at(-1).click();
+  check('and Undo takes the vote back too', !(sess.removed ?? []).some(r => r.exerciseId === victim.exerciseId));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');

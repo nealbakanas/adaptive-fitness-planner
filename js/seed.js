@@ -203,7 +203,7 @@ export function seed() {
   ];
 
   return {
-    version: 19,
+    version: 20,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -214,6 +214,8 @@ export function seed() {
       recovery: { t1AfterT1: true },
       week: { workouts: null, minutes: null }, // your usual week for the goal budget; null = from your recent check-ins
       onboarded: false, // a new install starts with the setup (js/onboard.js)
+      learnTaste: true,  // suggestions follow your swaps, removals and favorites (js/taste.js)
+      tasteSince: null,  // "Forget what it learned" sets this: older swaps and removals are ignored
       changeover: 2, // minutes per exercise for moving, loading and setting up, on top of each scheme and its warm-up
       lastExportAt: null,
       timer: { autoStart: true, sound: true, vibrate: true, warn10: true, keepAwake: true, notify: false, prep: 5 },

@@ -222,7 +222,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 19);
+  eq(m.version, 20);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -241,7 +241,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 19);
+  eq(m.version, 20);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -513,7 +513,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 19);
+  eq(m.version, 20);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -675,7 +675,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 19);
+  eq(m.version, 20);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -702,7 +702,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 19);
+  eq(m.version, 20);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1224,7 +1224,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 19);
+  eq(m.version, 20);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1383,7 +1383,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 19);
+  eq(m.version, 20);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1476,10 +1476,10 @@ test('v19: data saved before it opens with savedAt unset, and the summary counts
   s.version = 18;
   delete s.savedAt;
   const m = migrate(s);
-  eq([m.version, m.savedAt], [19, null]);
+  eq([m.version, m.savedAt], [20, null]);
   s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
   s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
-  eq(V.summaryOf(s), { version: 19, workouts: 1, sets: 1 });
+  eq(V.summaryOf(s), { version: 20, workouts: 1, sets: 1 });
 });
 atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
   if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
@@ -1501,6 +1501,115 @@ atest('the vault: a second copy, snapshots that list newest first, and pruning',
   eq(await V.read(1), null, 'unknown time');
   await V.wipe();
   eq(await V.list(), [], 'wiped');
+});
+
+// ---------- taste (js/taste.js) ----------
+import * as T from './taste.js';
+// A state with swap and removal events on a past session: [{ type, from, to, reason, tier, daysAgo }].
+const tasteState = (events = [], extra = {}) => {
+  const s = seed();
+  s.sessions.push({ id: 'ts', status: 'done', source: 'swapped', checkinAt: Date.now() - 3 * DAY, firstSetAt: Date.now() - 3 * DAY, blocks: events.map((ev, i) => ({
+    id: `tb${i}`, tier: ev.tier ?? 'T3', exerciseId: ev.to ?? ev.from, schemeId: 's-t3-3x15', swaps: [{ type: ev.type ?? 'exercise', from: ev.from, to: ev.to, reason: ev.reason, at: Date.now() - (ev.daysAgo ?? 3) * DAY }] })), ...extra });
+  return s;
+};
+test('taste: each signal is worth what the spec says, and fades with a 6-week half-life', () => {
+  const sc = (events, id) => T.tasteOf(T.taste(tasteState(events)), id);
+  const near = (a, b) => Math.abs(a - b) < 0.1;
+  ok(near(sc([{ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0 }], 'ex-leg-ext'), 1.5), 'swapped to');
+  ok(near(sc([{ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0 }], 'ex-calf-raise'), -1.5), 'swapped away');
+  ok(near(sc([{ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0, reason: 'Preference' }], 'ex-calf-raise'), -1.5), 'Preference counts');
+  ok(near(sc([{ type: 'add', to: 'ex-leg-ext', daysAgo: 0 }], 'ex-leg-ext'), 1), 'added by hand');
+  ok(near(sc([{ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0, reason: 'Pain / niggle' }], 'ex-calf-raise'), -2), 'pain');
+  eq(sc([{ from: 'ex-calf-raise', to: 'ex-leg-ext', reason: 'Equipment busy' }], 'ex-calf-raise'), 0, 'equipment busy is not taste');
+  eq(sc([{ from: 'ex-calf-raise', to: 'ex-leg-ext', reason: 'Time' }], 'ex-leg-ext'), 0, 'neither is time');
+  ok(near(sc([{ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 42 }], 'ex-leg-ext'), 0.75), 'half after six weeks');
+  eq(sc(Array(6).fill({ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0 }), 'ex-leg-ext'), 3, 'clamped to +3');
+  eq(sc(Array(6).fill({ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0 }), 'ex-calf-raise'), -3, 'and -3');
+  // Removed after being suggested: -1; one you added yourself says nothing; kept and fully logged: +0.5.
+  const r = tasteState([], { removed: [{ exerciseId: 'ex-db-curl', tier: 'T3', at: Date.now(), wasSuggested: true }, { exerciseId: 'ex-leg-ext', tier: 'T3', at: Date.now(), wasSuggested: false }] });
+  ok(near(T.tasteOf(T.taste(r), 'ex-db-curl'), -1) && T.tasteOf(T.taste(r), 'ex-leg-ext') === 0, 'removed');
+  const k = tasteState([], { source: 'suggested', blocks: [{ id: 'kb', tier: 'T3', exerciseId: 'ex-db-curl', swaps: [] }, { id: 'kb2', tier: 'T3', exerciseId: 'ex-leg-ext', swaps: [] }] });
+  k.sets.push({ id: 'k1', sessionId: 'ts', blockId: 'kb', exerciseId: 'ex-db-curl', done: true }, { id: 'k2', sessionId: 'ts', blockId: 'kb2', exerciseId: 'ex-leg-ext', done: true }, { id: 'k3', sessionId: 'ts', blockId: 'kb2', exerciseId: 'ex-leg-ext', done: false });
+  ok(T.tasteOf(T.taste(k), 'ex-db-curl') > 0.4 && T.tasteOf(T.taste(k), 'ex-leg-ext') === 0, 'suggested and kept needs every set logged');
+});
+test('taste: favorites, Never suggest, pain, the cool-off, Forget, and the switch', () => {
+  const s = tasteState([{ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0 }, { from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 0 }]);
+  let tr = T.taste(s);
+  ok(T.isExcluded(tr, 'ex-calf-raise') && !T.isExcluded(tr, 'ex-leg-ext'), 'two swaps away reach the cool-off');
+  ok(!T.isExcluded(T.taste(s, Date.now() + 40 * DAY), 'ex-calf-raise'), 'and it fades');
+  s.exercises.find(e => e.id === 'ex-leg-ext').pref = 'never';
+  s.exercises.find(e => e.id === 'ex-calf-raise').pref = 'fav';
+  tr = T.taste(s);
+  ok(T.isExcluded(tr, 'ex-leg-ext') && !T.isExcluded(tr, 'ex-calf-raise') && T.tasteOf(tr, 'ex-calf-raise') >= -1, 'Never suggest, and a favorite is held up');
+  const pain = T.taste(tasteState([{ from: 'ex-nordic', to: 'ex-ghr', reason: 'Pain / niggle', daysAgo: 1 }]));
+  ok(T.isExcluded(pain, 'ex-nordic') && T.isExcluded(T.taste(tasteState([{ from: 'ex-nordic', to: 'ex-ghr', reason: 'Pain / niggle', daysAgo: 1 }]), Date.now()), 'ex-nordic'), 'pain skips it');
+  ok(pain.skipUntil.get('ex-nordic') > Date.now() + 12 * DAY, 'for about two weeks');
+  const f = tasteState([{ from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 5 }, { from: 'ex-calf-raise', to: 'ex-leg-ext', daysAgo: 5 }]);
+  f.settings.tasteSince = Date.now() - DAY;
+  eq(T.taste(f).score.size, 0, 'Forget: earlier events are ignored, history stays');
+  f.settings.tasteSince = null; f.settings.learnTaste = false;
+  eq(T.taste(f).score.size, 0, 'the switch off: nothing learned');
+  f.exercises.find(e => e.id === 'ex-leg-ext').pref = 'never';
+  ok(T.isExcluded(T.taste(f), 'ex-leg-ext'), 'but what you said outright still counts');
+});
+test('taste: your usual replacement needs two swaps at the same tier, not equipment busy or time', () => {
+  const swap = (reason, tier = 'T2', n = 2) => Array.from({ length: n }, () => ({ from: 'ex-power-clean', to: 'ex-hang-clean', reason, tier }));
+  const usual = (events, tier = 'T2') => T.usualReplacement(T.taste(tasteState(events)), 'ex-power-clean', tier, ['ex-hang-clean', 'ex-box-jump']);
+  eq(usual(swap(undefined)), { id: 'ex-hang-clean', count: 2 });
+  eq(usual(swap(undefined, 'T2', 1)), null, 'once is not a habit');
+  eq(usual(swap('Equipment busy')), null);
+  eq(usual(swap(undefined, 'T1')), null, 'another tier');
+  eq(T.replacements(T.taste(tasteState(swap(undefined))), 'ex-power-clean', 'T2'), [{ id: 'ex-hang-clean', count: 2 }]);
+});
+test('taste in the builders: your usual replacement is picked and explained; Never suggest never shows; named goals hold; Learn off changes nothing', () => {
+  const swaps = Array.from({ length: 2 }, () => ({ from: 'ex-power-clean', to: 'ex-hang-clean', tier: 'T2' }));
+  const s = tasteState(swaps);
+  const name = id => s.exercises.find(e => e.id === id).name;
+  const c = ci({ minutes: 60, fatigue: 1, lean: 'lower' });
+  const r = L.buildSuggestion(s, c);
+  ok(r.blocks.some(b => b.exerciseId === 'ex-hang-clean') && !r.blocks.some(b => b.exerciseId === 'ex-power-clean'), `Hang clean instead: ${r.blocks.map(b => name(b.exerciseId))}`);
+  ok(r.scored.some(x => x.why.some(w => /you usually swap Power clean for Hang clean/.test(w))), 'and it says why');
+  // Never suggest: nowhere in any automatic pick, over many builds.
+  const never = tasteState();
+  for (const id of ['ex-back-ext', 'ex-belt-squat', 'ex-ab-wheel', 'ex-power-clean', 'ex-hang-clean']) never.exercises.find(e => e.id === id).pref = 'never';
+  const bad = [];
+  for (const minutes of [30, 45, 60, 90]) for (const lean of [null, 'lower', 'upper']) for (const variant of [0, 1, 2, 3]) {
+    const cc = ci({ minutes, lean, variant, fatigue: 1 });
+    for (const [kind, res] of [['suggest', L.buildSuggestion(never, cc)], ['focus', L.buildFocus(never, cc, { region: 'lower', explosive: true })], ['mix', L.buildMix(never, cc, { T1: 0, T2: 1, T3: 5 })]]) {
+      for (const b of res.blocks) if (['ex-back-ext', 'ex-belt-squat', 'ex-ab-wheel', 'ex-power-clean', 'ex-hang-clean'].includes(b.exerciseId)) bad.push(`${kind} ${minutes} ${lean} ${variant}: ${name(b.exerciseId)}`);
+    }
+  }
+  eq(bad.slice(0, 3), [], 'Never suggest exercises came up');
+  // A goal that names an exercise is never changed by taste.
+  const named = tasteState([{ from: 'ex-deficit-rdl', to: 'ex-nordic', daysAgo: 0 }, { from: 'ex-deficit-rdl', to: 'ex-nordic', daysAgo: 0 }]);
+  named.exercises.find(e => e.id === 'ex-deficit-rdl').pref = 'never';
+  ok(L.buildSuggestion(named, ci({ minutes: 60, fatigue: 1, lean: 'lower' })).blocks.some(b => b.exerciseId === 'ex-deficit-rdl'), 'the named Deficit RDL goal still gets its lift');
+  // With Learn off, a history of swaps changes nothing.
+  const off = tasteState([...swaps, { from: 'ex-calf-raise', to: 'ex-leg-ext' }, { from: 'ex-calf-raise', to: 'ex-leg-ext' }]);
+  off.settings.learnTaste = false;
+  const plain = seed();
+  for (const cc of [ci({ minutes: 45, lean: 'lower' }), ci({ minutes: 90, fatigue: 3 }), ci({ minutes: 30, fatigue: 5, intent: 'easy' }), ci({ minutes: 60, variant: 2 })]) {
+    eq(L.buildSuggestion(off, cc).blocks.map(b => b.exerciseId), L.buildSuggestion(plain, cc).blocks.map(b => b.exerciseId), 'Learn off: the same suggestion');
+    eq(L.buildFocus(off, cc, { region: 'lower' }).blocks.map(b => b.exerciseId), L.buildFocus(plain, cc, { region: 'lower' }).blocks.map(b => b.exerciseId));
+  }
+});
+test('taste: a favorite breaks a tie, and a build with taste stays fast', () => {
+  const s = seed();
+  const c = ci({ minutes: 90, fatigue: 1, lean: 'lower' });
+  const base = L.buildFocus(s, c, { region: 'lower' }).blocks.map(b => b.exerciseId);
+  const calf = base.find(id => L.movementPattern(s, s.exercises.find(e => e.id === id)) === 'calf');
+  ok(!!calf, 'a 90-minute lower day reaches the calves');
+  const other = s.exercises.find(e => e.id !== calf && e.role === 'accessory' && L.movementPattern(s, e) === 'calf' && L.isAvailable(e, s.locations[1]) && e.familyId === s.exercises.find(x => x.id === calf).familyId);
+  ok(!!other, 'another calf exercise');
+  other.pref = 'fav';
+  const after = L.buildFocus(s, c, { region: 'lower' }).blocks.map(b => b.exerciseId);
+  ok(base.indexOf(calf) < base.indexOf(other.id) && after.indexOf(other.id) < after.indexOf(calf), `${other.name} comes before ${s.exercises.find(e => e.id === calf).name} once it is a favorite`);
+  // Speed, with a real history of swaps.
+  const busy = tasteState(Array.from({ length: 60 }, (_, i) => ({ from: i % 2 ? 'ex-calf-raise' : 'ex-leg-ext', to: 'ex-ab-wheel', daysAgo: i })));
+  const t0 = performance.now();
+  for (let i = 0; i < 40; i++) L.buildSuggestion(busy, ci({ minutes: 45 + (i % 4) * 15, lean: i % 2 ? 'lower' : 'upper', variant: i % 3 }));
+  const per = (performance.now() - t0) / 40;
+  ok(per < 40, `a suggestion takes ${per.toFixed(1)} ms`);
 });
 
 // ---------- cloud sync (js/merge.js, js/cloud.js, js/sync.js, against js/fake-supabase.js) ----------
@@ -1533,7 +1642,7 @@ test('merge: settings merge key by key; whole states keep both devices\' work an
   eq(m.sessions.map(x => x.id), ['ls', 'rs']);
   ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
   ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
-  eq(migrate(m).version, 19);
+  eq(migrate(m).version, 20);
 });
 test('sync plan: what to do for each situation', () => {
   const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
@@ -1769,7 +1878,7 @@ atest('sync: another device saving mid-push is merged and retried; offline and o
     const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
     fake.putRow(EMAIL, future);
     const nv = await Sync.sync();
-    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 19);
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 20);
   });
 });
 atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
