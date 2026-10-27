@@ -462,3 +462,12 @@ section.block .bhead { position: relative; padding-right: 40px; }
 /* AMRAP last set */
 .amraptag { font-size: 11px; font-weight: 700; color: var(--accent); }
 button.small.on { border-color: var(--accent); color: var(--accent); }
+
+/* Editing a past workout */
+.histedit .setdel { margin-left: auto; color: var(--muted); border: none; background: none; min-width: 36px; }
+select.tierpick { appearance: none; border: none; font-weight: 700; padding: 6px 12px; min-height: 0; width: auto; border-radius: 8px; color: #111; cursor: pointer; }
+select.tierpick.T1 { background: var(--t1); } select.tierpick.T2 { background: var(--t2); } select.tierpick.T3 { background: var(--t3); }
+select.tierpick.TECH { background: #e9c46a; } select.tierpick.JUMP { background: #8ecae6; }
+.histhead .small { margin-left: auto; }
+.histedit .bhead { position: relative; padding-right: 40px; }
+select.tierpick { width: auto; flex: none; }
