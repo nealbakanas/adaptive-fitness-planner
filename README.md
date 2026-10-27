@@ -93,13 +93,14 @@ The service worker (`sw.js`) loads files from the network first, always revalida
 
 ## Cloud backup (Supabase)
 
-Optional. **Backup and data → Back up to your account** signs you in by email (a link, or a 6-digit code: no password) and keeps your data in your own row of a Supabase project (`js/cloud.js` for the server calls, `js/sync.js` for what to do, `js/merge.js` for combining two devices). The project URL and publishable key are in `js/cloud-config.js`; both are public by design, and row-level security lets a signed-in user touch only their own row.
+Optional. **Backup and data → Back up to your account** signs you in with an email and password (or an emailed link or code) and keeps your data in your own row of a Supabase project (`js/cloud.js` for the server calls, `js/sync.js` for what to do, `js/merge.js` for combining two devices). The project URL and publishable key are in `js/cloud-config.js`; both are public by design, and row-level security lets a signed-in user touch only their own row.
 
 **One-time setup in the Supabase dashboard:**
 1. **SQL Editor** → run `supabase/schema.sql` (safe to run again).
-2. **Authentication → URL Configuration:** set the Site URL to where the app is hosted and add the same address to Redirect URLs.
-3. **Authentication → Email Templates → Magic Link:** add `{{ .Token }}` (for example a line "Or type this code: {{ .Token }}"), so the email carries the code. Needed on an iPhone home-screen app, whose links open in Safari instead of the app.
-4. The built-in email sender allows only a few emails an hour. For more, add your own SMTP under **Authentication → SMTP**.
+2. **Authentication → Sign In / Providers → Email:** turn **Confirm email** off, so creating an account signs you straight in (otherwise a new account has to confirm by emailed link first).
+3. *(Only if you'll use the emailed link or code instead of a password.)* **Authentication → URL Configuration:** set the Site URL to where the app is hosted (`https://nealbakanas.github.io/adaptive-fitness-planner/`) and add it to Redirect URLs. The Magic Link template can only be edited once you set up your own SMTP server; without that the email carries only the link, which on an iPhone home-screen app opens in Safari instead of the app.
+
+You sign in with an **email and a password** (**Create account** the first time, **Sign in** after), or with an emailed link or code. Passwords need 6 or more characters; there is no password reset yet, so keep it somewhere safe (your data on each device is unaffected if you lose it).
 
 **How it syncs:** one row per user with a revision number. After you stop saving for 10 seconds, when the network returns, and when you come back to the app, the device compares itself with the account: nothing changed → nothing sent; only this device changed → push; only the account changed → pull; both → merge, then push. A push only lands if it names the revision it was based on, so two devices can't overwrite each other: the loser merges and retries.
 

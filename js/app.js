@@ -1651,11 +1651,20 @@ function cloudSection() {
       ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
       <button class="menurow" data-act="cloudVerify" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Sign in with the code</span></span></button>
       <button class="menurow" data-act="cloudChange"><span class="grow"><span class="name">Use a different email</span></span></button>`;
-  } else {
-    body = `<p class="meta pad">Keeps a copy of your data in your own account, so a new phone or a cleared browser can get it back. You sign in with an email, no password.</p>
+  } else if (c.mode === 'link') {
+    body = `<p class="meta pad">We email you a sign-in link and a code. No password to remember.</p>
       <div class="field pad"><label for="cloud-email">Email</label><input id="cloud-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${esc(c.email ?? '')}"></div>
       ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
-      <button class="menurow" data-act="cloudSend" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Email me a sign-in link</span></span></button>`;
+      <button class="menurow" data-act="cloudSend" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Email me a sign-in link</span></span></button>
+      <button class="menurow" data-act="cloudMode" data-m="password"><span class="grow"><span class="name">Use a password instead</span></span></button>`;
+  } else {
+    body = `<p class="meta pad">Keeps a copy of your data in your own account, so a new phone or a cleared browser can get it back. First time: type an email and a password you'll remember (6 or more characters) and tap Create account.</p>
+      <div class="field pad"><label for="cloud-email">Email</label><input id="cloud-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${esc(c.email ?? '')}"></div>
+      <div class="field pad"><label for="cloud-password">Password</label><input id="cloud-password" type="password" autocomplete="current-password" placeholder="6 or more characters"></div>
+      ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
+      <button class="menurow" data-act="cloudPassword" data-m="in" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Sign in</span></span></button>
+      <button class="menurow" data-act="cloudPassword" data-m="up" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Create account</span><span class="meta">New here? Use this the first time</span></span></button>
+      <button class="menurow" data-act="cloudMode" data-m="link"><span class="grow"><span class="name">Email me a sign-in link instead</span></span></button>`;
   }
   return `<div class="label">Back up to your account</div><div class="menu">${body}</div>`;
 }
@@ -3445,12 +3454,29 @@ const actions = {
       navigator.share({ files: [file], title: 'Training backup' }).then(done, e => { if (e?.name !== 'AbortError') download(); });
     } else download();
   },
+  cloudMode: d => { ui.cloud = { mode: d.m, email: (appEl.querySelector('#cloud-email')?.value ?? '').trim() }; render(); },
+  // Sign in, or create the account (the first time), with an email and a password.
+  cloudPassword: async d => {
+    const address = (appEl.querySelector('#cloud-email')?.value ?? '').trim().toLowerCase();
+    const password = appEl.querySelector('#cloud-password')?.value ?? '';
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) return toast('Type your email address');
+    if (password.length < 6) return toast('Type a password of 6 or more characters');
+    ui.cloud = { busy: true, email: address };
+    render();
+    try {
+      await (d.m === 'up' ? Cloud.signUp(address, password) : Cloud.signInWithPassword(address, password));
+      ui.cloud = {};
+      toast(d.m === 'up' ? 'Account created' : 'Signed in');
+      render();
+      handleSync(await Sync.sync());
+    } catch (e) { ui.cloud = { email: address, error: e.message }; render(); }
+  },
   cloudSend: async () => {
     const address = (appEl.querySelector('#cloud-email')?.value ?? '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) return toast('Type your email address');
-    ui.cloud = { busy: true, email: address };
+    ui.cloud = { busy: true, email: address, mode: 'link' };
     render();
-    try { await Cloud.sendCode(address); ui.cloud = { sentTo: address }; } catch (e) { ui.cloud = { email: address, error: e.message }; }
+    try { await Cloud.sendCode(address); ui.cloud = { sentTo: address }; } catch (e) { ui.cloud = { email: address, mode: 'link', error: e.message }; }
     render();
   },
   cloudVerify: async () => {

@@ -1592,6 +1592,28 @@ atest('cloud: a code signs you in, a bad code does not, and the link\'s address 
     ok(!('data' in await Cloud.getRemote()), 'the cheap look has no data');
   } finally { fake.restore(); }
 });
+atest('cloud: a password account can be created, signed into, and a wrong password or an existing email says so', async () => {
+  const fake = installFake();
+  try {
+    Cloud.reset();
+    let e1 = null; try { await Cloud.signInWithPassword(EMAIL, 'secret12'); } catch (e) { e1 = e; }
+    ok(e1 && /don.t match/.test(e1.message) && !Cloud.signedIn(), 'no account yet');
+    let weak = null; try { await Cloud.signUp(EMAIL, 'abc'); } catch (e) { weak = e; }
+    ok(weak && /at least 6/.test(weak.message), 'the server\'s message for a weak password');
+    ok(await Cloud.signUp(EMAIL, 'secret12') && Cloud.signedIn() && Cloud.email() === EMAIL, 'create account signs you in');
+    Cloud.reset();
+    let dup = null; try { await Cloud.signUp(EMAIL, 'secret12'); } catch (e) { dup = e; }
+    ok(dup && /already has an account/.test(dup.message), 'creating it twice');
+    let bad = null; try { await Cloud.signInWithPassword(EMAIL, 'nope-nope'); } catch (e) { bad = e; }
+    ok(bad && /don.t match/.test(bad.message) && !Cloud.signedIn());
+    ok(await Cloud.signInWithPassword(EMAIL, 'secret12') && Cloud.signedIn());
+    eq(await Cloud.getRemote(), null, 'and the account\'s row is reachable');
+    // With "Confirm email" left on in Supabase, sign-up returns no session: say what to do.
+    Cloud.reset(); fake.passwords.clear(); fake.confirmEmail = true;
+    let conf = null; try { await Cloud.signUp('new@example.com', 'secret12'); } catch (e) { conf = e; }
+    ok(conf && /confirm/i.test(conf.message) && /Confirm email/.test(conf.message) && !Cloud.signedIn());
+  } finally { fake.restore(); }
+});
 atest('cloud: an expired token is refreshed, a stale one retried, offline is told apart, a dead session signs you out', async () => {
   const fake = installFake();
   try {

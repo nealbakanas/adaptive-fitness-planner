@@ -777,17 +777,37 @@ try {
   const page = async () => { click('[data-act=nav][data-tab=today]'); click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=data]'); await tick(300); };
   Cloud.reset();
   await page();
-  check('the account section offers sign-in by email', /back up to your account/i.test(text()) && !!q('#cloud-email') && !!q('[data-act=cloudSend]'), text().slice(0, 300));
-  setVal(q('#cloud-email'), 'me@example.com', 'input');
+  check('the account section offers a password sign-in', /back up to your account/i.test(text()) && !!q('#cloud-email') && !!q('#cloud-password') && !!q('[data-act=cloudPassword][data-m=in]') && !!q('[data-act=cloudPassword][data-m=up]'), text().slice(0, 300));
+  setVal(q('#cloud-email'), 'me@example.com', 'input'); setVal(q('#cloud-password'), 'secret12', 'input');
+  click('[data-act=cloudPassword][data-m=in]'); await tick(300);
+  check('signing in before there is an account says so', /don.t match/.test(text()) && !Cloud.signedIn(), text().slice(0, 300));
+  setVal(q('#cloud-email'), 'me@example.com', 'input'); setVal(q('#cloud-password'), 'abc', 'input');
+  click('[data-act=cloudPassword][data-m=up]'); await tick(100);
+  check('a short password is refused before anything is sent', !Cloud.signedIn() && fake.passwords.size === 0);
+  setVal(q('#cloud-email'), 'me@example.com', 'input'); setVal(q('#cloud-password'), 'secret12', 'input');
+  click('[data-act=cloudPassword][data-m=up]'); await tick(900);
+  check('Create account signs in and the first sync uploads', Cloud.signedIn() && /Signed in as\s*me@example\.com/.test(text()) && fake.row('me@example.com')?.rev === 1, text().slice(0, 300));
+  check('the account holds the data', fake.row('me@example.com').data.sets.length === st().sets.length && /Synced\s*(just now|\d+ min ago)/.test(text()), text().slice(0, 400));
+  // The emailed link and code still work for anyone who prefers them.
+  click('[data-act=cloudSignOut]'); await tick(200);
+  click('#sheet [data-act=confirmYes]'); await tick(400);
+  click('[data-act=cloudMode][data-m=link]');
+  setVal(q('#cloud-email'), 'other@example.com', 'input');
   click('[data-act=cloudSend]'); await tick(300);
-  check('a code field follows, naming the address', !!q('#cloud-code') && /me@example\.com/.test(text()), text().slice(0, 300));
+  check('the link path shows a code field naming the address', !!q('#cloud-code') && /other@example\.com/.test(text()), text().slice(0, 300));
   setVal(q('#cloud-code'), '000000', 'input');
   click('[data-act=cloudVerify]'); await tick(300);
   check('a wrong code says so', /code didn.t work/.test(text()) && !Cloud.signedIn(), text().slice(0, 300));
-  setVal(q('#cloud-code'), '123456', 'input');
-  click('[data-act=cloudVerify]'); await tick(900);
-  check('the right code signs in and the first sync uploads', Cloud.signedIn() && /Signed in as\s*me@example\.com/.test(text()) && fake.row('me@example.com')?.rev === 1, text().slice(0, 300));
-  check('the account holds the data', fake.row('me@example.com').data.sets.length === st().sets.length && /Synced\s*(just now|\d+ min ago)/.test(text()), text().slice(0, 400));
+  click('[data-act=cloudChange]'); await tick(100); // back to the password form
+  setVal(q('#cloud-email'), 'me@example.com', 'input'); setVal(q('#cloud-password'), 'wrong-one', 'input');
+  click('[data-act=cloudPassword][data-m=in]'); await tick(300);
+  check('a wrong password says so', /don.t match/.test(text()) && !Cloud.signedIn(), text().slice(0, 300));
+  setVal(q('#cloud-email'), 'me@example.com', 'input'); setVal(q('#cloud-password'), 'secret12', 'input');
+  const sessionsBefore = st().sessions.length;
+  click('[data-act=cloudPassword][data-m=in]'); await tick(1200);
+  check('signing back in asks what to do with the account\'s backup', /Your account has a backup/.test(sheet()), sheet().slice(0, 200) + text().slice(0, 200));
+  click('#sheet [data-act=cloudChoose][data-c=merge]'); await tick(1200);
+  check('Merge both finishes and signs in', Cloud.signedIn() && st().sessions.length >= sessionsBefore && !q('#sheet:not([hidden])'));
 
   // The other device saves: Sync now brings it in.
   const theirs = structuredClone(fake.row('me@example.com').data);
@@ -801,11 +821,9 @@ try {
   click('[data-act=cloudSignOut]'); await tick(200);
   click('#sheet [data-act=confirmYes]'); await tick(500);
   check('signing out brings the sign-in form back and keeps the data', !!q('#cloud-email') && !Cloud.signedIn() && st().sessions.some(x => x.id === 'phone-session'));
-  setVal(q('#cloud-email'), 'me@example.com', 'input');
-  click('[data-act=cloudSend]'); await tick(300);
-  setVal(q('#cloud-code'), '123456', 'input');
+  setVal(q('#cloud-email'), 'me@example.com', 'input'); setVal(q('#cloud-password'), 'secret12', 'input');
   const sessionsHere = st().sessions.length;
-  click('[data-act=cloudVerify]'); await tick(1200);
+  click('[data-act=cloudPassword][data-m=in]'); await tick(1200);
   check('signing back in asks what to do with the account\'s backup', /Your account has a backup/.test(sheet()) && !!q('#sheet [data-act=cloudChoose][data-c=merge]') && !!q('#sheet [data-act=cloudChoose][data-c=account]') && !!q('#sheet [data-act=cloudChoose][data-c=keep]'), sheet().slice(0, 300));
   check('and changes nothing yet', st().sessions.length === sessionsHere);
   click('#sheet [data-act=cloudChoose][data-c=merge]'); await tick(1200);
