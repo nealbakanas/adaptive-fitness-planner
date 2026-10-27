@@ -14,7 +14,9 @@
 <body>
   <h1 id="summary">Running…</h1>
   <div id="out"></div>
-  <script>globalThis.AFP_STORAGE_KEY = 'afp.tests'; // never touch the real saved data</script>
+  <script>globalThis.AFP_STORAGE_KEY = 'afp.tests'; // never touch the real saved data
+  globalThis.AFP_VAULT_NAME = 'afp-vault-tests';
+  globalThis.AFP_SUPABASE_URL = 'https://fake.supabase.test'; // never the real project // and its second copy (js/vault.js) has its own database</script>
   <script type="module" src="js/tests.js"></script>
 </body>
 </html>

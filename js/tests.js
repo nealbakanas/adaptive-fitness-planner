@@ -7,12 +7,22 @@ import * as G from './goals.js';
 import * as M from './mobility.js';
 import * as P from './programs.js';
 import * as O from './onboard.js';
+import * as V from './vault.js';
+import * as Store from './store.js';
+import * as Cloud from './cloud.js';
+import * as Sync from './sync.js';
+import { mergeStates, mergeById, mergeObject } from './merge.js';
+import { installFake } from './fake-supabase.js';
 
 const results = [];
+const pass = name => results.push(['PASS', name]), fail = (name, e) => results.push(['FAIL', `${name} — ${e.message}`]);
 const test = (name, fn) => {
-  try { fn(); results.push(['PASS', name]); }
-  catch (e) { results.push(['FAIL', `${name} — ${e.message}`]); }
+  try { fn(); pass(name); } catch (e) { fail(name, e); }
 };
+// Tests that wait on IndexedDB or the fake server. They share one browser database and one fake network, so they run one
+// at a time, in order, after the plain tests; the summary waits for the last.
+let queue = Promise.resolve();
+const atest = (name, fn) => { queue = queue.then(() => fn().then(() => pass(name), e => fail(name, e))); };
 const eq = (a, b, msg = '') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg} expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`); };
 const ok = (c, msg = 'assertion failed') => { if (!c) throw new Error(msg); };
 
@@ -212,7 +222,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -231,7 +241,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -503,7 +513,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -665,7 +675,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -692,7 +702,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 18);
+  eq(m.version, 19);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1214,7 +1224,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1373,7 +1383,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1411,7 +1421,350 @@ test('Air Alert 2: the chart, each week\'s dose, and moving through 12 weeks of 
   ok(P.doneToday(s, 'aa2', L.dayKey()));
 });
 
+// ---------- data safety (js/vault.js) ----------
+test('snapshots: the newest 14 daily and 10 of every other kind are kept', () => {
+  const rows = [];
+  for (let i = 0; i < 20; i++) rows.push({ at: 1000 + i, reason: 'daily' });
+  for (let i = 0; i < 14; i++) rows.push({ at: 5000 + i, reason: i % 2 ? 'before-import' : 'before-erase' });
+  const gone = new Set(V.pruneKeys(rows));
+  eq(gone.size, 6 + 4);
+  ok([...gone].filter(at => at < 5000).every(at => at < 1006), 'the oldest dailies go');
+  ok([...gone].filter(at => at >= 5000).every(at => at < 5004), 'the oldest action snapshots go');
+  eq(V.pruneKeys(rows.slice(0, 5)), [], 'few snapshots: nothing goes');
+});
+test('daily snapshot: one a day, only on a day with logged sets', () => {
+  const s = seed();
+  const now = new Date(); now.setHours(15, 0, 0, 0);
+  eq(V.needsDaily([], s, now.getTime()), false, 'nothing logged today');
+  s.sets.push({ id: 'a', done: true, loggedAt: now.getTime() - 3600e3, exerciseId: 'ex-back-squat' });
+  eq(V.needsDaily([], s, now.getTime()), true, 'a set today, no snapshot yet');
+  eq(V.needsDaily([{ at: now.getTime() - 7200e3, reason: 'daily' }], s, now.getTime()), false, 'already taken today');
+  eq(V.needsDaily([{ at: now.getTime() - 7200e3, reason: 'before-import' }], s, now.getTime()), true, 'a before-action snapshot is not the daily one');
+  eq(V.needsDaily([{ at: now.getTime() - 86400e3, reason: 'daily' }], s, now.getTime()), true, 'yesterday\'s does not count');
+  s.sets[0].warmup = true;
+  eq(V.needsDaily([], s, now.getTime()), false, 'warm-ups do not count');
+});
+test('backup reminder: 3 finished workouts or 7 days with one, since your last backup; Not now waits 3 days', () => {
+  const s = seed();
+  const now = Date.now();
+  const done = d => ({ id: L.uid(), status: 'done', firstSetAt: now - d * DAY, blocks: [] });
+  eq(V.backupNudge(s, now), false, 'no workouts');
+  s.sessions.push(done(2), done(1));
+  eq(V.backupNudge(s, now), false, 'two recent workouts');
+  s.sessions.push(done(0));
+  eq(V.backupNudge(s, now), true, 'three workouts, never backed up');
+  s.settings.lastExportAt = now - 3600e3;
+  eq(V.backupNudge(s, now), false, 'just backed up');
+  s.settings.lastExportAt = now - 1.5 * DAY;
+  eq(V.backupNudge(s, now), false, 'two workouts since a backup 1.5 days ago');
+  s.settings.lastExportAt = now - 2.5 * DAY;
+  eq(V.backupNudge(s, now), true, 'three workouts since a backup 2.5 days ago');
+  const t = seed();
+  t.sessions.push(done(8));
+  eq(V.backupNudge(t, now), true, 'one workout 8 days ago, never backed up');
+  t.settings.lastExportAt = now - 2 * DAY;
+  eq(V.backupNudge(t, now), false, 'that workout is older than the backup');
+  t.sessions.push(done(1));
+  t.settings.lastExportAt = now - 9 * DAY;
+  eq(V.backupNudge(t, now), true, 'a workout since a week-old backup');
+  t.settings.backupSnoozeUntil = now + 2 * DAY;
+  eq(V.backupNudge(t, now), false, 'Not now');
+  eq(V.backupNudge(t, now + 3 * DAY), true, 'and it comes back');
+});
+test('v19: data saved before it opens with savedAt unset, and the summary counts workouts and working sets', () => {
+  const s = seed();
+  s.version = 18;
+  delete s.savedAt;
+  const m = migrate(s);
+  eq([m.version, m.savedAt], [19, null]);
+  s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
+  s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
+  eq(V.summaryOf(s), { version: 19, workouts: 1, sets: 1 });
+});
+atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
+  if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
+  await V.wipe();
+  ok(await V.usable(), 'opens');
+  eq(await V.get(), null, 'empty at first');
+  ok(await V.put('{"a":1}'));
+  eq((await V.get()).json, '{"a":1}');
+  ok(await V.put('{"a":2}'));
+  eq((await V.get()).json, '{"a":2}', 'one copy, replaced');
+  for (let i = 0; i < 16; i++) await V.snapshot(`{"n":${i}}`, 'daily', { workouts: i, sets: i * 5, version: 19 });
+  for (let i = 0; i < 12; i++) await V.snapshot(`{"m":${i}}`, i % 2 ? 'before-import' : 'before-paste', { workouts: 1, sets: 1, version: 19 });
+  const rows = await V.list();
+  eq([rows.filter(r => r.reason === 'daily').length, rows.filter(r => r.reason !== 'daily').length], [14, 10], 'pruned to 14 and 10');
+  ok(rows.every((r, i) => !i || rows[i - 1].at > r.at), 'newest first, each at unique');
+  ok(!('json' in rows[0]), 'the list carries no data');
+  const newestDaily = rows.find(r => r.reason === 'daily');
+  eq([JSON.parse((await V.read(newestDaily.at)).json).n, newestDaily.workouts], [15, 15], 'the newest daily is the last one taken');
+  eq(await V.read(1), null, 'unknown time');
+  await V.wipe();
+  eq(await V.list(), [], 'wiped');
+});
+
+// ---------- cloud sync (js/merge.js, js/cloud.js, js/sync.js, against js/fake-supabase.js) ----------
+const rec = (id, extra = {}) => ({ id, ...extra });
+test('merge: records on either side are kept; one-sided edits win; real conflicts go to the newer side', () => {
+  const base = [rec('a', { n: 1 }), rec('b', { n: 1 })];
+  const local = [rec('a', { n: 2 }), rec('b', { n: 1 }), rec('c', { n: 1 })];
+  const remote = [rec('a', { n: 1 }), rec('b', { n: 9 }), rec('d', { n: 1 })];
+  eq(mergeById(base, local, remote, 'local').map(x => `${x.id}${x.n}`), ['a2', 'b9', 'c1', 'd1'], 'each side\'s own edit and addition');
+  eq(mergeById(base, [rec('a', { n: 2 })], [rec('a', { n: 3 })], 'local')[0].n, 2, 'conflict: local newer');
+  eq(mergeById(base, [rec('a', { n: 2 })], [rec('a', { n: 3 })], 'remote')[0].n, 3, 'conflict: remote newer');
+  eq(mergeById(null, [rec('a', { n: 1 })], [rec('a', { n: 2 }), rec('z')], 'remote').map(x => `${x.id}${x.n ?? ''}`), ['a2', 'z'], 'no base: union, newer wins');
+});
+test('merge: a deletion on one side sticks unless the other side edited the record', () => {
+  const base = [rec('x', { n: 1 }), rec('y', { n: 1 }), rec('w', { n: 1 })];
+  eq(mergeById(base, [rec('y', { n: 1 }), rec('w', { n: 1 })], base, 'local').map(x => x.id), ['y', 'w'], 'deleted here, untouched there: gone');
+  eq(mergeById(base, base, [rec('y', { n: 1 }), rec('w', { n: 1 })], 'local').map(x => x.id), ['x', 'y', 'w'].slice(1), 'deleted there, untouched here: gone');
+  eq(mergeById(base, [rec('y', { n: 1 })], [rec('x', { n: 5 }), rec('y', { n: 1 })], 'local').map(x => x.id), ['y', 'x'], 'deleted here but edited there: kept');
+  eq(mergeById(base, [rec('x', { n: 7 }), rec('y', { n: 1 })], [rec('y', { n: 1 })], 'remote').map(x => `${x.id}${x.n}`), ['x7', 'y1'], 'edited here but deleted there: kept');
+});
+test('merge: settings merge key by key; whole states keep both devices\' work and this device\'s timer', () => {
+  eq(mergeObject({ a: 1, b: 1, c: { d: 1, e: 1 } }, { a: 2, b: 1, c: { d: 2, e: 1 } }, { a: 1, b: 3, c: { d: 1, e: 5 } }, 'local'), { a: 2, b: 3, c: { d: 2, e: 5 } });
+  const base = seed(), local = structuredClone(base), remote = structuredClone(base);
+  local.settings.bodyweight = 210; local.savedAt = 2000; local.timer = { endsAt: 1 };
+  remote.settings.unit = 'kg'; remote.savedAt = 1000; remote.equipment.push('sled');
+  local.sessions.push({ id: 'ls', blocks: [] }); remote.sessions.push({ id: 'rs', blocks: [] });
+  remote.exercises = remote.exercises.filter(e => e.id !== 'ex-nordic');
+  const m = mergeStates(base, local, remote);
+  eq([m.settings.bodyweight, m.settings.unit], [210, 'kg']);
+  eq(m.sessions.map(x => x.id), ['ls', 'rs']);
+  ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
+  ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
+  eq(migrate(m).version, 19);
+});
+test('sync plan: what to do for each situation', () => {
+  const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
+  eq(P({ remote: null }), 'upload');
+  eq(P({ hasBase: false, baseRev: null }), 'ask');
+  eq(P({ hasBase: false, baseRev: null, remoteEmpty: true }), 'push');
+  eq(Sync.planSync({ hasBase: false, remote: { rev: 2 }, localEmpty: true, remoteEmpty: false }).choice, 'account');
+  eq(Sync.planSync({ hasBase: false, remote: { rev: 2 }, localEmpty: false, remoteEmpty: false }).choice, 'merge');
+  eq(P({}), 'none');
+  eq(P({ localChanged: true }), 'push');
+  eq(P({ remote: { rev: 4 } }), 'pull');
+  eq(P({ remote: { rev: 4 }, localChanged: true }), 'merge');
+  eq(P({ remote: { rev: 2 }, localChanged: true }), 'push');
+  eq(P({ localEmpty: true, localChanged: true }), 'ask', 'a device that looks erased never pushes over the account');
+  eq(P({ remote: { rev: 4 }, localEmpty: true, localChanged: true }), 'ask');
+  eq(P({ localEmpty: true, baseHadData: false, localChanged: true }), 'push', 'a device that never had data is not "erased"');
+});
+const loggedData = (n, tag) => {
+  const s = seed();
+  s.settings.onboarded = true;
+  for (let i = 0; i < n; i++) s.sets.push({ id: `${tag}${i}`, sessionId: `${tag}s`, blockId: `${tag}b`, exerciseId: 'ex-back-squat', tier: 'T1', load: 200, reps: 3, done: true, loggedAt: Date.now() - i * 1000 });
+  s.sessions.push({ id: `${tag}s`, status: 'done', firstSetAt: Date.now() - 9e4, checkinAt: Date.now() - 1e5, blocks: [] });
+  s.savedAt = Date.now();
+  return s;
+};
+const EMAIL = 'me@example.com';
+// A signed-in device holding `data`, against a fresh fake project.
+async function signedInDevice(data = loggedData(4, 'a')) {
+  const fake = installFake();
+  Cloud.reset();
+  await V.wipe();
+  Store.replaceState(structuredClone(data));
+  await Cloud.sendCode(EMAIL);
+  await Cloud.verifyCode(EMAIL, '123456');
+  return fake;
+}
+const withFake = async fn => { try { await fn(globalThis.__fake); } finally { globalThis.__fake?.restore(); globalThis.__fake = null; } };
+atest('cloud: a code signs you in, a bad code does not, and the link\'s address is the app\'s own', async () => {
+  const fake = installFake();
+  try {
+    Cloud.reset();
+    await Cloud.sendCode(EMAIL);
+    eq(fake.sent[0].email, EMAIL);
+    ok(fake.sent[0].redirect.startsWith(location.origin), 'the link comes back to this app');
+    let bad = null;
+    try { await Cloud.verifyCode(EMAIL, '000000'); } catch (e) { bad = e; }
+    ok(bad && /code didn.t work/.test(bad.message) && !Cloud.signedIn(), 'a wrong code');
+    await Cloud.verifyCode(EMAIL, '123456');
+    ok(Cloud.signedIn() && Cloud.email() === EMAIL && Cloud.record().session.user.id === fake.users.get(EMAIL));
+    eq(await Cloud.getRemote(), null, 'the account starts empty');
+    eq(await Cloud.insertRemote({ saved_at: new Date().toISOString(), workouts: 0, sets: 0, data: { a: 1 } }), true);
+    eq(await Cloud.insertRemote({ saved_at: new Date().toISOString(), workouts: 0, sets: 0, data: { a: 2 } }), 'conflict', 'a second first-upload');
+    eq(await Cloud.updateRemote(1, { data: { a: 3 } }), true);
+    eq(await Cloud.updateRemote(1, { data: { a: 4 } }), 'conflict', 'a stale rev');
+    eq([(await Cloud.getRemote({ withData: true })).rev, (await Cloud.getRemote({ withData: true })).data.a], [2, 3]);
+    ok(!('data' in await Cloud.getRemote()), 'the cheap look has no data');
+  } finally { fake.restore(); }
+});
+atest('cloud: an expired token is refreshed, a stale one retried, offline is told apart, a dead session signs you out', async () => {
+  const fake = installFake();
+  try {
+    Cloud.reset();
+    await Cloud.sendCode(EMAIL); await Cloud.verifyCode(EMAIL, '123456');
+    Cloud.update({ session: { ...Cloud.record().session, expires_at: 1 } });
+    await Cloud.getRemote();
+    ok(fake.log.some(l => l.startsWith('POST /auth/v1/token')) && Cloud.record().session.expires_at > Date.now() / 1000, 'refreshed before the call');
+    fake.expireTokens = true;
+    eq(await Cloud.getRemote(), null, 'a 401 is retried after a refresh');
+    fake.offline = true;
+    let off = null; try { await Cloud.getRemote(); } catch (e) { off = e; }
+    ok(off?.offline, 'offline');
+    fake.offline = false;
+    Cloud.update({ session: { ...Cloud.record().session, expires_at: 1, refresh_token: 'garbage' } });
+    let dead = null; try { await Cloud.getRemote(); } catch (e) { dead = e; }
+    ok(dead?.auth && !Cloud.signedIn(), 'a refresh the server refuses signs you out');
+  } finally { fake.restore(); }
+});
+test('cloud: coming back from the emailed link takes the session from the address', () => {
+  Cloud.reset();
+  const b64 = o => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const token = `${b64({ alg: 'none' })}.${b64({ sub: 'u-1', email: 'x@y.z' })}.sig`;
+  const before = location.hash;
+  location.hash = `#access_token=${token}&expires_in=3600&refresh_token=r1&token_type=bearer&type=magiclink`;
+  eq(Cloud.takeSessionFromUrl(), 'signedIn');
+  ok(Cloud.signedIn() && Cloud.email() === 'x@y.z' && location.hash === '', 'signed in, address cleared');
+  location.hash = '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired';
+  eq(Cloud.takeSessionFromUrl(), 'Email link is invalid or has expired');
+  eq(Cloud.takeSessionFromUrl(), null, 'nothing in the address');
+  Cloud.reset();
+  location.hash = before;
+});
+atest('sync: the first upload, then nothing to do, then a change is pushed', async () => {
+  const fake = globalThis.__fake = await signedInDevice();
+  await withFake(async () => {
+    eq((await Sync.sync()).kind, 'uploaded');
+    const row = fake.row(EMAIL);
+    eq([row.rev, row.sets, row.workouts, row.data.sets.length, row.data.timer], [1, 4, 1, 4, null]);
+    eq(Cloud.record().baseRev, 1);
+    fake.log.length = 0;
+    eq((await Sync.sync()).kind, 'none');
+    ok(!fake.log.some(l => l.startsWith('PATCH') || l.startsWith('POST /rest')), 'nothing sent when nothing changed');
+    Store.state.settings.bodyweight = 222; Store.save();
+    eq((await Sync.sync()).kind, 'pushed');
+    eq([fake.row(EMAIL).rev, fake.row(EMAIL).data.settings.bodyweight], [2, 222]);
+  });
+});
+atest('sync: the other device saved and this one changed nothing: it is pulled, after a snapshot', async () => {
+  const fake = globalThis.__fake = await signedInDevice();
+  await withFake(async () => {
+    await Sync.sync();
+    const theirs = structuredClone(fake.row(EMAIL).data);
+    theirs.sessions.push({ id: 'phone-s', status: 'done', firstSetAt: Date.now(), blocks: [] }); theirs.settings.bodyweight = 180; theirs.savedAt = Date.now() + 5;
+    fake.putRow(EMAIL, theirs);
+    const r = await Sync.sync();
+    eq([r.kind, r.device], ['pulled', 'Other phone']);
+    ok(Store.state.sessions.some(x => x.id === 'phone-s') && Store.state.settings.bodyweight === 180);
+    eq(Cloud.record().baseRev, 2);
+    ok((await V.list()).some(x => x.reason === 'before-sync'), 'what was here is kept');
+    eq((await Sync.sync()).kind, 'none');
+  });
+});
+atest('sync: both devices changed: merged, both kept as snapshots, and the account gets the merge', async () => {
+  const fake = globalThis.__fake = await signedInDevice();
+  await withFake(async () => {
+    await Sync.sync();
+    const theirs = structuredClone(fake.row(EMAIL).data);
+    theirs.sessions.push({ id: 'phone-s', status: 'done', firstSetAt: Date.now(), blocks: [] }); theirs.savedAt = Date.now() + 5;
+    fake.putRow(EMAIL, theirs);
+    Store.state.sessions.push({ id: 'laptop-s', status: 'done', firstSetAt: Date.now(), blocks: [] }); Store.save();
+    const r = await Sync.sync();
+    eq(r.kind, 'merged');
+    ok(['phone-s', 'laptop-s', 'as'].every(id => Store.state.sessions.some(x => x.id === id)), 'both devices\' workouts here');
+    eq(fake.row(EMAIL).rev, 3);
+    ok(['phone-s', 'laptop-s'].every(id => fake.row(EMAIL).data.sessions.some(x => x.id === id)), 'and in the account');
+    const why = (await V.list()).map(x => x.reason);
+    ok(why.includes('before-sync') && why.includes('cloud-copy'), `both sides kept: ${why}`);
+  });
+});
+atest('sync: a deletion travels, and an erased device never wipes the account', async () => {
+  const fake = globalThis.__fake = await signedInDevice(loggedData(6, 'a'));
+  await withFake(async () => {
+    await Sync.sync();
+    // Deleted on this device, untouched on the other: gone from the account.
+    Store.state.sets = Store.state.sets.filter(x => x.id !== 'a0' && x.id !== 'a1'); Store.save();
+    await Sync.sync();
+    eq(fake.row(EMAIL).data.sets.length, 4);
+    // Deleted on the other device while this one edited something else: both apply.
+    const theirs = structuredClone(fake.row(EMAIL).data);
+    theirs.sets = theirs.sets.filter(x => x.id !== 'a2'); theirs.savedAt = Date.now() + 5;
+    fake.putRow(EMAIL, theirs);
+    Store.state.settings.bodyweight = 205; Store.save();
+    eq((await Sync.sync()).kind, 'merged');
+    eq([Store.state.sets.length, Store.state.settings.bodyweight], [3, 205]);
+    // This device gets erased: it asks instead of pushing the empty data.
+    Store.replaceState(seed());
+    const before = fake.row(EMAIL).rev;
+    const r = await Sync.sync();
+    eq([r.kind, r.choice], ['ask', 'account']);
+    eq(fake.row(EMAIL).rev, before, 'the account is untouched');
+  });
+});
+atest('sync: a device that meets an account with data asks first; each answer does what it says', async () => {
+  const fake = globalThis.__fake = await signedInDevice(seed());
+  await withFake(async () => {
+    const theirs = loggedData(8, 'phone'); theirs.settings.bodyweight = 190;
+    fake.putRow(EMAIL, theirs);
+    const mine = structuredClone(Store.state);
+    const r = await Sync.sync();
+    eq([r.kind, r.choice, r.remote.sets, r.remote.workouts], ['ask', 'account', 8, 1]);
+    eq(Store.state.sets.length, 0, 'nothing changes until you choose');
+    eq(fake.row(EMAIL).rev, 1);
+    eq((await Sync.resolve('account')).kind, 'pulled');
+    eq([Store.state.sets.length, Store.state.settings.bodyweight], [8, 190]);
+    ok((await V.list()).some(x => x.reason === 'cloud-copy' || x.reason === 'before-sync'));
+    // Same account, a second fresh device that has its own data: merge both.
+    Cloud.update({ baseRev: null }); await V.delKey('cloudBase');
+    Store.replaceState(loggedData(3, 'laptop'));
+    const r2 = await Sync.sync();
+    eq([r2.kind, r2.choice], ['ask', 'merge']);
+    eq((await Sync.resolve('merge')).kind, 'merged');
+    eq(Store.state.sets.length, 11, 'both devices\' sets');
+    eq(fake.row(EMAIL).data.sets.length, 11);
+    // Keep this device's: it goes over the account, whose copy stays here as a snapshot.
+    Cloud.update({ baseRev: null }); await V.delKey('cloudBase');
+    Store.replaceState(loggedData(2, 'tablet'));
+    eq((await Sync.sync()).kind, 'ask');
+    eq((await Sync.resolve('keep')).kind, 'pushed');
+    eq([fake.row(EMAIL).data.sets.length, Store.state.sets.length], [2, 2]);
+    ok((await V.list()).filter(x => x.reason === 'cloud-copy').length >= 2, 'the account\'s copies were kept');
+  });
+});
+atest('sync: another device saving mid-push is merged and retried; offline and old-version cases fail safe', async () => {
+  const fake = globalThis.__fake = await signedInDevice();
+  await withFake(async () => {
+    await Sync.sync();
+    Store.state.settings.bodyweight = 201; Store.save();
+    const theirs = structuredClone(fake.row(EMAIL).data); theirs.sessions.push({ id: 'racer', status: 'done', firstSetAt: 1, blocks: [] }); theirs.savedAt = Date.now() + 5;
+    fake.beforePatch = () => fake.putRow(EMAIL, theirs);
+    const r = await Sync.sync();
+    eq(r.kind, 'merged');
+    ok(Store.state.sessions.some(x => x.id === 'racer') && fake.row(EMAIL).data.sessions.some(x => x.id === 'racer') && fake.row(EMAIL).data.settings.bodyweight === 201, 'the race lost nothing');
+    // Offline: an error that says so, and nothing touched.
+    const keep = JSON.stringify(Store.state.sets);
+    Store.state.settings.bodyweight = 202; Store.save();
+    fake.offline = true;
+    const off = await Sync.sync();
+    ok(off.kind === 'error' && off.error.offline && JSON.stringify(Store.state.sets) === keep);
+    fake.offline = false;
+    eq((await Sync.sync()).kind, 'pushed', 'and it catches up when the network is back');
+    // An account copy from a newer build is left alone.
+    const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
+    fake.putRow(EMAIL, future);
+    const nv = await Sync.sync();
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 19);
+  });
+});
+atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
+  const fake = globalThis.__fake = await signedInDevice();
+  await withFake(async () => {
+    await Sync.sync();
+    await Sync.signOut();
+    ok(!Cloud.signedIn() && Cloud.record().baseRev == null && (await V.getKey('cloudBase')) == null);
+    eq((await Sync.sync()).kind, 'skipped');
+    eq(Store.state.sets.length, 4, 'your data stays');
+    await Cloud.sendCode(EMAIL); await Cloud.verifyCode(EMAIL, '123456');
+    eq((await Sync.sync()).kind, 'ask', 'signing back in asks, as on a new device');
+  });
+});
+
 // ---------- render ----------
+await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;
 document.title = fails ? 'FAIL' : 'PASS';

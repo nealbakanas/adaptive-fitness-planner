@@ -81,6 +81,28 @@ A new install opens with a short setup (`js/onboard.js`); anyone can rerun it fr
 - If saved data can't be opened (for example an upgrade step fails), the app keeps it untouched, pauses saving, and shows a message with **Copy the saved data** and **Start fresh**. It never saves the starter data over it.
 - If a save fails (storage full or blocked), a message stays at the top of every tab until a save succeeds.
 - The FitNotes import takes a snapshot first; **Backup and data → Undo last import** puts it back.
+- **A second copy on the device** (`js/vault.js`, IndexedDB database `afp-vault`): every save also writes the whole data there (2 seconds later, and when the page is hidden). If the browser clears localStorage but not IndexedDB, the data comes back at startup with a banner. If a localStorage write failed and the second copy is newer, the app offers it (**Use it** / **Ignore**; a snapshot keeps it either way). If the saved data can't be opened, the load-problem banner adds **Use the backup copy from <date>**. Where IndexedDB is missing or blocked, the app behaves as before.
+- **Snapshots**: one **daily** snapshot on the first save of a day with logged sets (newest 14 kept), and one before anything replaces your data (FitNotes import, setup finish, pasting or choosing a backup, restoring a saved copy, Erase all data; newest 10 kept). **Backup and data → Saved copies on this device** lists them (date, why, workouts and sets); tap one to go back, with Undo.
+- **Backing up off the device**: **Save backup to…** opens the phone's share sheet (Files, iCloud Drive, Google Drive, email) or downloads a file on a computer; only a finished share or download counts as a backup. The reminder shows after 3 finished workouts, or 7 days with one, since the last one (**Not now** waits 3 days). The same screen shows whether the browser has agreed to keep the data (`navigator.storage.persist()`, asked after setup and when the screen opens), when the copy on this device was saved, and the last backup off it.
+- Saved data carries a `savedAt` stamp and `version` 19; `tests.html` covers the rules and the vault, `smoke.html` the screens, and `recovery.html` simulates a cleared browser across real page reloads.
+
+## Cloud backup (Supabase)
+
+Optional. **Backup and data → Back up to your account** signs you in by email (a link, or a 6-digit code: no password) and keeps your data in your own row of a Supabase project (`js/cloud.js` for the server calls, `js/sync.js` for what to do, `js/merge.js` for combining two devices). The project URL and publishable key are in `js/cloud-config.js`; both are public by design, and row-level security lets a signed-in user touch only their own row.
+
+**One-time setup in the Supabase dashboard:**
+1. **SQL Editor** → run `supabase/schema.sql` (safe to run again).
+2. **Authentication → URL Configuration:** set the Site URL to where the app is hosted and add the same address to Redirect URLs.
+3. **Authentication → Email Templates → Magic Link:** add `{{ .Token }}` (for example a line "Or type this code: {{ .Token }}"), so the email carries the code. Needed on an iPhone home-screen app, whose links open in Safari instead of the app.
+4. The built-in email sender allows only a few emails an hour. For more, add your own SMTP under **Authentication → SMTP**.
+
+**How it syncs:** one row per user with a revision number. After you stop saving for 10 seconds, when the network returns, and when you come back to the app, the device compares itself with the account: nothing changed → nothing sent; only this device changed → push; only the account changed → pull; both → merge, then push. A push only lands if it names the revision it was based on, so two devices can't overwrite each other: the loser merges and retries.
+
+- **Asks before restoring.** The first time a device meets an account that has data (a new phone, a cleared browser, signing back in), and whenever a device looks erased while the account has data, a sheet offers **Use the account's copy**, **Merge both** or **Keep this device's**, and nothing changes until you choose. Every choice first snapshots what's here; the account's copy is kept as a saved copy too.
+- **Merging is three-way** against the data as of the last sync (kept in the on-device vault): records are matched by id; a change on one side is kept; a record deleted on one side stays deleted unless the other side edited it; real conflicts go to the side saved most recently. Settings merge key by key. A device's running rest timer never syncs.
+- **Safe by default:** an account copy from a newer build is left alone until this device updates; offline just waits; signing out keeps your data (signing back in asks again).
+- **Scale:** the whole data is one row of about 300 KB per user, fine for a few users. Records are id-keyed and the sync code is isolated, so moving to per-record sync (only what changed) later touches `js/cloud.js`, `js/sync.js` and `js/merge.js`, not the app.
+- Tests never reach the real project: test pages set `AFP_SUPABASE_URL` to a fake address and `js/fake-supabase.js` answers in memory.
 
 ## Mobility
 

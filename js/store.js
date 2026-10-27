@@ -3,6 +3,7 @@ import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BAS
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
+import * as Vault from './vault.js';
 
 // Test pages set their own key so they never touch real data.
 const KEY = globalThis.AFP_STORAGE_KEY ?? 'afp.v1';
@@ -10,12 +11,16 @@ const KEY = globalThis.AFP_STORAGE_KEY ?? 'afp.v1';
 // Set when saved data exists but couldn't be opened. Saving stays off until you choose what to do,
 // so a bug in an upgrade step can never overwrite your only copy.
 export let loadProblem = null;
+// True when this page load found no saved data (a first run, or the browser cleared it): see recover().
+export let loadedFromSeed = false;
 // Why the most recent save failed, or null once a save succeeds again.
 export let lastSaveError = null;
 let saveFailHandler = null;
 export const onSaveFail = fn => { saveFailHandler = fn; };
 
 export let state = load();
+// The data version this build writes (an account copy with a higher one came from a newer build).
+export const CURRENT_VERSION = seed().version;
 
 function load() {
   let raw = null;
@@ -25,7 +30,7 @@ function load() {
     loadProblem = { message: 'This browser is blocking storage, so nothing can be saved here.', raw: null };
     return seed();
   }
-  if (!raw) return seed();
+  if (!raw) { loadedFromSeed = true; return seed(); }
   try {
     return migrate(JSON.parse(raw));
   } catch (e) {
@@ -270,12 +275,21 @@ export function migrate(s) {
     for (const p of s.plans || []) for (const it of p.items || []) if (it.tier === 'T2' && jump(it.exerciseId)) it.tier = 'JUMP';
     s.version = 18;
   }
+  if (s.version < 19) {
+    // v19: every save is stamped (state.savedAt) so a second copy in IndexedDB (js/vault.js) can be compared with this one.
+    // The key arrives as null from the defaults above; the next save fills it in.
+    s.version = 19;
+  }
   return s;
 }
 
 // Returns false when nothing was written: storage full or blocked, or saving paused after a load problem.
+// Each save also schedules the second copy in IndexedDB, even when localStorage failed: then it holds the only newest copy.
 export function save() {
   if (loadProblem) return false;
+  state.savedAt = Date.now();
+  scheduleVault();
+  for (const fn of saveListeners) { try { fn(); } catch (e) { console.warn(e); } }
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
     lastSaveError = null;
@@ -286,6 +300,106 @@ export function save() {
     saveFailHandler?.(e);
     return false;
   }
+}
+
+// Called after every save (the cloud sync schedules itself from this).
+const saveListeners = [];
+export const onSave = fn => { saveListeners.push(fn); };
+
+// ---------- the second copy and snapshots (js/vault.js) ----------
+
+let vaultTimer = null;
+function scheduleVault() {
+  if (!Vault.available()) return;
+  clearTimeout(vaultTimer);
+  vaultTimer = setTimeout(flushVault, 2000);
+}
+
+// Writes the second copy now (also on the first save of a day with logged sets: a daily snapshot). Never throws.
+export async function flushVault() {
+  clearTimeout(vaultTimer);
+  vaultTimer = null;
+  if (loadProblem) return false;
+  const json = JSON.stringify(state);
+  const ok = await Vault.put(json);
+  if (ok && Vault.needsDaily(await Vault.list(), state)) await Vault.snapshot(json, 'daily', Vault.summaryOf(state));
+  return ok;
+}
+
+if (typeof document !== 'undefined') {
+  // Leaving the page: don't wait out the 2 second delay.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && vaultTimer) flushVault(); });
+  addEventListener('pagehide', () => { if (vaultTimer) flushVault(); });
+}
+
+// A snapshot of what's here right now, taken before something replaces it. The data is captured at once; the write
+// finishes a moment later. Resolves the snapshot's time, or null. Skipped while saving is paused (the data isn't real).
+export function snapshotNow(reason) {
+  if (loadProblem) return Promise.resolve(null);
+  return Vault.snapshot(JSON.stringify(state), reason, Vault.summaryOf(state));
+}
+
+// The vault's copy when it holds data this page didn't load: { at, json, summary }. See recover().
+let recoveryCopy = null;
+export const getRecoveryCopy = () => recoveryCopy;
+
+// Run once at startup, before the first save. Resolves { kind, at }:
+// - 'restored': nothing was saved here (the browser cleared it) but the second copy has your data: it's loaded back.
+// - 'newer': the second copy is newer than what was saved here (a save to localStorage failed): offered, not applied.
+// - 'offer': what's saved here can't be opened and the second copy can: offered on the load-problem banner.
+// - 'none': nothing to do (also when IndexedDB is unavailable or slow: it gives up after `timeout` ms).
+export async function recover({ timeout = 2500 } = {}) {
+  const fresh = loadedFromSeed; // only the first run can say "nothing was saved here"
+  loadedFromSeed = false;
+  const work = (async () => {
+    const v = await Vault.get();
+    if (!v) return { kind: 'none' };
+    let theirs;
+    try { theirs = migrate(JSON.parse(v.json)); } catch { return { kind: 'none' }; }
+    const worth = theirs.sets.length > 0 || theirs.sessions.length > 0 || theirs.settings.onboarded;
+    const at = theirs.savedAt ?? v.at;
+    const summary = Vault.summaryOf(theirs);
+    if (loadProblem) {
+      if (!loadProblem.raw || !worth) return { kind: 'none' };
+      recoveryCopy = { at, json: v.json, summary };
+      return { kind: 'offer', at };
+    }
+    if (fresh) {
+      if (!worth) return { kind: 'none' };
+      state = theirs;
+      save();
+      return { kind: 'restored', at, summary };
+    }
+    if (worth && (theirs.savedAt ?? 0) > (state.savedAt ?? 0) + 1000) {
+      recoveryCopy = { at, json: v.json, summary };
+      await Vault.snapshot(v.json, 'recovered', summary); // keep it whatever you choose: the next save replaces the second copy
+      return { kind: 'newer', at, summary };
+    }
+    return { kind: 'none' };
+  })();
+  return Promise.race([work, new Promise(r => setTimeout(() => r({ kind: 'none' }), timeout))]);
+}
+
+// Takes the second copy over what's here (after a snapshot of what's here, unless that was unreadable). True when done.
+export function useRecoveryCopy() {
+  if (!recoveryCopy) return false;
+  const copy = recoveryCopy;
+  snapshotNow('before-restore');
+  recoveryCopy = null;
+  replaceState(JSON.parse(copy.json));
+  return true;
+}
+export function dismissRecoveryCopy() { recoveryCopy = null; }
+
+// Asks the browser not to clear this site's data on its own (storage.persist). Remembers the answer in
+// settings.storagePersisted: true, false, or 'unsupported'. Resolves that value.
+export async function requestPersist() {
+  let result = 'unsupported';
+  try {
+    if (navigator.storage?.persist) result = !!((await navigator.storage.persisted?.()) || (await navigator.storage.persist()));
+  } catch { result = false; }
+  if (state.settings.storagePersisted !== result) { state.settings.storagePersisted = result; save(); }
+  return result;
 }
 
 // After a load problem: start using the app's normal saving again (the unreadable data is replaced).
