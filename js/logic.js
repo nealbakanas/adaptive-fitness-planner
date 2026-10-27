@@ -11,7 +11,7 @@ let activeBuild = null;
 const tasteFor = (state, t = Date.now()) => (activeBuild?.state === state ? activeBuild.tr : taste(state, t));
 function withTaste(state, t, ci, fn) {
   const prev = activeBuild;
-  activeBuild = { state, tr: taste(state, t), pace: paceFor(state, t), loc: ci?.locationId ?? null };
+  activeBuild = { state, tr: taste(state, t), pace: paceFor(state, t), loc: ci?.locationId ?? null, place: ci ? placeOf(state, ci) : null };
   try { return fn(); } finally { activeBuild = prev; }
 }
 let paceMemo = null;
@@ -116,8 +116,24 @@ export function guessRole(name, metric = 'load_reps', explosive = false) {
 export const isJump = e => !!e && (e.familyId === 'fam-jumps' || (!!e.explosive && e.metric !== 'load_reps' && e.region === 'lower'));
 export const isMainLift = e => (e?.role ?? guessRole(e?.name, e?.metric, e?.explosive)) === 'main';
 
+// `loc` may be several locations together (placeOf): then the exercise needs all its gear in one of them.
 export function isAvailable(ex, loc) {
+  if (loc?.parts) return loc.parts.some(p => isAvailable(ex, p));
   return !!loc && (ex.equipment || []).every(e => loc.equipment.includes(e));
+}
+
+// Where a check-in or workout is: its location, or, when you picked several (`locationIds`), all of them together.
+// `locationId` stays the first one picked (changeover and history use it).
+export function placeOf(state, x) {
+  const ids = x?.locationIds?.length ? x.locationIds : [x?.locationId];
+  const parts = ids.map(id => byId(state.locations, id)).filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? null;
+  return { id: parts[0].id, name: parts.map(p => p.name).join(' + '), equipment: [...new Set(parts.flatMap(p => p.equipment))], parts };
+}
+// The one location of several that has an exercise's gear, when it isn't the first one; else null.
+export function elsewhere(ex, place) {
+  if (!place?.parts || isAvailable(ex, place.parts[0])) return null;
+  return place.parts.find(p => isAvailable(ex, p)) ?? null;
 }
 
 export function familyMembers(state, familyId) {
@@ -490,7 +506,7 @@ export function readinessSummary(state, ci, t = Date.now()) {
 }
 
 export function scoreSlots(state, ci, t = Date.now()) {
-  const loc = byId(state.locations, ci.locationId);
+  const loc = placeOf(state, ci);
   const credit = creditWeek(state, t);
   const daysLeft = daysLeftInWeek(state, t);
   const loaded = state.settings.recovery?.t1AfterT1 !== false ? recentLoadedRegions(state, t) : new Map();
@@ -604,7 +620,7 @@ const blockRank = (state, b) => {
 // of open goals still changes. Goals that name an exercise, and T1/T2 lifts, stay as they are.
 function variedAccessory(state, ci, c) {
   if (!ci.variant || c.slot.exerciseId) return c.exercise;
-  const loc = byId(state.locations, ci.locationId);
+  const loc = placeOf(state, ci);
   const main = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
   const tr = tasteFor(state);
   const ok = e => !e.explosive && !main.has(e.id) && !isExcluded(tr, e.id) && !(e.equipment || []).includes('dip-belt') && (e.role ?? guessRole(e.name, e.metric, e.explosive)) === 'accessory';
@@ -660,6 +676,8 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
     sortBlocks(state, blocks);
     pairT3s(state, blocks);
     stretchToFit(state, blocks, ci.minutes, ci);
+    // A T3 left without a partner (several locations: no partner in the same place) costs its full time.
+    if (blocksMinutes(state, blocks) > ci.minutes + 1e-9) trimToFit(state, blocks, ci.minutes, [...f.blocks]);
   }
   return { blocks, scored, notes, goalMinutes, minutesUsed: Math.round(blocksMinutes(state, blocks)), ready: readinessSummary(state, ci, t) };
 }
@@ -716,30 +734,37 @@ function pairWhy(state, mainEx, e) {
 // Free T3s superset with each other in twos, best-matched pairs first; an odd one out joins a T3 pair as a
 // giant set, else the free T1/T2/technique block it suits best. Supersets on main lifts stay optional.
 // Mutates and returns the blocks.
-export function pairT3s(state, blocks) {
+// `place`: with several locations, a superset stays in one of them.
+export function pairT3s(state, blocks, place = activeBuild?.state === state ? activeBuild.place : null) {
   const ex = b => byId(state.exercises, b.exerciseId);
   const grouped = b => !!b.pairOf || blocks.some(x => x.pairOf === b.id);
+  const together = (a, b) => !place?.parts || place.parts.some(p => isAvailable(ex(a), p) && isAvailable(ex(b), p));
   const fit = (a, b) => Math.max(pairScore(state, ex(a), ex(b)), pairScore(state, ex(b), ex(a)));
   const free = blocks.filter(b => b.tier === 'T3' && !grouped(b));
+  const left = []; // T3s with no partner (one, or with several locations, any with no partner in the same place)
   while (free.length >= 2) {
     const lead = free.shift();
-    const i = free.reduce((best, x, j) => fit(lead, x) > fit(lead, free[best]) ? j : best, 0);
-    free.splice(i, 1)[0].pairOf = lead.id;
+    const mates = free.filter(x => together(lead, x));
+    if (!mates.length) { left.push(lead); continue; }
+    const mate = mates.reduce((best, x) => fit(lead, x) > fit(lead, best) ? x : best);
+    free.splice(free.indexOf(mate), 1)[0].pairOf = lead.id;
   }
-  if (!free.length) return blocks;
-  const lone = free[0];
-  const t3Group = blocks.find(b => b.tier === 'T3' && !b.pairOf && b !== lone && blocks.filter(x => x.pairOf === b.id).length === 1);
-  if (t3Group) { lone.pairOf = t3Group.id; return blocks; }
-  const best = blocks.filter(b => b.tier !== 'T3' && b.tier !== 'JUMP' && !grouped(b)) // jumps are warm-up, not a rest to fill
-    .sort((a, b) => pairScore(state, ex(b), ex(lone)) - pairScore(state, ex(a), ex(lone)))[0];
-  if (best) lone.pairOf = best.id;
+  left.push(...free);
+  for (const lone of left) {
+    const t3Group = blocks.find(b => b.tier === 'T3' && !b.pairOf && b !== lone && blocks.filter(x => x.pairOf === b.id).length === 1
+      && [b, ...blocks.filter(x => x.pairOf === b.id)].every(x => together(x, lone)));
+    if (t3Group) { lone.pairOf = t3Group.id; continue; }
+    const best = blocks.filter(b => b.tier !== 'T3' && b.tier !== 'JUMP' && !grouped(b) && together(b, lone)) // jumps are warm-up, not a rest to fill
+      .sort((a, b) => pairScore(state, ex(b), ex(lone)) - pairScore(state, ex(a), ex(lone)))[0];
+    if (best) lone.pairOf = best.id;
+  }
   return blocks;
 }
 
 // A T3 to do in a main lift's rest: the best-matched movement (see pairScore), no barbell setup, not explosive.
 // Prefers an open T3 goal, then exercises you've done lately.
 export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = creditWeek(state) } = {}) {
-  const loc = byId(state.locations, ci.locationId);
+  const loc = placeOf(state, ci);
   // A T1/T2 goal's own lift is a main lift, not something to squeeze into a rest; its easier variations are fair game.
   const skip = new Set(excludeFamilies);
   const goalLift = sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId;
@@ -865,11 +890,12 @@ function regroup(state, blocks) {
 }
 
 // While the workout runs over (a T3 that ended up outside a superset costs its full time), drop the last T3 from
-// `removable` (library picks) and regroup. Mutates `blocks` and `removable`; returns the dropped blocks.
+// `removable` (library picks), else its last other pick, and regroup. Mutates `blocks` and `removable`; returns the dropped blocks.
 function trimToFit(state, blocks, minutes, removable) {
   const dropped = [];
   while (regroup(state, blocks) && blocksMinutes(state, blocks) > minutes + 1e-9) {
-    const i = removable.findLastIndex(b => b.tier === 'T3');
+    let i = removable.findLastIndex(b => b.tier === 'T3');
+    if (i < 0) i = removable.findLastIndex(b => b.tier !== 'JUMP'); // no T3 to drop: the last other library pick
     if (i < 0) break;
     const [gone] = removable.splice(i, 1);
     if (blocks !== removable) blocks.splice(blocks.indexOf(gone), 1);
@@ -890,7 +916,7 @@ export function bodyRegion(state, e) {
 // Picks from the whole library at the location, spending `minutes`. Collects blocks and notes.
 // `taken`: exercises already in the workout (goal picks, the session so far), never picked again.
 function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken = []) {
-  const loc = byId(state.locations, ci.locationId);
+  const loc = placeOf(state, ci);
   const famUsed = new Set(excludeFamilies);
   const variant = ci.variant || 0; // Regenerate bumps this to rotate equal picks
   const pattern = e => movementPattern(state, e);

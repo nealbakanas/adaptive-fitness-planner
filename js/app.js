@@ -42,6 +42,7 @@ function defaultCheckin() {
   const last = state.sessions.filter(s => s.source !== 'imported').sort((a, b) => b.checkinAt - a.checkinAt)[0];
   return {
     locationId: last?.locationId ?? state.locations[0]?.id,
+    locationIds: (last?.locationIds ?? [last?.locationId ?? state.locations[0]?.id]).filter(id => L.byId(state.locations, id)),
     minutes: last?.minutes ?? 45,
     fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false,
   };
@@ -273,7 +274,7 @@ function setBlockTier(s, b, tier, reason = null) {
   b.swaps.push({ type: 'tier', from: b.tier, to: tier, reason, at: Date.now() });
   b.tier = tier;
   b.slotId = slotIdFor(ex.id, tier);
-  if (tier === 'T3') L.pairT3s(state, s.blocks);
+  if (tier === 'T3') L.pairT3s(state, s.blocks, L.placeOf(state, s));
   b.schemeId = schemeForBlock(s, ex, tier, b).id;
   if (s.source === 'suggested') s.source = 'swapped';
   genSets(s, b);
@@ -289,7 +290,7 @@ function addBlock(s, ex, tier) {
   s.blocks.push(b);
   if (s.source === 'suggested') s.source = 'swapped';
   if (tier === 'T3') {
-    L.pairT3s(state, s.blocks);
+    L.pairT3s(state, s.blocks, L.placeOf(state, s));
     if (b.pairOf) b.schemeId = schemeForBlock(s, ex, tier, b).id; // a partner only costs half its time
   }
   genSets(s, b);
@@ -336,7 +337,7 @@ function createSession(blocks, source, extra = {}) {
     ...ui.ci, source, blocks, ...extra,
   };
   state.sessions.push(s);
-  L.pairT3s(state, blocks);
+  L.pairT3s(state, blocks, L.placeOf(state, s));
   for (const b of blocks) genSets(s, b);
   save();
   return s;
@@ -783,7 +784,9 @@ function viewCheckin() {
     const rest = restSummary(sets);
     h += `<div class="card muted">Done today: ${doneToday.length} session${doneToday.length > 1 ? 's' : ''}, ${sets.length} sets${rest ? ` · ${rest.text}` : ''}.</div>`;
   }
-  h += `<div class="field"><label>Where</label>${seg('locationId', state.locations.map(l => [l.id, esc(l.name)]), ci.locationId)}</div>
+  const where = ci.locationIds?.length ? ci.locationIds : [ci.locationId];
+  h += `<div class="field"><label>Where <span class="hint">tap more than one if you'll move between them</span></label><div class="seg">${state.locations.map(l =>
+    `<button data-act="ciLoc" data-v="${l.id}" class="${where.includes(l.id) ? 'on' : ''}">${esc(l.name)}</button>`).join('')}</div></div>
     <div class="field"><label>Time (min)</label>${seg('minutes', TIMES.map(t => [t, t]), ci.minutes)}</div>
     <div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${seg('energy', [1, 2, 3, 4, 5].map(n => [n, n]), 6 - ci.fatigue)}</div>
     <div class="field"><label>Sleep <span class="hint">optional · 1 poor · 5 great · tap again to clear</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
@@ -810,7 +813,7 @@ function viewCheckin() {
 }
 
 function viewSession(s) {
-  const loc = L.byId(state.locations, s.locationId);
+  const loc = L.placeOf(state, s);
   const credit = L.creditWeek(state);
   const est = s.minutes - sessionBudget(s);
   const intent = INTENTS.find(i => i[0] === s.intent)?.[1] ?? s.intent;
@@ -882,6 +885,8 @@ function viewBlock(s, b, credit, idea = null) {
   // Progression: how this load follows from last time (see L.progression).
   const prog = L.progression(state, ex, b.tier, sc, s.checkinAt);
   let info = [];
+  const there = L.elsewhere(ex, L.placeOf(state, s)); // several locations: say where this one is done
+  if (there) info.push(`at ${esc(there.name)}`);
   // With progression the load is last time's (+ the increment), so show what share of your e1RM that really is.
   const progPct = prog && max ? (prog.load + (ex.bodyweight ? state.settings.bodyweight || 0 : 0)) / max : null;
   if (ex.metric === 'load_reps' && (progPct || pct)) info.push(`${round((progPct || pct) * 100)}% of e1RM`);
@@ -1413,7 +1418,7 @@ function viewHistory(hs) {
     if (s) {
       if (s.source === 'imported') bits.push('from FitNotes');
       else {
-        bits.push(L.byId(state.locations, s.locationId)?.name);
+        bits.push(L.placeOf(state, s)?.name);
         const mins = s.durationMin ?? Math.round((e.end - e.at) / 60e3);
         if (mins > 0) bits.push(s.status === 'done' && s.minutes ? `planned ${s.minutes} · took ${mins} min` : `${mins} min`);
       }
@@ -2059,7 +2064,7 @@ const TIER_DESC = {
 function sheetAddEx(sh) {
   const past = sh.mode === 'histAdd' || sh.mode === 'histSwap'; // editing a past workout: any exercise, wherever it was done
   const s = past ? L.byId(state.sessions, sh.sessionId) : currentSession();
-  const loc = past ? null : L.byId(state.locations, s.locationId);
+  const loc = past ? null : L.placeOf(state, s);
   const q = (sh.q || '').trim().toLowerCase();
   const matches = state.exercises.filter(e => !e.archived && (!q || e.name.toLowerCase().includes(q) || famOf(e.familyId)?.name.toLowerCase().includes(q)));
   const here = past ? matches : matches.filter(e => L.isAvailable(e, loc));
@@ -2158,7 +2163,7 @@ function reasonChips(cur) {
 function sheetSwapEx(sh) {
   const { s, b } = findBlock(sh.blockId);
   const cur = exOf(b.exerciseId), fam = famOf(cur.familyId);
-  const loc = L.byId(state.locations, s.locationId);
+  const loc = L.placeOf(state, s);
   // What you usually swap this for comes first, marked; favorites carry a star.
   const usual = new Map(Taste.replacements(Taste.taste(state), cur.id, b.tier).map(r => [r.id, r.count]));
   const alts = L.alternatives(state, cur, loc).sort((x, y) => (usual.get(y.id) ?? 0) - (usual.get(x.id) ?? 0));
@@ -2617,6 +2622,15 @@ const actions = {
     save(); render(); toast('Your previous goals are back');
   },
 
+  // Locations: tap to add or remove one; at least one stays. The first picked is the main one.
+  ciLoc: d => {
+    const ids = ui.ci.locationIds?.length ? [...ui.ci.locationIds] : [ui.ci.locationId];
+    const i = ids.indexOf(d.v);
+    if (i >= 0) { if (ids.length > 1) ids.splice(i, 1); } else ids.push(d.v);
+    ui.ci.locationIds = ids;
+    ui.ci.locationId = ids[0];
+    render();
+  },
   ci: d => {
     if (d.k === 'energy') { ui.ci.fatigue = 6 - Number(d.v); return render(); }
     const num = ['minutes', 'fatigue', 'sleep'].includes(d.k);
@@ -2641,7 +2655,7 @@ const actions = {
     const extra = { focusRegion: region, focusExplosive: explosive, focusNotes: res.notes, ready: res.ready };
     if (s) {
       s.blocks.push(...res.blocks);
-      L.pairT3s(state, s.blocks);
+      L.pairT3s(state, s.blocks, L.placeOf(state, s));
       for (const b of res.blocks) genSets(s, b);
       Object.assign(s, extra, { source: 'focus' });
       delete s.why;
@@ -2686,7 +2700,7 @@ const actions = {
       ? L.buildFocus(state, ci, { region: s.focusRegion, explosive: !!s.focusExplosive }, Date.now(), { excludeFamilies, sessionBlocks: keep })
       : L.buildSuggestion(state, ci, Date.now(), { excludeFamilies, sessionBlocks: keep });
     s.blocks.push(...res.blocks);
-    L.pairT3s(state, s.blocks);
+    L.pairT3s(state, s.blocks, L.placeOf(state, s));
     for (const b of res.blocks) genSets(s, b);
     s.focusNotes = res.notes;
     s.ready = res.ready;
@@ -2888,7 +2902,7 @@ const actions = {
     s.minutes += extra;
     if (res.notes?.length) s.focusNotes = [...(s.focusNotes || []), ...res.notes];
     s.blocks.push(...res.blocks);
-    L.pairT3s(state, s.blocks);
+    L.pairT3s(state, s.blocks, L.placeOf(state, s));
     for (const b of res.blocks) genSets(s, b);
     ui.sheet = null;
     save(); render();
@@ -3233,11 +3247,11 @@ const actions = {
     const s = currentSession();
     // Gear you just added while training is gear you have here.
     if (s && sh.from !== 'lib') {
-      const loc = L.byId(state.locations, s.locationId);
+      const loc = L.placeOf(state, s);
       for (const eq of sh.newEq || []) if (equipment.includes(eq) && !loc.equipment.includes(eq)) loc.equipment.push(eq);
     }
     save();
-    const here = s && L.isAvailable(e, L.byId(state.locations, s.locationId));
+    const here = s && L.isAvailable(e, L.placeOf(state, s));
     const note = availabilityNote(e);
     if (note) setTimeout(() => toast(note), 2300);
     if (sh.from === 'swap' && sh.blockId) {
@@ -3829,7 +3843,7 @@ document.addEventListener('change', e => {
     moveWorkout(el.value);
   } else if (d.hloc !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit);
-    if (s) { s.locationId = el.value || null; save(); }
+    if (s) { s.locationId = el.value || null; delete s.locationIds; save(); }
   } else if (d.hdur !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit), v = Math.round(Number(el.value));
     if (s) { if (el.value.trim() !== '' && v > 0) s.durationMin = v; else delete s.durationMin; save(); }
