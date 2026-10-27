@@ -93,6 +93,27 @@ function setSession(s) {
   update({ session: { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at ?? nowSec() + (Number(s.expires_in) || 3600), user } });
 }
 
+// Email and password: no email involved after the account exists. Needs "Confirm email" turned off in Supabase
+// (Authentication → Sign In / Providers → Email), or a new account has to confirm by link before it gets a session.
+export async function signUp(address, password) {
+  const res = await raw('/auth/v1/signup', { method: 'POST', body: { email: address, password } });
+  if (!res.ok) {
+    const msg = await messageOf(res);
+    throw new CloudError(/already registered|already been registered/i.test(msg) ? 'That email already has an account. Sign in instead.' : msg, { status: res.status });
+  }
+  const body = await res.json();
+  if (!body.access_token) throw new CloudError('Check your email to confirm the account, then sign in. (To skip this, turn off "Confirm email" in Supabase.)', { status: 200 });
+  setSession(body);
+  return true;
+}
+
+export async function signInWithPassword(address, password) {
+  const res = await raw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email: address, password } });
+  if (!res.ok) throw new CloudError(res.status === 400 || res.status === 401 ? 'That email and password don’t match. Check them, or create an account.' : await messageOf(res), { status: res.status });
+  setSession(await res.json());
+  return true;
+}
+
 // Emails a sign-in link and a code. The link brings you back to this page signed in; the code works where the link
 // can't (a home-screen app on an iPhone opens links in Safari instead).
 export async function sendCode(address) {

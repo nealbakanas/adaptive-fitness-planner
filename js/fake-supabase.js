@@ -12,6 +12,8 @@ export function installFake() {
   const fake = {
     rows: new Map(),      // user id -> { rev, saved_at, device, workouts, sets, data }
     users: new Map(),     // email -> id
+    passwords: new Map(), // email -> password
+    confirmEmail: false,  // true: signing up needs an emailed confirmation first (no session returned)
     codes: new Map(),     // email -> the code "emailed"
     sent: [],             // emails sent: { email, redirect }
     log: [],              // every request: "METHOD path"
@@ -47,6 +49,20 @@ export function installFake() {
     }
     if (path === '/auth/v1/verify') {
       if (fake.codes.get(body.email) !== body.token) return json(403, { error_code: 'otp_expired', msg: 'Token has expired or is invalid' });
+      const id = fake.users.get(body.email);
+      return json(200, { access_token: jwt(id, body.email), refresh_token: `r-${id}-${++fake.refreshes}`, expires_in: 3600, token_type: 'bearer', user: { id, email: body.email } });
+    }
+    if (path === '/auth/v1/signup') {
+      if (fake.passwords.has(body.email)) return json(422, { error_code: 'user_already_exists', msg: 'User already registered' });
+      if (String(body.password ?? '').length < 6) return json(422, { error_code: 'weak_password', msg: 'Password should be at least 6 characters.' });
+      if (!fake.users.has(body.email)) fake.users.set(body.email, crypto.randomUUID());
+      fake.passwords.set(body.email, body.password);
+      const id = fake.users.get(body.email);
+      if (fake.confirmEmail) return json(200, { id, email: body.email, confirmation_sent_at: new Date().toISOString() });
+      return json(200, { access_token: jwt(id, body.email), refresh_token: `r-${id}-${++fake.refreshes}`, expires_in: 3600, token_type: 'bearer', user: { id, email: body.email } });
+    }
+    if (path === '/auth/v1/token' && u.searchParams.get('grant_type') === 'password') {
+      if (!fake.passwords.has(body.email) || fake.passwords.get(body.email) !== body.password) return json(400, { error_code: 'invalid_credentials', msg: 'Invalid login credentials' });
       const id = fake.users.get(body.email);
       return json(200, { access_token: jwt(id, body.email), refresh_token: `r-${id}-${++fake.refreshes}`, expires_in: 3600, token_type: 'bearer', user: { id, email: body.email } });
     }
