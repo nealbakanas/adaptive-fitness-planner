@@ -631,6 +631,9 @@ function globalBanners() {
     h += `<div class="banner">A newer copy of your data was found on this device (saved ${esc(fmtDateTime(copy.at))}, ${copy.summary.workouts} workouts, ${copy.summary.sets} sets).
       <button class="link" data-act="recoveryUse">Use it</button> <button class="link" data-act="recoveryIgnore">Ignore</button></div>`;
   }
+  if (ui.updateReady) {
+    h += `<div class="banner">A newer version of the app is ready. <button class="link" data-act="reloadApp">Reload</button></div>`;
+  }
   if (ui.cloud?.ask && !(ui.sheet?.type === 'cloudAsk')) {
     h += `<div class="banner">Your account has a saved backup. <button class="link" data-act="cloudAsk">Choose what to do</button></div>`;
   }
@@ -1388,7 +1391,10 @@ function viewSettingsMenu() {
     <div class="menu">${SETTINGS_PAGES.slice(3, 6).map(([k, t]) => menuRow(k, t, summary[k])).join('')}</div>
     <div class="menu">${menuRow('data', 'Backup and data', summary.data)}
       <button class="menurow" data-act="setupAgain"><span class="grow"><span class="name">Set up again</span>
-        <span class="meta">Walk through locations, your week, lifts and maxes; replaces your goals</span></span><span class="chev">›</span></button></div>`;
+        <span class="meta">Walk through locations, your week, lifts and maxes; replaces your goals</span></span><span class="chev">›</span></button></div>
+    <div class="label">App</div>
+    <div class="menu"><button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
+      <span class="meta">${ui.swVersion ? `You have ${esc(String(ui.swVersion).replace(/^afp-/, ''))}. ` : ''}Reloads the app fresh from the server; your data stays</span></span></button></div>`;
 }
 
 const menuRow = (k, t, sub) => `<button class="menurow" data-act="setPage" data-p="${k}"><span class="grow"><span class="name">${esc(t)}</span>
@@ -3356,6 +3362,15 @@ const actions = {
     render();
     handleSync(await Sync.resolve(d.c));
   },
+  reloadApp: () => location.reload(),
+  // Throws away the saved app files and loads everything fresh. Needs the network: the saved copy is what works offline.
+  refreshApp: async () => {
+    if (navigator.onLine === false) return toast('You\'re offline, so there\'s nothing newer to get.');
+    toast('Getting the latest version…');
+    try { await (await navigator.serviceWorker?.getRegistration())?.update(); } catch { /* reload anyway */ }
+    try { for (const k of await caches.keys()) await caches.delete(k); } catch { /* nothing saved */ }
+    location.reload();
+  },
   backupSnooze: () => { state.settings.backupSnoozeUntil = Date.now() + 3 * 864e5; save(); render(); },
   recoveryUse: () => {
     useRecoveryCopy();
@@ -3629,8 +3644,25 @@ function importText(text) {
   });
 }
 
+// Which version of the app is running (the service worker's cache name), for Settings. Resolves null without a worker.
+function swVersion() {
+  const c = navigator.serviceWorker?.controller;
+  if (!c) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = e => resolve(e.data);
+    c.postMessage({ type: 'version' }, [ch.port2]);
+    setTimeout(() => resolve(null), 1000);
+  });
+}
+
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
+  // On a slow signal the saved copy loads first; the worker says when the newer one has arrived.
+  navigator.serviceWorker.addEventListener('message', e => { if (e.data?.type === 'update-ready' && !ui.updateReady) { ui.updateReady = true; render(); } });
+  // A home-screen app can resume without reloading: look for a new version whenever you come back to it.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') navigator.serviceWorker.getRegistration().then(r => r?.update()).catch(() => {}); });
+  swVersion().then(v => { ui.swVersion = v; });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(err => console.warn('Service worker not registered', err));
   // A new version took over: reload once so every file comes from the same version.
   let reloading = false;

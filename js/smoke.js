@@ -693,6 +693,19 @@ try {
   out.push(['FAIL', `backup and data — ${e.message}`]);
 }
 
+// ---------- getting updates ----------
+try {
+  click('[data-act=nav][data-tab=today]'); click('[data-act=nav][data-tab=more]');
+  check('Settings has a way to get the latest version', !!q('[data-act=refreshApp]') && /Get the latest version/.test(text()));
+  check('no update banner at first', !q('[data-act=reloadApp]'));
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'update-ready' } }));
+    check('a newer version arriving shows a Reload banner', !!q('[data-act=reloadApp]') && /newer version of the app is ready/.test(text()), text().slice(0, 200));
+  }
+} catch (e) {
+  out.push(['FAIL', `updates — ${e.message}`]);
+}
+
 // ---------- the account (the fake Supabase stands in for the server) ----------
 const { installFake } = await import('./fake-supabase.js');
 const fake = installFake();
