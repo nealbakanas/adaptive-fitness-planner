@@ -1,4 +1,6 @@
-import { state, save, replaceState, resetState, loadProblem, lastSaveError, resolveLoadProblem, onSaveFail, keepCopy, readCopy, hasCopy, dropCopy } from './store.js';
+import { state, save, replaceState, resetState, loadProblem, lastSaveError, resolveLoadProblem, onSaveFail, keepCopy, readCopy, hasCopy, dropCopy,
+  recover, getRecoveryCopy, useRecoveryCopy, dismissRecoveryCopy, snapshotNow, requestPersist, flushVault } from './store.js';
+import * as Vault from './vault.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
 import * as G from './goals.js';
@@ -116,6 +118,8 @@ const mobEx = id => L.byId(state.mobility.exercises, id);
 // A logged item's exercise: a program item carries its own (with that week's dose), else the mobility library's.
 const itemEx = it => it.def ?? mobEx(it.exerciseId);
 const progLabel = m => m.program ? `${P.programDef(m.program.id)?.name ?? 'Program'} · week ${m.program.week}, day ${m.program.day}` : null;
+const fmtDateTime = t => new Date(t).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const fmtMinutesAgo = t => { const m = Math.max(0, Math.round((Date.now() - t) / 6e4)); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 const fmtAgo = t => { const d = Math.floor((L.startOfDay() - L.startOfDay(t)) / 864e5); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
 
 function currentMobility() {
@@ -615,9 +619,18 @@ function render() {
 // Problems with saving show on every tab: they mean your latest changes aren't safe yet.
 function globalBanners() {
   let h = '';
+  const copy = getRecoveryCopy();
   if (loadProblem) {
     h += `<div class="banner bad">${esc(loadProblem.message)}${loadProblem.raw ? ' <button class="link" data-act="copyRaw">Copy the saved data</button>' : ''}
+      ${copy ? `<button class="link" data-act="recoveryUse">Use the backup copy from ${esc(fmtDateTime(copy.at))}</button>` : ''}
       <button class="link" data-act="startFresh">Start fresh</button></div>`;
+  } else if (copy) {
+    h += `<div class="banner">A newer copy of your data was found on this device (saved ${esc(fmtDateTime(copy.at))}, ${copy.summary.workouts} workouts, ${copy.summary.sets} sets).
+      <button class="link" data-act="recoveryUse">Use it</button> <button class="link" data-act="recoveryIgnore">Ignore</button></div>`;
+  }
+  if (ui.recovered) {
+    h += `<div class="banner">Recovered your data from this device's backup copy (saved ${esc(fmtDateTime(ui.recovered.at))}: ${ui.recovered.summary.workouts} workouts, ${ui.recovered.summary.sets} sets).
+      <button class="link" data-act="recoveredOk">OK</button></div>`;
   }
   if (ui.setupUndo) h += `<div class="banner">Setup saved: new goals, locations and maxes. <button class="link" data-act="setupUndo">Undo</button></div>`;
   if (lastSaveError) {
@@ -631,11 +644,11 @@ function banners() {
   if (!state.settings.bodyweight) {
     h += `<div class="banner">Set your bodyweight in Settings so weighted pull-ups and dips get loads. <button class="link" data-act="nav" data-tab="more">Settings</button></div>`;
   }
-  // Nudge once data is a week older than the last backup (or than the first logged set).
-  const firstLog = Math.min(...state.sets.filter(s => s.done).map(s => s.loggedAt));
-  const since = state.settings.lastExportAt ?? firstLog;
-  if (Number.isFinite(since) && Date.now() - since > 7 * 864e5) {
-    h += `<div class="banner">It's been a while since your last backup. <button class="link" data-act="copyBackup">Copy backup</button></div>`;
+  // Nudge after 3 finished workouts, or 7 days with one, since the last backup off this device (see Vault.backupNudge).
+  if (Vault.backupNudge(state)) {
+    const n = state.sessions.filter(x => x.status === 'done' && x.firstSetAt && x.firstSetAt > (state.settings.lastExportAt ?? 0)).length;
+    h += `<div class="banner">${state.settings.lastExportAt ? `${n} workout${n === 1 ? '' : 's'} since your last backup.` : `Your ${n} workout${n === 1 ? '' : 's'} only exist on this device.`}
+      <button class="link" data-act="saveBackup">Save backup</button> <button class="link" data-act="backupSnooze">Not now</button></div>`;
   }
   return h;
 }
@@ -1470,14 +1483,42 @@ function settingsSchemes() {
     }).join('') + `<button class="addblock" data-act="schemeNew">+ Add scheme</button>`;
 }
 
+// How a snapshot came about, for the saved-copies list.
+const SNAP_LABEL = { daily: 'daily', 'before-import': 'before an import', 'before-setup': 'before setup', 'before-paste': 'before restoring a backup',
+  'before-restore': 'before restoring a saved copy', 'before-erase': 'before erasing everything', recovered: 'found at startup' };
+
+// Loads what Backup and data shows about the copy on this device (it lives in IndexedDB, so it arrives a moment later).
+async function loadVault() {
+  const usable = await Vault.usable();
+  ui.vault = { usable, savedAt: usable ? (await Vault.get())?.at ?? null : null, rows: usable ? await Vault.list() : [] };
+  if (ui.setPage === 'data') render();
+}
+function openDataPage() {
+  loadVault();
+  requestPersist().then(() => { if (ui.setPage === 'data') render(); });
+}
+
 function settingsData() {
-  const st = { ...state.settings, imports: state.imports };
-  return `<p class="meta pad">Everything is stored only on this device, in this browser. Clearing browser data erases it, so keep a backup.</p>
+  const st = state.settings, v = ui.vault;
+  const persisted = st.storagePersisted === true ? 'Yes' : st.storagePersisted === 'unsupported' ? 'Not available here' : st.storagePersisted === false ? 'No' : '…';
+  const copyLine = !v ? '…' : !v.usable ? 'Not available in this browser' : v.savedAt ? `Saved ${fmtMinutesAgo(v.savedAt)}` : 'Not saved yet';
+  const status = (name, value, hint = '') => `<div class="frow"><span class="grow"><span class="name">${name}</span>${hint ? `<span class="meta">${hint}</span>` : ''}</span><b>${value}</b></div>`;
+  const rows = (v?.rows ?? []).map(r => `<button class="menurow" data-act="vaultRestore" data-at="${r.at}"><span class="grow"><span class="name">${esc(fmtDateTime(r.at))}</span>
+    <span class="meta">${esc(SNAP_LABEL[r.reason] ?? r.reason)} · ${r.workouts ?? '?'} workouts, ${r.sets ?? '?'} sets</span></span><span class="chev">›</span></button>`).join('');
+  return `<p class="meta pad">Your data lives in this browser, with a second copy and dated snapshots on this device. A backup saved somewhere else is what survives a lost phone or a cleared browser.</p>
+    <div class="label">Status</div>
+    <div class="menu">
+      ${status('Protected from automatic clearing', persisted, st.storagePersisted === false ? 'Add the app to your home screen so the browser keeps it' : '')}
+      ${status('Copy on this device', copyLine)}
+      ${status('Last backup off this device', st.lastExportAt ? `${esc(new Date(st.lastExportAt).toLocaleDateString())} · ${fmtAgo(st.lastExportAt)}` : 'Never')}
+    </div>
     <div class="label">Back up</div>
     <div class="menu">
+      <button class="menurow" data-act="saveBackup"><span class="grow"><span class="name">Save backup to…</span><span class="meta">Files, iCloud Drive, Google Drive or email; downloads a file on a computer</span></span></button>
       <button class="menurow" data-act="copyBackup"><span class="grow"><span class="name">Copy backup</span><span class="meta">Paste it into a note or email to yourself</span></span></button>
-      <button class="menurow" data-act="export"><span class="grow"><span class="name">Download backup file</span><span class="meta">Last backup: ${st.lastExportAt ? new Date(st.lastExportAt).toLocaleString() : 'never'}</span></span></button>
     </div>
+    <div class="label">Saved copies on this device</div>
+    <div class="menu">${rows || `<p class="muted pad">${v ? 'None yet. One is taken each day you log a set, and before anything replaces your data.' : '…'}</p>`}</div>
     <div class="label">Import</div>
     <div class="menu">
       <button class="menurow" data-act="setPage" data-p="fitnotes"><span class="grow"><span class="name">Import from FitNotes</span>
@@ -2912,8 +2953,8 @@ const actions = {
   setupAgain: () => { ui.onboard = O.startDraft(state); ui.onboard.step = 1; render(); window.scrollTo(0, 0); },
   obNext: () => { readObInputs(); ui.onboard.step = Math.min(O.STEPS.length - 1, ui.onboard.step + 1); render(); window.scrollTo(0, 0); },
   obBack: () => { readObInputs(); ui.onboard.step = Math.max(0, ui.onboard.step - 1); render(); window.scrollTo(0, 0); },
-  obSkip: () => { if (!state.settings.onboarded) { state.settings.onboarded = true; save(); } ui.onboard = null; render(); },
-  obImport: () => { state.settings.onboarded = true; save(); ui.onboard = null; ui.tab = 'more'; actions.setPage({ p: 'fitnotes' }); },
+  obSkip: () => { if (!state.settings.onboarded) { state.settings.onboarded = true; save(); } ui.onboard = null; render(); requestPersist(); },
+  obImport: () => { state.settings.onboarded = true; save(); ui.onboard = null; ui.tab = 'more'; actions.setPage({ p: 'fitnotes' }); requestPersist(); },
   obSet: d => { readObInputs(); ui.onboard[d.k] = d.v; render(); },
   obToggle: d => {
     readObInputs();
@@ -2933,9 +2974,11 @@ const actions = {
   obLocDel: d => { readObInputs(); ui.onboard.locations.splice(Number(d.i), 1); render(); },
   obFinish: () => {
     keepCopy('before-setup');
+    snapshotNow('before-setup');
     O.applyDraft(state, ui.onboard);
     ui.onboard = null; ui.setupUndo = true; ui.tab = 'today';
     save(); render(); window.scrollTo(0, 0);
+    requestPersist();
     toast('All set. Check in when you train.');
   },
   setupUndo: () => {
@@ -3029,6 +3072,7 @@ const actions = {
   setPage: d => {
     ui.setPage = d.p || null;
     if (d.p === 'fitnotes' && (!ui.fn || ui.fn.stage === 'done')) ui.fn = { stage: 'pick' };
+    if (d.p === 'data') { ui.vault = null; openDataPage(); }
     render(); window.scrollTo(0, 0);
   },
 
@@ -3044,6 +3088,7 @@ const actions = {
   fnImport: () => {
     const f = ui.fn;
     if (!keepCopy('before-import')) return toast('Couldn’t make a safety copy first, so nothing was imported. Free up some space and try again.');
+    snapshotNow('before-import');
     const undo = msg => {
       const snap = readCopy('before-import');
       if (snap) replaceState(snap);
@@ -3063,7 +3108,7 @@ const actions = {
     render(); window.scrollTo(0, 0);
   },
   fnLibrary: () => { ui.fn = null; ui.setPage = null; ui.tab = 'library'; render(); window.scrollTo(0, 0); },
-  fnFinish: () => { ui.fn = null; ui.setPage = 'data'; render(); window.scrollTo(0, 0); },
+  fnFinish: () => { ui.fn = null; ui.setPage = 'data'; ui.vault = null; openDataPage(); render(); window.scrollTo(0, 0); },
   fnUndo: () => askConfirm('Undo the last import?', 'Everything goes back to how it was just before the import, including anything you logged since.', 'Undo import', () => {
     const snap = readCopy('before-import');
     if (!snap) return toast('There’s nothing to undo.');
@@ -3152,7 +3197,8 @@ const actions = {
     render();
   },
 
-  reset: () => askConfirm('Erase everything and start from the seed?', 'All sessions, sets, plans and edits are deleted. Copy a backup first if you might want them.', 'Erase all data', () => {
+  reset: () => askConfirm('Erase everything and start from the seed?', 'All sessions, sets, plans and edits are deleted. A saved copy stays on this device under Backup and data; copy a backup too if you might want them later.', 'Erase all data', () => {
+    snapshotNow('before-erase');
     resetState();
     ui.ci = defaultCheckin();
     render(); toast('Reset to seed');
@@ -3175,6 +3221,48 @@ const actions = {
     } catch {
       fallback();
     }
+  },
+  // Share sheet on phones (Files, iCloud Drive, Google Drive, email), a download elsewhere. Only a completed share or
+  // download counts as a backup. Built and shared in one go: the browser wants the share to start from the tap.
+  saveBackup: () => {
+    const name = `fitness-backup-${L.dayKey()}.json`;
+    const text = JSON.stringify(state, null, 2);
+    const done = () => { state.settings.lastExportAt = Date.now(); save(); render(); toast('Backup saved'); };
+    const download = () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      done();
+    };
+    let file = null;
+    try { file = new File([text], name, { type: 'application/json' }); } catch { /* no File constructor */ }
+    if (file && navigator.canShare?.({ files: [file] })) {
+      navigator.share({ files: [file], title: 'Training backup' }).then(done, e => { if (e?.name !== 'AbortError') download(); });
+    } else download();
+  },
+  backupSnooze: () => { state.settings.backupSnoozeUntil = Date.now() + 3 * 864e5; save(); render(); },
+  recoveryUse: () => {
+    useRecoveryCopy();
+    ui.ci = defaultCheckin();
+    render(); toast('Back to the saved copy. Your previous data is under Backup and data.');
+  },
+  recoveryIgnore: () => { dismissRecoveryCopy(); render(); },
+  recoveredOk: () => { ui.recovered = null; render(); },
+  // Rolling back to a saved copy: it replaces what's here, after a snapshot of what's here, and can be undone.
+  vaultRestore: async d => {
+    const rec = await Vault.read(Number(d.at));
+    if (!rec) return toast('That saved copy couldn’t be read.');
+    askConfirm(`Go back to ${fmtDateTime(rec.at)}?`, `${rec.workouts ?? '?'} workouts and ${rec.sets ?? '?'} sets. What's here now is replaced; you can undo this right after.`, 'Restore', () => {
+      const before = JSON.stringify(state);
+      snapshotNow('before-restore');
+      try { replaceState(JSON.parse(rec.json)); } catch (e) { return toast(`That copy couldn’t be opened: ${e.message}`); }
+      ui.ci = defaultCheckin();
+      render();
+      toast('Restored', () => { replaceState(JSON.parse(before)); ui.ci = defaultCheckin(); render(); toast('Back to how it was'); });
+      loadVault();
+    });
   },
   pasteImport: () => openSheet({ type: 'pasteImport' }),
   pasteImportGo: () => importText(sheetEl.querySelector('#paste-json').value),
@@ -3419,7 +3507,8 @@ function importText(text) {
     return toast(`Import failed: ${err.message}`);
   }
   const n = data.sets.filter(x => x.done).length;
-  askConfirm('Replace all current data with this backup?', `The backup has ${data.sessions?.length ?? 0} sessions and ${n} logged sets. What's here now is erased.`, 'Replace data', () => {
+  askConfirm('Replace all current data with this backup?', `The backup has ${data.sessions?.length ?? 0} sessions and ${n} logged sets. What's here now is replaced (a saved copy stays on this device).`, 'Replace data', () => {
+    snapshotNow('before-paste');
     replaceState(data);
     ui.ci = defaultCheckin();
     render(); toast('Imported');
@@ -3448,9 +3537,16 @@ document.addEventListener('visibilitychange', () => {
 
 onSaveFail(() => { toast('Couldn’t save your last change. See the message at the top.'); });
 
+// Before anything saves: if this browser lost the saved data but the second copy in IndexedDB has it, it comes back here.
+{
+  const r = await recover();
+  if (r.kind === 'restored') { ui.recovered = r; ui.ci = defaultCheckin(); }
+}
+
 closeStale();
 // Drop a timer left over from an earlier visit.
 if (state.timer && ((!currentSession() && !currentMobility()) || Date.now() - state.timer.endsAt > 10 * 60e3)) state.timer = null;
 save();
 if (O.isNewUser(state)) ui.onboard = O.startDraft(state);
 render();
+if (!ui.onboard) requestPersist();

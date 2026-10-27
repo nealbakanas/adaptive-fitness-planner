@@ -18,6 +18,7 @@ const step = (name, fn) => { try { fn(); } catch (e) { out.push(['FAIL', `${name
 const KEY = globalThis.AFP_STORAGE_KEY;
 const wipe = () => Object.keys(localStorage).filter(k => k === KEY || k.startsWith(`${KEY}.`)).forEach(k => localStorage.removeItem(k));
 wipe();
+await (await import('./vault.js')).wipe(); // the second copy too, or a run would recover the last one's data
 await import('./app.js');
 const store = await import('./store.js');
 const { state } = store;
@@ -628,6 +629,69 @@ step('set up again: locations, week, lifts, maxes, review, save and undo', () =>
   const now = store.state; // undo swaps in the saved copy as a new object
   check('undo restores the old goals', JSON.stringify(now.slots) === before && !now.locations.some(l => l.name === 'Hotel') && !/Undo/.test(text()));
 });
+
+// ---------- backup and data (async: the second copy lives in IndexedDB) ----------
+const tick = ms => new Promise(r => setTimeout(r, ms));
+const V = await import('./vault.js');
+try {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  // The reminder: three finished workouts and no backup off the device.
+  st().settings.lastExportAt = null; st().settings.backupSnoozeUntil = null;
+  while (st().sessions.filter(x => x.status === 'done' && x.firstSetAt).length < 3) st().sessions.push({ id: L.uid(), status: 'done', firstSetAt: Date.now() - 1000, checkinAt: Date.now() - 2000, blocks: [], source: 'suggested' });
+  click('[data-act=nav][data-tab=more]'); click('[data-act=nav][data-tab=today]');
+  check('the backup reminder shows after 3 workouts', /Save backup/.test(text()) && /Not now/.test(text()), text().slice(0, 300));
+  click('[data-act=backupSnooze]');
+  check('Not now hides it for 3 days', !/Not now/.test(text()) && st().settings.backupSnoozeUntil > Date.now() + 2.9 * 864e5);
+
+  click('[data-act=nav][data-tab=more]');
+  click('[data-act=setPage][data-p=data]');
+  await tick(400);
+  check('Backup and data shows the three status lines', /Protected from automatic clearing/.test(text()) && /Copy on this device/.test(text()) && /Last backup off this device\s*Never/.test(text()), text().slice(0, 500));
+  check('the copy on this device is reported', /Saved (just now|\d+ min ago)/.test(text()) || /Not saved yet/.test(text()), text().slice(0, 400));
+
+  // Snapshots: take one by hand, change something, go back to it, and undo.
+  st().settings.bodyweight = 201; store.save();
+  await store.snapshotNow('before-import');
+  await tick(300);
+  st().settings.bodyweight = 250; store.save();
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=data]');
+  await tick(500);
+  const rows = qa('[data-act=vaultRestore]');
+  check('saved copies are listed', rows.length >= 1 && rows.some(r => /before an import/.test(r.innerText)), qa('.menu').map(m => m.innerText).join(' | ').slice(0, 400));
+  click(rows.find(r => /before an import/.test(r.innerText)));
+  await tick(300);
+  check('restoring asks first', /Go back to/.test(sheet()) && /Restore/.test(sheet()), sheet().slice(0, 200));
+  click('#sheet [data-act=confirmYes]');
+  check('restoring puts that copy back', st().settings.bodyweight === 201);
+  const undo = [...document.querySelectorAll('.toast button')].filter(x => x.textContent === 'Undo').at(-1); // the newest toast's
+  check('and offers Undo', !!undo);
+  undo?.click();
+  check('Undo brings back what was there', st().settings.bodyweight === 250);
+  await tick(300);
+  check('a snapshot was taken before the restore', (await V.list()).some(r => r.reason === 'before-restore'));
+
+  // Save backup: the share sheet when the browser offers one, else a download. Only a finished one counts.
+  const canShare = Object.getOwnPropertyDescriptor(navigator, 'canShare'), share = Object.getOwnPropertyDescriptor(navigator, 'share');
+  const stub = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true });
+  st().settings.lastExportAt = null;
+  stub('canShare', () => true); stub('share', async () => { throw Object.assign(new Error('cancelled'), { name: 'AbortError' }); });
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=data]');
+  click('[data-act=saveBackup]'); await tick(200);
+  check('a cancelled share is not a backup', st().settings.lastExportAt == null);
+  let shared = null;
+  stub('share', async data => { shared = data; });
+  click('[data-act=saveBackup]'); await tick(200);
+  check('a finished share is a backup, named by date', st().settings.lastExportAt > Date.now() - 5000 && /^fitness-backup-\d{4}-\d\d-\d\d\.json$/.test(shared?.files?.[0]?.name ?? ''), shared?.files?.[0]?.name);
+  st().settings.lastExportAt = null;
+  stub('canShare', undefined);
+  click('[data-act=saveBackup]'); await tick(200);
+  check('without a share sheet it downloads, and that counts', st().settings.lastExportAt > Date.now() - 5000);
+  for (const [k, d] of [['canShare', canShare], ['share', share]]) { if (d) Object.defineProperty(navigator, k, d); else delete navigator[k]; }
+  await store.flushVault();
+} catch (e) {
+  out.push(['FAIL', `backup and data — ${e.message}`]);
+}
 
 const fails = out.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${out.filter(r => r[0] === 'PASS').length} passed, ${fails} failed`;

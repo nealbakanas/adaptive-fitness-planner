@@ -7,11 +7,16 @@ import * as G from './goals.js';
 import * as M from './mobility.js';
 import * as P from './programs.js';
 import * as O from './onboard.js';
+import * as V from './vault.js';
 
 const results = [];
+const pending = []; // tests that return a promise (the vault's IndexedDB): the summary waits for them
 const test = (name, fn) => {
-  try { fn(); results.push(['PASS', name]); }
-  catch (e) { results.push(['FAIL', `${name} — ${e.message}`]); }
+  const pass = () => results.push(['PASS', name]), fail = e => results.push(['FAIL', `${name} — ${e.message}`]);
+  try {
+    const r = fn();
+    if (r?.then) pending.push(r.then(pass, fail)); else pass();
+  } catch (e) { fail(e); }
 };
 const eq = (a, b, msg = '') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg} expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`); };
 const ok = (c, msg = 'assertion failed') => { if (!c) throw new Error(msg); };
@@ -212,7 +217,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -231,7 +236,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -503,7 +508,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -665,7 +670,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -692,7 +697,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 18);
+  eq(m.version, 19);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1214,7 +1219,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1373,7 +1378,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 18);
+  eq(m.version, 19);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1411,7 +1416,90 @@ test('Air Alert 2: the chart, each week\'s dose, and moving through 12 weeks of 
   ok(P.doneToday(s, 'aa2', L.dayKey()));
 });
 
+// ---------- data safety (js/vault.js) ----------
+test('snapshots: the newest 14 daily and 10 of every other kind are kept', () => {
+  const rows = [];
+  for (let i = 0; i < 20; i++) rows.push({ at: 1000 + i, reason: 'daily' });
+  for (let i = 0; i < 14; i++) rows.push({ at: 5000 + i, reason: i % 2 ? 'before-import' : 'before-erase' });
+  const gone = new Set(V.pruneKeys(rows));
+  eq(gone.size, 6 + 4);
+  ok([...gone].filter(at => at < 5000).every(at => at < 1006), 'the oldest dailies go');
+  ok([...gone].filter(at => at >= 5000).every(at => at < 5004), 'the oldest action snapshots go');
+  eq(V.pruneKeys(rows.slice(0, 5)), [], 'few snapshots: nothing goes');
+});
+test('daily snapshot: one a day, only on a day with logged sets', () => {
+  const s = seed();
+  const now = new Date(); now.setHours(15, 0, 0, 0);
+  eq(V.needsDaily([], s, now.getTime()), false, 'nothing logged today');
+  s.sets.push({ id: 'a', done: true, loggedAt: now.getTime() - 3600e3, exerciseId: 'ex-back-squat' });
+  eq(V.needsDaily([], s, now.getTime()), true, 'a set today, no snapshot yet');
+  eq(V.needsDaily([{ at: now.getTime() - 7200e3, reason: 'daily' }], s, now.getTime()), false, 'already taken today');
+  eq(V.needsDaily([{ at: now.getTime() - 7200e3, reason: 'before-import' }], s, now.getTime()), true, 'a before-action snapshot is not the daily one');
+  eq(V.needsDaily([{ at: now.getTime() - 86400e3, reason: 'daily' }], s, now.getTime()), true, 'yesterday\'s does not count');
+  s.sets[0].warmup = true;
+  eq(V.needsDaily([], s, now.getTime()), false, 'warm-ups do not count');
+});
+test('backup reminder: 3 finished workouts or 7 days with one, since your last backup; Not now waits 3 days', () => {
+  const s = seed();
+  const now = Date.now();
+  const done = d => ({ id: L.uid(), status: 'done', firstSetAt: now - d * DAY, blocks: [] });
+  eq(V.backupNudge(s, now), false, 'no workouts');
+  s.sessions.push(done(2), done(1));
+  eq(V.backupNudge(s, now), false, 'two recent workouts');
+  s.sessions.push(done(0));
+  eq(V.backupNudge(s, now), true, 'three workouts, never backed up');
+  s.settings.lastExportAt = now - 3600e3;
+  eq(V.backupNudge(s, now), false, 'just backed up');
+  s.settings.lastExportAt = now - 1.5 * DAY;
+  eq(V.backupNudge(s, now), false, 'two workouts since a backup 1.5 days ago');
+  s.settings.lastExportAt = now - 2.5 * DAY;
+  eq(V.backupNudge(s, now), true, 'three workouts since a backup 2.5 days ago');
+  const t = seed();
+  t.sessions.push(done(8));
+  eq(V.backupNudge(t, now), true, 'one workout 8 days ago, never backed up');
+  t.settings.lastExportAt = now - 2 * DAY;
+  eq(V.backupNudge(t, now), false, 'that workout is older than the backup');
+  t.sessions.push(done(1));
+  t.settings.lastExportAt = now - 9 * DAY;
+  eq(V.backupNudge(t, now), true, 'a workout since a week-old backup');
+  t.settings.backupSnoozeUntil = now + 2 * DAY;
+  eq(V.backupNudge(t, now), false, 'Not now');
+  eq(V.backupNudge(t, now + 3 * DAY), true, 'and it comes back');
+});
+test('v19: data saved before it opens with savedAt unset, and the summary counts workouts and working sets', () => {
+  const s = seed();
+  s.version = 18;
+  delete s.savedAt;
+  const m = migrate(s);
+  eq([m.version, m.savedAt], [19, null]);
+  s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
+  s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
+  eq(V.summaryOf(s), { version: 19, workouts: 1, sets: 1 });
+});
+test('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
+  if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
+  await V.wipe();
+  ok(await V.usable(), 'opens');
+  eq(await V.get(), null, 'empty at first');
+  ok(await V.put('{"a":1}'));
+  eq((await V.get()).json, '{"a":1}');
+  ok(await V.put('{"a":2}'));
+  eq((await V.get()).json, '{"a":2}', 'one copy, replaced');
+  for (let i = 0; i < 16; i++) await V.snapshot(`{"n":${i}}`, 'daily', { workouts: i, sets: i * 5, version: 19 });
+  for (let i = 0; i < 12; i++) await V.snapshot(`{"m":${i}}`, i % 2 ? 'before-import' : 'before-paste', { workouts: 1, sets: 1, version: 19 });
+  const rows = await V.list();
+  eq([rows.filter(r => r.reason === 'daily').length, rows.filter(r => r.reason !== 'daily').length], [14, 10], 'pruned to 14 and 10');
+  ok(rows.every((r, i) => !i || rows[i - 1].at > r.at), 'newest first, each at unique');
+  ok(!('json' in rows[0]), 'the list carries no data');
+  const newestDaily = rows.find(r => r.reason === 'daily');
+  eq([JSON.parse((await V.read(newestDaily.at)).json).n, newestDaily.workouts], [15, 15], 'the newest daily is the last one taken');
+  eq(await V.read(1), null, 'unknown time');
+  await V.wipe();
+  eq(await V.list(), [], 'wiped');
+});
+
 // ---------- render ----------
+await Promise.all(pending);
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;
 document.title = fails ? 'FAIL' : 'PASS';
