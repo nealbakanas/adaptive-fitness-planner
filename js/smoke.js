@@ -693,6 +693,57 @@ try {
   out.push(['FAIL', `backup and data — ${e.message}`]);
 }
 
+// ---------- the account (the fake Supabase stands in for the server) ----------
+const { installFake } = await import('./fake-supabase.js');
+const fake = installFake();
+try {
+  const st = () => store.state;
+  const Cloud = await import('./cloud.js');
+  const page = async () => { click('[data-act=nav][data-tab=today]'); click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=data]'); await tick(300); };
+  Cloud.reset();
+  await page();
+  check('the account section offers sign-in by email', /back up to your account/i.test(text()) && !!q('#cloud-email') && !!q('[data-act=cloudSend]'), text().slice(0, 300));
+  setVal(q('#cloud-email'), 'me@example.com', 'input');
+  click('[data-act=cloudSend]'); await tick(300);
+  check('a code field follows, naming the address', !!q('#cloud-code') && /me@example\.com/.test(text()), text().slice(0, 300));
+  setVal(q('#cloud-code'), '000000', 'input');
+  click('[data-act=cloudVerify]'); await tick(300);
+  check('a wrong code says so', /code didn.t work/.test(text()) && !Cloud.signedIn(), text().slice(0, 300));
+  setVal(q('#cloud-code'), '123456', 'input');
+  click('[data-act=cloudVerify]'); await tick(900);
+  check('the right code signs in and the first sync uploads', Cloud.signedIn() && /Signed in as\s*me@example\.com/.test(text()) && fake.row('me@example.com')?.rev === 1, text().slice(0, 300));
+  check('the account holds the data', fake.row('me@example.com').data.sets.length === st().sets.length && /Synced\s*(just now|\d+ min ago)/.test(text()), text().slice(0, 400));
+
+  // The other device saves: Sync now brings it in.
+  const theirs = structuredClone(fake.row('me@example.com').data);
+  theirs.sessions.push({ id: 'phone-session', status: 'done', firstSetAt: Date.now(), checkinAt: Date.now(), blocks: [] }); theirs.savedAt = Date.now() + 10;
+  fake.putRow('me@example.com', theirs);
+  click('[data-act=cloudSync]'); await tick(900);
+  check('Sync now brings the other device\'s workout in', st().sessions.some(x => x.id === 'phone-session') && fake.row('me@example.com').rev >= 2, `rev ${fake.row('me@example.com').rev}`);
+  check('and says so', [...document.querySelectorAll('.toast')].some(t => /other device/.test(t.textContent)));
+
+  // Signing out keeps the data; signing back in asks before touching anything.
+  click('[data-act=cloudSignOut]'); await tick(200);
+  click('#sheet [data-act=confirmYes]'); await tick(500);
+  check('signing out brings the sign-in form back and keeps the data', !!q('#cloud-email') && !Cloud.signedIn() && st().sessions.some(x => x.id === 'phone-session'));
+  setVal(q('#cloud-email'), 'me@example.com', 'input');
+  click('[data-act=cloudSend]'); await tick(300);
+  setVal(q('#cloud-code'), '123456', 'input');
+  const sessionsHere = st().sessions.length;
+  click('[data-act=cloudVerify]'); await tick(1200);
+  check('signing back in asks what to do with the account\'s backup', /Your account has a backup/.test(sheet()) && !!q('#sheet [data-act=cloudChoose][data-c=merge]') && !!q('#sheet [data-act=cloudChoose][data-c=account]') && !!q('#sheet [data-act=cloudChoose][data-c=keep]'), sheet().slice(0, 300));
+  check('and changes nothing yet', st().sessions.length === sessionsHere);
+  click('#sheet [data-act=cloudChoose][data-c=merge]'); await tick(1200);
+  check('Merge both finishes and syncs', !q('#sheet:not([hidden])') && Cloud.record().baseRev >= 3 && !/Choose what to do/.test(text()), `${Cloud.record().baseRev} ${text().slice(0, 200)}`);
+  check('a saved copy of the account\'s backup was kept', (await V.list()).some(r => r.reason === 'cloud-copy'));
+  click('[data-act=cloudSignOut]'); await tick(200);
+  click('#sheet [data-act=confirmYes]'); await tick(400);
+} catch (e) {
+  out.push(['FAIL', `the account — ${e.message}`]);
+} finally {
+  fake.restore();
+}
+
 const fails = out.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${out.filter(r => r[0] === 'PASS').length} passed, ${fails} failed`;
 document.title = fails ? 'FAIL' : 'PASS';

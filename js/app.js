@@ -1,6 +1,8 @@
 import { state, save, replaceState, resetState, loadProblem, lastSaveError, resolveLoadProblem, onSaveFail, keepCopy, readCopy, hasCopy, dropCopy,
   recover, getRecoveryCopy, useRecoveryCopy, dismissRecoveryCopy, snapshotNow, requestPersist, flushVault } from './store.js';
 import * as Vault from './vault.js';
+import * as Cloud from './cloud.js';
+import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
 import * as G from './goals.js';
@@ -118,6 +120,7 @@ const mobEx = id => L.byId(state.mobility.exercises, id);
 // A logged item's exercise: a program item carries its own (with that week's dose), else the mobility library's.
 const itemEx = it => it.def ?? mobEx(it.exerciseId);
 const progLabel = m => m.program ? `${P.programDef(m.program.id)?.name ?? 'Program'} · week ${m.program.week}, day ${m.program.day}` : null;
+const statusRow = (name, value, hint = '') => `<div class="frow"><span class="grow"><span class="name">${name}</span>${hint ? `<span class="meta">${hint}</span>` : ''}</span><b>${value}</b></div>`;
 const fmtDateTime = t => new Date(t).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const fmtMinutesAgo = t => { const m = Math.max(0, Math.round((Date.now() - t) / 6e4)); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 const fmtAgo = t => { const d = Math.floor((L.startOfDay() - L.startOfDay(t)) / 864e5); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
@@ -627,6 +630,12 @@ function globalBanners() {
   } else if (copy) {
     h += `<div class="banner">A newer copy of your data was found on this device (saved ${esc(fmtDateTime(copy.at))}, ${copy.summary.workouts} workouts, ${copy.summary.sets} sets).
       <button class="link" data-act="recoveryUse">Use it</button> <button class="link" data-act="recoveryIgnore">Ignore</button></div>`;
+  }
+  if (ui.cloud?.ask && !(ui.sheet?.type === 'cloudAsk')) {
+    h += `<div class="banner">Your account has a saved backup. <button class="link" data-act="cloudAsk">Choose what to do</button></div>`;
+  }
+  if (ui.cloud?.authLost && !Cloud.signedIn()) {
+    h += `<div class="banner bad">Your account sign-in expired. <button class="link" data-act="cloudAuthPage">Sign in again</button></div>`;
   }
   if (ui.recovered) {
     h += `<div class="banner">Recovered your data from this device's backup copy (saved ${esc(fmtDateTime(ui.recovered.at))}: ${ui.recovered.summary.workouts} workouts, ${ui.recovered.summary.sets} sets).
@@ -1498,11 +1507,78 @@ function openDataPage() {
   requestPersist().then(() => { if (ui.setPage === 'data') render(); });
 }
 
+// ---------- the account (js/cloud.js, js/sync.js) ----------
+
+function cloudSection() {
+  if (!Cloud.configured()) return '';
+  const c = ui.cloud ?? {}, busy = c.busy || Sync.isBusy();
+  let body;
+  if (Cloud.signedIn()) {
+    const last = Cloud.record().lastSyncAt;
+    body = `${statusRow('Signed in as', esc(Cloud.email() ?? ''))}
+      ${statusRow('Synced', busy ? 'Syncing…' : last ? fmtMinutesAgo(last) : 'Not yet')}
+      ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : c.offline ? '<p class="meta pad">You\'re offline. It syncs when the network is back.</p>' : ''}
+      ${c.ask ? '<button class="menurow" data-act="cloudAsk"><span class="grow"><span class="name">Choose what to do with your account\'s backup</span></span><span class="chev">›</span></button>' : ''}
+      <button class="menurow" data-act="cloudSync" ${busy ? 'disabled' : ''}><span class="grow"><span class="name">Sync now</span></span></button>
+      <button class="menurow" data-act="cloudSignOut"><span class="grow"><span class="name">Sign out</span><span class="meta">Your data stays on this device</span></span></button>`;
+  } else if (c.sentTo) {
+    body = `<p class="meta pad">We emailed ${esc(c.sentTo)} a sign-in link and a code. Open the link on this device, or type the code here.</p>
+      <div class="field pad"><label for="cloud-code">Code</label><input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></div>
+      ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
+      <button class="menurow" data-act="cloudVerify" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Sign in with the code</span></span></button>
+      <button class="menurow" data-act="cloudChange"><span class="grow"><span class="name">Use a different email</span></span></button>`;
+  } else {
+    body = `<p class="meta pad">Keeps a copy of your data in your own account, so a new phone or a cleared browser can get it back. You sign in with an email, no password.</p>
+      <div class="field pad"><label for="cloud-email">Email</label><input id="cloud-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${esc(c.email ?? '')}"></div>
+      ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
+      <button class="menurow" data-act="cloudSend" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Email me a sign-in link</span></span></button>`;
+  }
+  return `<div class="label">Back up to your account</div><div class="menu">${body}</div>`;
+}
+
+// What a finished sync means for the screen. Automatic syncs call this too; it only redraws when something changed.
+function handleSync(r) {
+  const c = ui.cloud ??= {};
+  const was = JSON.stringify([c.error, c.offline, !!c.ask]);
+  c.busy = false;
+  if (r.kind === 'error') {
+    c.offline = !!r.error.offline;
+    c.error = r.error.offline ? null : r.error.message;
+    if (r.error.auth) c.authLost = true;
+  } else if (r.kind !== 'skipped') {
+    c.error = null; c.offline = false; c.authLost = false;
+  }
+  if (r.kind === 'ask') {
+    const first = !c.ask;
+    c.ask = r;
+    if (first && !ui.sheet) openSheet({ type: 'cloudAsk' });
+  } else if (r.kind !== 'skipped' && r.kind !== 'error') c.ask = null;
+  if (r.kind === 'pulled' || r.kind === 'merged') {
+    ui.ci = defaultCheckin();
+    toast(r.kind === 'merged' ? 'Merged changes from your other device. The earlier copy is under Saved copies.' : 'Updated from your other device. The earlier copy is under Saved copies.');
+    render();
+  } else if (ui.setPage === 'data' || was !== JSON.stringify([c.error, c.offline, !!c.ask])) render();
+}
+
+function sheetCloudAsk() {
+  const a = ui.cloud?.ask;
+  if (!a) return '<p class="muted">Nothing to choose.</p>';
+  const choice = (id, name, hint) => `<button class="row ${a.choice === id ? 'on' : ''}" data-act="cloudChoose" data-c="${id}"><span>${name}</span><span class="meta">${hint}</span></button>`;
+  return `<h3>Your account has a backup</h3>
+    <p class="meta">Saved ${esc(fmtDateTime(Date.parse(a.remote.saved_at)))}${a.remote.device ? ` from ${esc(a.remote.device)}` : ''}: ${a.remote.workouts} workouts, ${a.remote.sets} sets.
+      This device has ${a.local.workouts} workouts, ${a.local.sets} sets. Nothing changes until you choose, and whatever gets replaced stays under Saved copies.</p>
+    <div class="list">
+      ${choice('account', 'Use the account\'s copy', 'Replace what\'s on this device')}
+      ${choice('merge', 'Merge both', 'Keep the workouts and changes from both')}
+      ${choice('keep', 'Keep this device\'s', 'Upload it over the account\'s copy')}
+    </div>`;
+}
+
 function settingsData() {
   const st = state.settings, v = ui.vault;
   const persisted = st.storagePersisted === true ? 'Yes' : st.storagePersisted === 'unsupported' ? 'Not available here' : st.storagePersisted === false ? 'No' : '…';
   const copyLine = !v ? '…' : !v.usable ? 'Not available in this browser' : v.savedAt ? `Saved ${fmtMinutesAgo(v.savedAt)}` : 'Not saved yet';
-  const status = (name, value, hint = '') => `<div class="frow"><span class="grow"><span class="name">${name}</span>${hint ? `<span class="meta">${hint}</span>` : ''}</span><b>${value}</b></div>`;
+  const status = statusRow;
   const rows = (v?.rows ?? []).map(r => `<button class="menurow" data-act="vaultRestore" data-at="${r.at}"><span class="grow"><span class="name">${esc(fmtDateTime(r.at))}</span>
     <span class="meta">${esc(SNAP_LABEL[r.reason] ?? r.reason)} · ${r.workouts ?? '?'} workouts, ${r.sets ?? '?'} sets</span></span><span class="chev">›</span></button>`).join('');
   return `<p class="meta pad">Your data lives in this browser, with a second copy and dated snapshots on this device. A backup saved somewhere else is what survives a lost phone or a cleared browser.</p>
@@ -1512,6 +1588,7 @@ function settingsData() {
       ${status('Copy on this device', copyLine)}
       ${status('Last backup off this device', st.lastExportAt ? `${esc(new Date(st.lastExportAt).toLocaleDateString())} · ${fmtAgo(st.lastExportAt)}` : 'Never')}
     </div>
+    ${cloudSection()}
     <div class="label">Back up</div>
     <div class="menu">
       <button class="menurow" data-act="saveBackup"><span class="grow"><span class="name">Save backup to…</span><span class="meta">Files, iCloud Drive, Google Drive or email; downloads a file on a computer</span></span></button>
@@ -1713,7 +1790,7 @@ function renderSheet() {
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, pasteImport: sheetPasteImport,
-    addEx: sheetAddEx, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist }[s.type](s);
+    addEx: sheetAddEx, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist, cloudAsk: sheetCloudAsk }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
   sheetEl.hidden = false;
   if (ui.sheetFocus) {
@@ -3242,6 +3319,43 @@ const actions = {
       navigator.share({ files: [file], title: 'Training backup' }).then(done, e => { if (e?.name !== 'AbortError') download(); });
     } else download();
   },
+  cloudSend: async () => {
+    const address = (appEl.querySelector('#cloud-email')?.value ?? '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) return toast('Type your email address');
+    ui.cloud = { busy: true, email: address };
+    render();
+    try { await Cloud.sendCode(address); ui.cloud = { sentTo: address }; } catch (e) { ui.cloud = { email: address, error: e.message }; }
+    render();
+  },
+  cloudVerify: async () => {
+    const code = (appEl.querySelector('#cloud-code')?.value ?? '').trim();
+    if (!/^\d{6,10}$/.test(code)) return toast('Type the code from the email');
+    const sentTo = ui.cloud.sentTo;
+    ui.cloud = { sentTo, busy: true };
+    render();
+    try {
+      await Cloud.verifyCode(sentTo, code);
+      ui.cloud = {};
+      toast('Signed in');
+      render();
+      handleSync(await Sync.sync());
+    } catch (e) { ui.cloud = { sentTo, error: e.message }; render(); }
+  },
+  cloudChange: () => { ui.cloud = {}; render(); },
+  cloudSync: async () => { (ui.cloud ??= {}).busy = true; render(); handleSync(await Sync.sync()); },
+  cloudSignOut: () => askConfirm('Sign out?', 'Your data stays on this device. Signing back in asks what to do with the account\'s copy.', 'Sign out', async () => {
+    await Sync.signOut();
+    ui.cloud = {};
+    render(); toast('Signed out');
+  }),
+  cloudAsk: () => openSheet({ type: 'cloudAsk' }),
+  cloudAuthPage: () => { ui.tab = 'more'; actions.setPage({ p: 'data' }); },
+  cloudChoose: async d => {
+    ui.sheet = null; renderSheet();
+    (ui.cloud ??= {}).busy = true;
+    render();
+    handleSync(await Sync.resolve(d.c));
+  },
   backupSnooze: () => { state.settings.backupSnoozeUntil = Date.now() + 3 * 864e5; save(); render(); },
   recoveryUse: () => {
     useRecoveryCopy();
@@ -3543,6 +3657,13 @@ onSaveFail(() => { toast('Couldn’t save your last change. See the message at t
   if (r.kind === 'restored') { ui.recovered = r; ui.ci = defaultCheckin(); }
 }
 
+// Coming back from the emailed sign-in link: the address carries the session.
+{
+  const back = Cloud.takeSessionFromUrl();
+  if (back === 'signedIn') { ui.tab = 'more'; ui.setPage = 'data'; ui.vault = null; }
+  else if (back) { ui.tab = 'more'; ui.setPage = 'data'; ui.cloud = { error: back }; }
+}
+
 closeStale();
 // Drop a timer left over from an earlier visit.
 if (state.timer && ((!currentSession() && !currentMobility()) || Date.now() - state.timer.endsAt > 10 * 60e3)) state.timer = null;
@@ -3550,3 +3671,5 @@ save();
 if (O.isNewUser(state)) ui.onboard = O.startDraft(state);
 render();
 if (!ui.onboard) requestPersist();
+Sync.start(handleSync);
+if (ui.setPage === 'data') openDataPage();

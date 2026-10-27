@@ -106,6 +106,14 @@ export async function get() {
   return r?.value ?? null;
 }
 
+// Small named values beside the copy (the cloud sync's last-synced data lives here). Text in, text out.
+export async function putKey(key, text) { return !!(await run(['current'], 'readwrite', tx => tx.objectStore('current').put({ at: Date.now(), json: text }, key))); }
+export async function getKey(key) {
+  const r = await run(['current'], 'readonly', (tx, set) => { tx.objectStore('current').get(key).onsuccess = e => set(e.target.result?.json ?? null); });
+  return r?.value ?? null;
+}
+export async function delKey(key) { return !!(await run(['current'], 'readwrite', tx => tx.objectStore('current').delete(key))); }
+
 // Adds a snapshot, then prunes. `meta`: { version, workouts, sets }. Returns the snapshot's `at`, or null.
 export async function snapshot(json, reason, meta = {}) {
   let at = Date.now();

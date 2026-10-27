@@ -19,6 +19,8 @@ let saveFailHandler = null;
 export const onSaveFail = fn => { saveFailHandler = fn; };
 
 export let state = load();
+// The data version this build writes (an account copy with a higher one came from a newer build).
+export const CURRENT_VERSION = seed().version;
 
 function load() {
   let raw = null;
@@ -287,6 +289,7 @@ export function save() {
   if (loadProblem) return false;
   state.savedAt = Date.now();
   scheduleVault();
+  for (const fn of saveListeners) { try { fn(); } catch (e) { console.warn(e); } }
   try {
     localStorage.setItem(KEY, JSON.stringify(state));
     lastSaveError = null;
@@ -298,6 +301,10 @@ export function save() {
     return false;
   }
 }
+
+// Called after every save (the cloud sync schedules itself from this).
+const saveListeners = [];
+export const onSave = fn => { saveListeners.push(fn); };
 
 // ---------- the second copy and snapshots (js/vault.js) ----------
 

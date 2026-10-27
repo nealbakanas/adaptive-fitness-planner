@@ -22,7 +22,8 @@
     <div id="sheet" hidden></div>
   </div>
   <script>globalThis.AFP_STORAGE_KEY = 'afp.smoke'; // the app under test saves here, never over real data
-  globalThis.AFP_VAULT_NAME = 'afp-vault-smoke'; // and its second copy (js/vault.js) has its own database</script>
+  globalThis.AFP_VAULT_NAME = 'afp-vault-smoke';
+  globalThis.AFP_SUPABASE_URL = 'https://fake.supabase.test'; // never the real project // and its second copy (js/vault.js) has its own database</script>
   <script type="module" src="js/smoke.js"></script>
 </body>
 </html>
