@@ -1359,6 +1359,12 @@ function moveWorkout(dateStr) {
   save(); render();
 }
 
+// First logged set to last, in minutes, or null.
+function loggedMinutes(s) {
+  const ts = state.sets.filter(x => x.sessionId === s.id && x.done && x.loggedAt).map(x => x.loggedAt);
+  return ts.length ? Math.round((Math.max(...ts) - Math.min(...ts)) / 60e3) : null;
+}
+
 function viewHistoryEdit(hs) {
   const s = L.byId(state.sessions, hs.edit);
   if (!s) { delete hs.edit; return viewHistory(hs); }
@@ -1386,7 +1392,9 @@ function viewHistoryEdit(hs) {
   return `<header class="top sub"><button class="back" data-act="histEditDone">‹ History</button></header><h1 class="pagetitle">Edit workout</h1>
     <p class="meta pad">Changes save as you type. Weekly goals and estimated maxes follow.</p>
     <div class="card"><div class="field"><label for="hist-date">Date</label><input id="hist-date" type="date" data-hdate max="${L.dayKey()}" value="${L.dayKey(when)}"></div>
-      <div class="field"><label for="hist-loc">Where</label><select id="hist-loc" data-hloc>${[['', '—'], ...state.locations.map(l => [l.id, l.name])].map(([v, t]) => `<option value="${esc(v)}" ${v === (s.locationId ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>
+      <div class="field"><label for="hist-loc">Where</label><select id="hist-loc" data-hloc>${[['', '—'], ...state.locations.map(l => [l.id, l.name])].map(([v, t]) => `<option value="${esc(v)}" ${v === (s.locationId ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+      <div class="field"><label for="hist-dur">How long (min) <span class="hint">optional</span></label><input id="hist-dur" class="num" inputmode="numeric" data-hdur value="${esc(s.durationMin ?? '')}" placeholder="${loggedMinutes(s) ?? ''}">
+        <p class="meta">For a workout logged after the fact. Left empty, it's first set to last.</p></div></div>
     ${groups || '<p class="muted">No exercises left in this workout.</p>'}
     <button class="addblock" data-act="histAddEx">+ Add exercise</button>
     <div class="actions"><button class="danger" data-act="histDeleteWorkout">Delete workout</button><button class="primary" data-act="histEditDone">Done</button></div>`;
@@ -1406,7 +1414,7 @@ function viewHistory(hs) {
       if (s.source === 'imported') bits.push('from FitNotes');
       else {
         bits.push(L.byId(state.locations, s.locationId)?.name);
-        const mins = Math.round((e.end - e.at) / 60e3);
+        const mins = s.durationMin ?? Math.round((e.end - e.at) / 60e3);
         if (mins > 0) bits.push(s.status === 'done' && s.minutes ? `planned ${s.minutes} · took ${mins} min` : `${mins} min`);
       }
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
@@ -3822,6 +3830,9 @@ document.addEventListener('change', e => {
   } else if (d.hloc !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit);
     if (s) { s.locationId = el.value || null; save(); }
+  } else if (d.hdur !== undefined) {
+    const s = L.byId(state.sessions, ui.history?.edit), v = Math.round(Number(el.value));
+    if (s) { if (el.value.trim() !== '' && v > 0) s.durationMin = v; else delete s.durationMin; save(); }
   } else if (d.mset) {
     const [iid, sid] = d.mset.split('|');
     const st = findMobItem(iid).item?.sets.find(x => x.id === sid);

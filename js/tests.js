@@ -2179,6 +2179,17 @@ test('review: accepting changes the goal; the gear fix can also move the tier or
   ok(!L.byId(s.slots, sl.id));
 });
 
+test('a workout length typed in: pace ignores its set times, the review counts the typed minutes', () => {
+  const s = fresh();
+  for (const d of [1, 2, 3]) paceWorkout(s, { daysAgo: d, groups: [[squat]] });
+  ok(L.paceFor(s).perSet.has('ex-front-squat|T1|solo'));
+  for (const x of s.sessions) x.durationMin = 50;
+  ok(!L.paceFor(s).perSet.has('ex-front-squat|T1|solo') && !L.paceFor(s).bursty, 'typed lengths teach nothing and ask nothing');
+  const w = L.weekBounds(s, s.sessions[0].firstSetAt).start;
+  const inWeek = s.sessions.filter(x => x.firstSetAt >= w && x.firstSetAt < w + 7 * DAY).length;
+  eq(R.weekReview(s, w).totals.minutes, 50 * inWeek);
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;
