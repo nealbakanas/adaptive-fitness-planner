@@ -285,6 +285,10 @@ export function migrate(s) {
     // ('fav' | 'never') and session.removed[] are optional, so nothing to move.
     s.version = 20;
   }
+  if (s.version < 21) {
+    // v21: pace (js/pace.js). Settings learnPace and paceSince arrive from the defaults above; it reads the sets as they are.
+    s.version = 21;
+  }
   return s;
 }
 

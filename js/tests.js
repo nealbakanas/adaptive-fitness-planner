@@ -222,7 +222,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 20);
+  eq(m.version, 21);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -241,7 +241,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 20);
+  eq(m.version, 21);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -513,7 +513,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 20);
+  eq(m.version, 21);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -675,7 +675,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 20);
+  eq(m.version, 21);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -702,7 +702,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 20);
+  eq(m.version, 21);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1224,7 +1224,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 20);
+  eq(m.version, 21);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1383,7 +1383,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 20);
+  eq(m.version, 21);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1476,10 +1476,10 @@ test('v19: data saved before it opens with savedAt unset, and the summary counts
   s.version = 18;
   delete s.savedAt;
   const m = migrate(s);
-  eq([m.version, m.savedAt], [20, null]);
+  eq([m.version, m.savedAt], [21, null]);
   s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
   s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
-  eq(V.summaryOf(s), { version: 20, workouts: 1, sets: 1 });
+  eq(V.summaryOf(s), { version: 21, workouts: 1, sets: 1 });
 });
 atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
   if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
@@ -1642,7 +1642,7 @@ test('merge: settings merge key by key; whole states keep both devices\' work an
   eq(m.sessions.map(x => x.id), ['ls', 'rs']);
   ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
   ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
-  eq(migrate(m).version, 20);
+  eq(migrate(m).version, 21);
 });
 test('sync plan: what to do for each situation', () => {
   const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
@@ -1878,7 +1878,7 @@ atest('sync: another device saving mid-push is merged and retried; offline and o
     const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
     fake.putRow(EMAIL, future);
     const nv = await Sync.sync();
-    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 20);
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 21);
   });
 });
 atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
@@ -1895,6 +1895,131 @@ atest('sync: signed out does nothing; signing out forgets the account link but k
 });
 
 // ---------- render ----------
+// ---------- pace (js/pace.js) ----------
+import * as Pace from './pace.js';
+const MINUTE = 6e4;
+// A finished workout with known timing. `groups`: [[block, ...]], each block { ex, tier, scheme, n, warm? };
+// a group of two or more is a superset (alternating sets). `gap`: minutes per set (with its rest), `change`: after a group.
+const paceWorkout = (state, { daysAgo = 1, loc = 'loc-basement', groups, gap = 3, change = 4, burst = false }) => {
+  const sid = L.uid(), blocks = [];
+  let t = NOON(daysAgo);
+  const start = t;
+  for (const g of groups) {
+    const bs = g.map(x => ({ id: L.uid(), tier: x.tier, exerciseId: x.ex, schemeId: x.scheme, swaps: [], ...(x.rest != null ? { restSec: x.rest } : {}) }));
+    bs.slice(1).forEach(b => { b.pairOf = bs[0].id; });
+    blocks.push(...bs);
+    g.forEach((x, i) => { for (let w = 0; w < (x.warm || 0); w++) { state.sets.push({ id: L.uid(), sessionId: sid, blockId: bs[i].id, exerciseId: x.ex, tier: x.tier, reps: 3, done: true, warmup: true, loggedAt: t }); t += MINUTE; } });
+    const most = Math.max(...g.map(x => x.n));
+    for (let r = 0; r < most; r++) g.forEach((x, i) => {
+      if (r >= x.n) return;
+      state.sets.push({ id: L.uid(), sessionId: sid, blockId: bs[i].id, exerciseId: x.ex, tier: x.tier, reps: 3, done: true, loggedAt: t });
+      t += burst ? 5e3 : gap * MINUTE;
+    });
+    t += change * MINUTE; // after the last set and its rest
+  }
+  state.sessions.push({ id: sid, status: 'done', source: 'suggested', locationId: loc, minutes: 45, checkinAt: start - 3600e3, firstSetAt: start, blocks });
+  return sid;
+};
+const squat = { ex: 'ex-front-squat', tier: 'T1', scheme: 's-t1-5x3', n: 5 };
+const curl = { ex: 'ex-db-curl', tier: 'T3', scheme: 's-t3-3x15', n: 3 };
+const tri = { ex: 'ex-db-oh-tri', tier: 'T3', scheme: 's-t3-3x15', n: 3 };
+const fresh = () => { const s = seed(); s.settings.onboarded = true; return s; };
+const staticMinutes = (s, b, ctx) => { const off = structuredClone(s); off.settings.learnPace = false; return L.blockMinutes(off, b, ctx); };
+
+test('pace: gaps under 20 s and over 15 min are dropped, and a workout with more than 40% dropped teaches nothing', () => {
+  const sess = { id: 'x', blocks: [{ id: 'a', tier: 'T1', exerciseId: 'e' }] };
+  const at = mins => mins.map((m, i) => ({ id: `s${i}`, blockId: 'a', done: true, loggedAt: NOON(1) + m * MINUTE }));
+  const one = Pace.sessionPace(sess, at([0, 3, 6, 6.2, 9.2, 12.2]));       // one burst of 12 s in five gaps: 20%
+  eq([one.skipped, one.kept, one.perSet.map(x => x.minutes)], [false, 4, [3, 3, 3, 3]]);
+  const brk = Pace.sessionPace(sess, at([0, 3, 6, 26, 29, 32]));           // a 20-minute break
+  eq([brk.skipped, brk.kept], [false, 4]);
+  const burst = Pace.sessionPace(sess, at([0, 0.1, 0.2, 0.3, 3, 6]));       // 3 of 5 gaps are bursts: 60%
+  eq([burst.skipped, burst.bursty], [true, true]);
+  eq(Pace.sessionPace(sess, at([0, 0.1, 3, 6, 9, 12])).skipped, false, 'one of five (20%) is fine');
+});
+
+test('pace: per-set time needs 3 workouts with the exercise at the tier; until then the estimate is exactly today’s', () => {
+  const s = fresh();
+  const b = { id: 'b', tier: 'T1', exerciseId: 'ex-front-squat', schemeId: 's-t1-5x3', swaps: [] };
+  const before = L.blockMinutes(s, b);
+  eq(before, 11 + 5 + 2, 'scheme + warm-up + changeover');
+  paceWorkout(s, { daysAgo: 3, groups: [[squat]] });
+  paceWorkout(s, { daysAgo: 2, groups: [[squat]] });
+  eq(L.blockMinutes(s, b), before, 'two workouts: still the guess');
+  ok(!L.pacedBlocks(s, [b], 'loc-basement'));
+  paceWorkout(s, { daysAgo: 1, groups: [[squat]] });
+  eq(L.paceFor(s).perSet.get('ex-front-squat|T1|solo'), { minutes: 3, sessions: 3 });
+  eq(L.blockMinutes(s, b), 5 * 3 + 5 + 2, 'five sets at 3 minutes, plus the usual warm-up and changeover');
+  ok(L.pacedBlocks(s, [b], 'loc-basement'));
+  eq(L.schemeTime(s, 'T1', 'ex-front-squat', L.byId(s.schemes, 's-t1-4x3')), 12, 'other schemes scale by their sets');
+  eq(L.blockMinutes(s, { ...b, exerciseId: 'ex-back-squat' }), staticMinutes(s, { ...b, exerciseId: 'ex-back-squat' }), 'another exercise keeps the guess');
+  s.settings.learnPace = false;
+  eq(L.blockMinutes(s, b), before, 'Use my pace off: exactly today’s numbers');
+  s.settings.learnPace = true;
+  s.settings.paceSince = Date.now();
+  eq(L.blockMinutes(s, b), before, 'Reset: earlier workouts stop counting');
+});
+
+test('pace: only the last 8 weeks count, and burst-logged workouts change no estimate', () => {
+  const s = fresh();
+  const b = { id: 'b', tier: 'T1', exerciseId: 'ex-front-squat', schemeId: 's-t1-5x3', swaps: [] };
+  for (const d of [60, 61, 62]) paceWorkout(s, { daysAgo: d, groups: [[squat]] });
+  eq(L.blockMinutes(s, b), 18, 'nine weeks ago');
+  for (const d of [1, 2, 3, 4]) paceWorkout(s, { daysAgo: d, groups: [[squat]], burst: true });
+  eq(L.blockMinutes(s, b), 18, 'bursts');
+  ok(L.paceFor(s).bursty, 'the next workout shows the logging hint');
+});
+
+test('pace: changeover per location needs 5 samples, less the next exercise’s warm-up', () => {
+  const s = fresh();
+  const b = { id: 'b', tier: 'T3', exerciseId: 'ex-db-curl', schemeId: 's-t3-3x15', swaps: [] };
+  const groups = [[squat], [{ ...curl, n: 3 }], [{ ...tri, n: 3 }]]; // two changeovers each: squat→curl, curl→tri
+  paceWorkout(s, { daysAgo: 1, groups, change: 4 });
+  paceWorkout(s, { daysAgo: 2, groups, change: 4 });
+  eq(L.paceFor(s).all.get('loc-basement').samples, 4);
+  eq(L.changeoverAt(s, 'loc-basement'), 2, 'four samples: still the setting');
+  paceWorkout(s, { daysAgo: 3, groups, change: 4 });
+  eq(L.changeoverAt(s, 'loc-basement'), 4, 'T3 has no warm-up, so the gap is the changeover');
+  eq(L.changeoverAt(s, 'loc-office'), 2, 'other locations keep the setting');
+  eq(L.blockMinutes(s, b, { loc: 'loc-basement' }), 3 * 3 + 4, 'three curl sets at 3 minutes, and the learned changeover');
+  eq(L.blockMinutes(s, b, { loc: 'loc-office' }), 3 * 3 + 2);
+  // With logged warm-up sets, warm-up is learned too and comes off the changeover.
+  const w = fresh();
+  for (const d of [1, 2, 3]) paceWorkout(w, { daysAgo: d, groups: [[curl], [{ ...squat, warm: 3 }]], change: 7 });
+  eq(L.paceFor(w).warm.get('ex-front-squat|T1'), 3);
+  eq(L.paceFor(w).all.get('loc-basement').minutes, 7, 'a 13-minute gap between working sets, less the last curl set’s 3 and 3 of logged warm-up');
+});
+
+test('pace: a superset is timed as one group and split evenly between its blocks', () => {
+  const s = fresh();
+  for (const d of [1, 2, 3]) paceWorkout(s, { daysAgo: d, groups: [[curl, tri]], gap: 1.5 });
+  // Six sets 1.5 minutes apart: 9 minutes for the group, 4.5 for each block, 1.5 a set.
+  eq(L.paceFor(s).perSet.get('ex-db-curl|T3|pair').minutes, 1.5);
+  ok(!L.paceFor(s).perSet.has('ex-db-curl|T3|solo'));
+  const a = { id: 'a', tier: 'T3', exerciseId: 'ex-db-curl', schemeId: 's-t3-3x15', swaps: [] };
+  const p = { id: 'p', tier: 'T3', exerciseId: 'ex-db-oh-tri', schemeId: 's-t3-3x15', swaps: [], pairOf: 'a' };
+  eq(L.blockMinutes(s, a, { blocks: [a, p], loc: 'loc-office' }), 4.5 + 2);
+  eq(L.blockMinutes(s, p, { blocks: [a, p], loc: 'loc-office' }), 4.5 + 1, 'the partner’s changeover is shared');
+  eq(L.blockMinutes(s, a, { loc: 'loc-office' }), 6 + 2, 'done alone: no solo time learned, so the guess');
+});
+
+test('pace: rest changed today moves that block’s estimate by the difference', () => {
+  const s = fresh();
+  const b = { id: 'b', tier: 'T1', exerciseId: 'ex-front-squat', schemeId: 's-t1-5x3', swaps: [] };
+  eq(L.blockMinutes(s, { ...b, restSec: 210 }) - L.blockMinutes(s, b), 5, 'a minute more rest on each of five sets');
+});
+
+test('pace: suggestions fill the time with your pace and never run over', () => {
+  const s = fresh();
+  // A slow lifter: 5 minutes a set on the squat.
+  for (const d of [2, 4, 6]) paceWorkout(s, { daysAgo: d, groups: [[squat]], gap: 5 });
+  for (const m of [30, 45, 60, 90]) {
+    const c = ci({ minutes: m, fatigue: 2 });
+    const r = L.buildSuggestion(s, c);
+    ok(L.blocksMinutes(s, r.blocks, c.locationId) <= m + 1e-9, `${m} min: ${L.blocksMinutes(s, r.blocks, c.locationId)}`);
+  }
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;
