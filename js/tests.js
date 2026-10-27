@@ -2190,6 +2190,39 @@ test('a workout length typed in: pace ignores its set times, the review counts t
   eq(R.weekReview(s, w).totals.minutes, 50 * inWeek);
 });
 
+test('recovery: the day after a lower-body day, lower strength goals wait and upper ones come first', () => {
+  const s = seed(); s.settings.onboarded = true;
+  s.settings.weekStartDay = new Date().getDay(); // a full week left
+  s.locations.push({ id: 'loc-all', name: 'All', equipment: [...s.equipment] });
+  const c = ci({ locationId: 'loc-all', fatigue: 2 });
+  const score = (st, id, cc = c) => L.scoreSlots(st, cc).find(x => x.slot.id === id);
+  const before = { squat: score(s, 'sl-t1-squat').score, vpull: score(s, 'sl-t1-vpull').score, hams: score(s, 'sl-t2-hams').score, incline: score(s, 'sl-t2-incline').score };
+  // Yesterday: heavy single-leg squats and moderate hip thrusts.
+  done(s, 'ex-front-squat', 'T1', 3, 5, 1, 160, 'y1');
+  const ht = s.exercises.find(e => /hip thrust/i.test(e.name));
+  done(s, ht.id, 'T2', 10, 3, 1, 205, 'y2');
+  // (the sessions are this week, so make sure the squat goal still has its quota open)
+  s.slots.find(sl => sl.id === 'sl-t1-squat').quota = 2;
+  eq([...L.recentLoadedRegions(s)], [['lower', 'heavy']]);
+  const sq = score(s, 'sl-t1-squat'), vp = score(s, 'sl-t1-vpull'), hm = score(s, 'sl-t2-hams'), inc = score(s, 'sl-t2-incline');
+  ok(sq.why.some(w => /heavy lower work since yesterday ×0.35/.test(w)), sq.why.join(' | '));
+  ok(hm.why.some(w => /×0.5/.test(w)) && hm.score < before.hams, hm.why.join(' | '));
+  ok(vp.score > before.vpull && inc.score > before.incline, 'upper goals a little higher');
+  ok(vp.score > sq.score, `T1 pull-up ${vp.score} before T1 squat ${sq.score}`);
+  ok(inc.score > hm.score, 'T2 incline before T2 deficit RDL');
+  // Explosive work keeps its own rule (it becomes technique), and moderate-only work is a smaller step.
+  const m = seed(); m.settings.weekStartDay = s.settings.weekStartDay; m.locations.push(s.locations.at(-1));
+  done(m, ht.id, 'T2', 10, 3, 1, 205, 'y2');
+  eq([...L.recentLoadedRegions(m)], [['lower', 'moderate']]);
+  ok(score(m, 'sl-t1-squat').why.some(w => /moderate lower work since yesterday ×0.6/.test(w)));
+  // The switch turns it off, and the last day of the week ignores it.
+  s.settings.recovery.t1AfterT1 = false;
+  ok(!score(s, 'sl-t1-squat').why.some(w => /since yesterday/.test(w)));
+  s.settings.recovery.t1AfterT1 = true;
+  s.settings.weekStartDay = (new Date().getDay() + 1) % 7;
+  ok(!score(s, 'sl-t1-squat').why.some(w => /since yesterday/.test(w)), 'last day: now or never');
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

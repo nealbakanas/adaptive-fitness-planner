@@ -437,10 +437,26 @@ export function energy(ci) {
   return e;
 }
 
-function hadT1Recently(state, t) {
+// Strength work (T1 heavy, T2 moderate; explosive lifts aside) since the start of yesterday, by half of the body:
+// region -> 'heavy' when any of it was T1, else 'moderate'.
+export function recentLoadedRegions(state, t = Date.now()) {
   const from = startOfDay(t) - DAY;
-  return state.sets.some(s => s.done && !s.warmup && s.tier === 'T1' && s.loggedAt >= from && s.loggedAt < t);
+  const out = new Map();
+  for (const s of state.sets) {
+    if (!s.done || s.warmup || (s.tier !== 'T1' && s.tier !== 'T2') || s.loggedAt < from || s.loggedAt >= t) continue;
+    const ex = byId(state.exercises, s.exerciseId);
+    if (!ex || ex.explosive) continue;
+    const r = bodyRegion(state, ex);
+    if (!r) continue;
+    if (s.tier === 'T1') out.set(r, 'heavy');
+    else if (!out.has(r)) out.set(r, 'moderate');
+  }
+  return out;
 }
+// The day after: strength goals for the half you trained score lower (T1 more than T2, heavy more than moderate), and the
+// other half a little higher, so a lower day is followed by an upper one.
+const RECOVERY = { T1: { heavy: 0.35, moderate: 0.6 }, T2: { heavy: 0.5, moderate: 0.7 } };
+const FRESH_HALF = 1.2;
 
 // Heavy (T1) work logged since the start of yesterday, as the set of body regions it taxed.
 // Explosive T1 work (cleans, jumps) doesn't count: it's fast rather than grinding.
@@ -477,7 +493,7 @@ export function scoreSlots(state, ci, t = Date.now()) {
   const loc = byId(state.locations, ci.locationId);
   const credit = creditWeek(state, t);
   const daysLeft = daysLeftInWeek(state, t);
-  const recentT1 = state.settings.recovery?.t1AfterT1 && hadT1Recently(state, t);
+  const loaded = state.settings.recovery?.t1AfterT1 !== false ? recentLoadedRegions(state, t) : new Map();
   const out = [];
   for (const sl of state.slots) {
     const r = credit.slots.get(sl.id);
@@ -503,7 +519,12 @@ export function scoreSlots(state, ci, t = Date.now()) {
       if (ci.fatigue >= 4) { score *= 0.4; why.push('low energy ×0.4'); }
       else if (ci.fatigue === 3) { score *= 0.8; why.push('middling energy ×0.8'); }
       if (ci.sleep && ci.sleep <= 2) { score *= 0.7; why.push('poor sleep ×0.7'); }
-      if (recentT1) { score *= 0.5; why.push('T1 in last day ×0.5'); }
+    }
+    // Recovery, except on the last day of the week, when it's now or not this week.
+    if (!power && (sl.tier === 'T1' || sl.tier === 'T2') && loaded.size && daysLeft > 1) {
+      const half = bodyRegion(state, exercise), hit = half && loaded.get(half);
+      if (hit) { const f = RECOVERY[sl.tier][hit]; score *= f; why.push(`${hit} ${half} work since yesterday ×${f}`); }
+      else if (half) { score *= FRESH_HALF; why.push(`${[...loaded.keys()].join('/')} worked since yesterday, ${half} is fresh ×${FRESH_HALF}`); }
     }
     if (sl.tier === 'T3' && ci.fatigue >= 4) { score *= 1.3; why.push('low energy ×1.3'); }
     if (sl.tier === 'TECH' && ready) {
