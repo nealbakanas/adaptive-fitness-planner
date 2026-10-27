@@ -2250,6 +2250,19 @@ test('several locations: their gear together, each exercise done where its gear 
   }
 });
 
+test('skip a category today: no goal, library pick, superset idea or jump from it', () => {
+  const s = seed(); s.settings.onboarded = true;
+  for (const fam of ['fam-squat', 'fam-hams', 'fam-arms', 'fam-jumps']) {
+    const c = ci({ minutes: 90, fatigue: 1, jumps: true, skip: [fam], locationIds: ['loc-basement', 'loc-office'] });
+    ok(!L.scoreSlots(s, c).some(x => x.slot.familyId === fam), `${fam}: goal`);
+    for (const r of [L.buildSuggestion(s, c), L.buildFocus(s, c, { region: 'lower', explosive: true }), L.buildMix(s, c, { T1: 1, T2: 2, T3: 6 })]) {
+      ok(!r.blocks.some(b => L.byId(s.exercises, b.exerciseId).familyId === fam), `${fam}: ${r.blocks.map(b => L.byId(s.exercises, b.exerciseId).name).join(', ')}`);
+    }
+    const idea = L.suggestPair(s, c, L.byId(s.exercises, 'ex-front-squat'));
+    ok(!idea || idea.exercise.familyId !== fam, `${fam}: superset idea`);
+  }
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

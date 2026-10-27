@@ -514,7 +514,7 @@ export function scoreSlots(state, ci, t = Date.now()) {
   for (const sl of state.slots) {
     const r = credit.slots.get(sl.id);
     const remaining = sl.quota - r.filled;
-    if (remaining <= 0 || r.todayMet) continue;
+    if (remaining <= 0 || r.todayMet || ci.skip?.includes(sl.familyId)) continue;
     const picked = pickExerciseWhy(state, sl.familyId, loc, sl.tier, sl.exerciseId);
     if (!picked) continue;
     const exercise = picked.exercise;
@@ -631,7 +631,9 @@ function variedAccessory(state, ci, c) {
 // Build one session: T1, then T2, technique and T3 until the time budget runs out, then fill any time left.
 // `fill` (on by default) tops the session up from the library when the goals don't use all the time.
 // `sessionBlocks`: the workout so far, when this fills extra time (+ Time), so its lifts count.
-export const buildSuggestion = (state, ci, t = Date.now(), opts = {}) => withTaste(state, t, ci, () => buildSuggestionIn(state, ci, t, opts));
+// Categories you skip today (`ci.skip`: family ids, e.g. a sore hip) are left out like families already in the workout.
+const skipping = (ci, opts) => (ci?.skip?.length ? { ...opts, excludeFamilies: [...(opts.excludeFamilies || []), ...ci.skip] } : opts);
+export const buildSuggestion = (state, ci, t = Date.now(), opts = {}) => withTaste(state, t, ci, () => buildSuggestionIn(state, ci, t, skipping(ci, opts)));
 function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, sessionBlocks = [] } = {}) {
   const scored = scoreSlots(state, ci, t);
   // Jumps are only in when you ask for them, and then whatever the scores say: they don't set the bar for other goals.
@@ -766,7 +768,7 @@ export function pairT3s(state, blocks, place = activeBuild?.state === state ? ac
 export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = creditWeek(state) } = {}) {
   const loc = placeOf(state, ci);
   // A T1/T2 goal's own lift is a main lift, not something to squeeze into a rest; its easier variations are fair game.
-  const skip = new Set(excludeFamilies);
+  const skip = new Set([...excludeFamilies, ...(ci?.skip || [])]);
   const goalLift = sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId;
   const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(goalLift));
   // Heavy-goal lifts: support work picks a different lift for the pattern when there is one, so it complements them.
@@ -956,7 +958,8 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
   // movement (triceps after curls). Families from the goals or the session so far stay off limits.
   const famPatterns = new Map();
   // Last resort while time is left: any exercise not in the workout yet, from any family (a second core or upper-back move).
-  const blocked = e => !named.has(e.id) && !t1Core.has(e.id) && isExcluded(tr, e.id);
+  const skipped = new Set(ci.skip || []); // categories skipped today: never, not even as a second pick from a family
+  const blocked = e => skipped.has(e.familyId) || (!named.has(e.id) && !t1Core.has(e.id) && isExcluded(tr, e.id));
   const takenIds = new Set(taken);
   const spare = e => !e.archived && isAvailable(e, loc) && !takenIds.has(e.id) && !k.blocks.some(b => b.exerciseId === e.id);
   const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId) && !takenIds.has(e.id)
@@ -1094,7 +1097,7 @@ function explosiveLower(state, ci, t, k) {
 }
 
 // `sessionBlocks`: the workout so far, when this adds accessories for extra time (+ Time), so none is picked twice.
-export const buildFocus = (state, ci, what, t = Date.now(), opts = {}) => withTaste(state, t, ci, () => buildFocusIn(state, ci, what, t, opts));
+export const buildFocus = (state, ci, what, t = Date.now(), opts = {}) => withTaste(state, t, ci, () => buildFocusIn(state, ci, what, t, skipping(ci, opts)));
 function buildFocusIn(state, ci, { region, explosive = false, accessoriesOnly = false }, t, { excludeFamilies = [], sessionBlocks = [] } = {}) {
   const k = libraryKit(state, ci, t, ci.minutes, excludeFamilies, [], sessionBlocks.map(b => b.exerciseId));
   const tired = energy(ci) <= 2.5;
@@ -1141,7 +1144,7 @@ function buildFocusIn(state, ci, { region, explosive = false, accessoriesOnly = 
 // A workout with the counts you ask for: `mix` = { T1, T2, T3 } blocks. Open goals fill each tier first (for the half you
 // lean toward), then the library does, with the same rules as the other builders. The counts are what you asked for, so
 // nothing tops up beyond them; only a T3 that doesn't fit the time is dropped.
-export const buildMix = (state, ci, asked, t = Date.now(), opts = {}) => withTaste(state, t, ci, () => buildMixIn(state, ci, asked, t, opts));
+export const buildMix = (state, ci, asked, t = Date.now(), opts = {}) => withTaste(state, t, ci, () => buildMixIn(state, ci, asked, t, skipping(ci, opts)));
 function buildMixIn(state, ci, asked, t, { excludeFamilies = [], sessionBlocks = [] } = {}) {
   const lean = leanOf(ci);
   // Regenerating a mix you've started: blocks you've logged count toward it.
