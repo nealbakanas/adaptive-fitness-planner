@@ -2223,6 +2223,33 @@ test('recovery: the day after a lower-body day, lower strength goals wait and up
   ok(!score(s, 'sl-t1-squat').why.some(w => /since yesterday/.test(w)), 'last day: now or never');
 });
 
+test('several locations: their gear together, each exercise done where its gear is, supersets kept in one place', () => {
+  const s = seed(); s.settings.onboarded = true;
+  const both = { ...ci({ fatigue: 2 }), locationId: 'loc-basement', locationIds: ['loc-basement', 'loc-office'] };
+  const place = L.placeOf(s, both);
+  eq([place.id, place.name, place.parts.length], ['loc-basement', 'Basement + Office', 2]);
+  eq(L.placeOf(s, { locationId: 'loc-office' }).name, 'Office', 'one location: itself');
+  const wpull = L.byId(s.exercises, 'ex-wpullup'), squat = L.byId(s.exercises, 'ex-front-squat');
+  ok(L.isAvailable(wpull, place) && L.isAvailable(squat, place));
+  eq([L.elsewhere(wpull, place)?.name, L.elsewhere(squat, place)], ['Office', null]);
+  // Gear split across places doesn't add up: barbell (basement) and rings (office) aren't in one spot.
+  ok(!L.isAvailable({ equipment: ['barbell', 'rings'] }, place));
+  // The lower day yesterday: with the office in reach, the upper T1 goal comes first.
+  s.settings.weekStartDay = new Date().getDay();
+  done(s, 'ex-front-squat', 'T1', 3, 5, 1, 160, 'y1');
+  s.slots.find(sl => sl.id === 'sl-t1-squat').quota = 2;
+  const basementOnly = L.buildSuggestion(s, ci({ fatigue: 2 })).blocks.find(b => b.tier === 'T1');
+  const r = L.buildSuggestion(s, both);
+  const t1 = r.blocks.find(b => b.tier === 'T1');
+  ok(t1 && L.byId(s.exercises, t1.exerciseId).familyId === 'fam-vpull', `T1 ${t1 && L.byId(s.exercises, t1.exerciseId).name}`);
+  ok(!basementOnly || L.byId(s.exercises, basementOnly.exerciseId).familyId !== 'fam-vpull', 'the basement alone has no pull-up bar');
+  // Every superset can be done in one of the two places.
+  for (const b of r.blocks.filter(x => x.pairOf)) {
+    const a = L.byId(s.exercises, b.exerciseId), lead = L.byId(s.exercises, L.byId(r.blocks, b.pairOf).exerciseId);
+    ok(place.parts.some(p => L.isAvailable(a, p) && L.isAvailable(lead, p)), `${lead.name} + ${a.name}`);
+  }
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

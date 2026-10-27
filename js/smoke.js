@@ -13,6 +13,12 @@ const fire = (el, type) => el.dispatchEvent(new Event(type, { bubbles: true }));
 const setVal = (el, v, type = 'change') => { el.value = v; fire(el, type); };
 const text = () => q('#app').innerText;
 const sheet = () => q('#sheet').innerText;
+// Check-in at just this one location (the buttons toggle, so turn the others off).
+const onlyAt = id => {
+  const btn = q(`[data-act=ciLoc][data-v="${id}"]`);
+  if (!btn.classList.contains('on')) btn.click();
+  for (const b of qa('[data-act=ciLoc].on')) if (b.dataset.v !== id) b.click();
+};
 const step = (name, fn) => { try { fn(); } catch (e) { out.push(['FAIL', `${name} — ${e.message}`]); } };
 
 const KEY = globalThis.AFP_STORAGE_KEY;
@@ -38,7 +44,7 @@ step('a new install starts with setup, which can be skipped', () => {
 step('check-in renders', () => check('check-in renders', text().includes('Check in') && !!q('[data-act=suggest]')));
 
 step('fresh suggestion', () => {
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-act=suggest]');
   check('session shows blocks', qa('section.block').length > 0);
   check('readiness line shown', /Fresh for power work/.test(text()), text().slice(0, 200));
@@ -47,7 +53,7 @@ step('fresh suggestion', () => {
 });
 
 step('tired check-in gives technique', () => {
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-k=energy][data-v="1"]');
   click('[data-act=suggest]');
   check('technique block present', qa('.bhead').some(h => /TECH/.test(h.innerText)), qa('.bhead').map(h => h.innerText.replace(/\n/g, ' ')).join(' | '));
@@ -68,7 +74,7 @@ step('power block while tired offers one-tap technique', () => {
 });
 
 step('choose the mix, then regenerate it', () => {
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-k=minutes][data-v="45"]');
   click('[data-k=lean][data-v=lower]');
   click('[data-act=mixStep][data-t=T3][data-d="1"]');
@@ -113,7 +119,7 @@ step('choose the mix, then regenerate it', () => {
 
 step('supersets, real rest, pause and resume, more time', () => {
   check('energy scale: 5 is fresh', /Energy\s*1 wrecked · 5 fresh/i.test(text()), text().slice(0, 300));
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-k=minutes][data-v="60"]'); // long enough for T3 supersets once warm-ups and changeovers count
   click('[data-k=energy][data-v="5"]');
   click('[data-act=suggest]');
@@ -230,7 +236,7 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
     && state.mobility.sessions.at(-1).items[0].note === 'left side tight');
   check('routine shows when it was last done', /Day 1: Long & Strong\s*4 exercises · last today/.test(text()), text().slice(0, 600));
 
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-act=suggest]');
   click('[data-act=mobPick][data-mode=workout]');
   click('[data-act=mobPart][data-v="Hip flexors"]');
@@ -338,7 +344,7 @@ step('archiving hides an exercise until you ask for it', () => {
 
 step('warm-ups are optional, only for T1/T2, and never fill the working sets', () => {
   click('[data-act=nav][data-tab=today]');
-  if (!q('[data-act=addEx]')) { click('[data-k=locationId][data-v=loc-basement]'); click('[data-act=suggest]'); }
+  if (!q('[data-act=addEx]')) { onlyAt('loc-basement'); click('[data-act=suggest]'); }
   click('[data-act=addEx]');
   click('[data-act=addExTier][data-t=T2]');
   click('[data-act=addExPick][data-id=ex-deficit-rdl]');
@@ -372,7 +378,7 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
   click('[data-act=nav][data-tab=today]');
   if (q('[data-act=finish]')) { click('[data-act=finish]'); if (q('[data-act=finishNow]')) click('[data-act=finishNow]'); }
   check('focus buttons on check-in', qa('[data-act=focus]').length === 4);
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-k=minutes][data-v="60"]');
   click('[data-act=focus][data-r=lower][data-x="1"]');
   check('focused lower + explosive workout', /Lower body \+ explosive/i.test(q('.badge')?.innerText) && qa('section.block').length >= 4, text().slice(0, 300));
@@ -433,7 +439,7 @@ step('Air Alert 2: optional, started from Plans, one day per finished session', 
 
 step('hold timer logs a timed set and starts the rest', () => {
   click('[data-act=nav][data-tab=today]');
-  if (!q('[data-act=addEx]')) { click('[data-k=locationId][data-v=loc-basement]'); click('[data-act=suggest]'); }
+  if (!q('[data-act=addEx]')) { onlyAt('loc-basement'); click('[data-act=suggest]'); }
   click('[data-act=addEx]');
   click('[data-act=addExPick][data-id=ex-sorensen]');
   // Do it on its own: an added T3 can join a superset, and then the rest waits for the end of the round.
@@ -725,7 +731,7 @@ step('taste: Learn from my swaps, Forget, favorites, Never suggest, and your usu
   check('and Normal clears it', !st().exercises.find(e => e.id === 'ex-leg-ext').pref);
   // The swap sheet: your usual first, and Never suggest the one you're swapping away from.
   click('[data-act=nav][data-tab=today]');
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-act=suggest]');
   const sess = st().sessions.filter(x => x.status === 'open').at(-1);
   const block = sess.blocks.find(b => b.tier === 'T3') ?? sess.blocks.at(-1);
@@ -787,7 +793,7 @@ step('pace: History shows planned and actual minutes; Settings shows the learned
   check('Reset asks first', /Reset your pace/.test(sheet()));
   click('#sheet [data-act=sheetClose]');
   click('[data-act=nav][data-tab=today]');
-  click('[data-k=locationId][data-v=loc-basement]');
+  onlyAt('loc-basement');
   click('[data-act=suggest]');
   check('the session estimate says it used your pace', /est \d+ min \(your pace\)/.test(text()), text().slice(0, 300));
   click('[data-act=finish]');
@@ -843,6 +849,26 @@ step('weekly review: the Last week card, Review, Accept, Undo, Copy', () => {
   st().reviews = [];
   store.save();
   click('[data-act=nav][data-tab=today]');
+});
+
+step('check-in at several locations', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  click('[data-act=ciLoc][data-v=loc-office]');
+  check('both locations are on', qa('[data-act=ciLoc].on').length === 2);
+  click('[data-act=ciLoc][data-v=loc-basement]'); click('[data-act=ciLoc][data-v=loc-office]');
+  check('the last one stays on', qa('[data-act=ciLoc].on').length === 1 && q('[data-act=ciLoc].on').dataset.v === 'loc-office');
+  click('[data-act=ciLoc][data-v=loc-basement]');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  check('the workout keeps both, the first picked as the main one', JSON.stringify(sess.locationIds) === '["loc-office","loc-basement"]' && sess.locationId === 'loc-office');
+  check('the header names both', /Office \+ Basement/.test(text()), text().slice(0, 200));
+  const away = sess.blocks.map(b => st().exercises.find(e => e.id === b.exerciseId)).find(e => L.elsewhere(e, L.placeOf(st(), sess)));
+  check('an exercise only one place has says where', !away || /at Basement/.test(text()));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  onlyAt('loc-basement');
 });
 
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
