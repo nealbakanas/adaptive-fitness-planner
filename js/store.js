@@ -307,6 +307,14 @@ export function migrate(s) {
     if (!s.slots.some(sl => sl.tier === 'COND')) s.slots.push({ id: 'sl-cond-bike', familyId: 'fam-cond', tier: 'COND', quota: 1, priority: 2 });
     s.version = 23;
   }
+  if (s.version < 24) {
+    // v24: bike sets added by hand went in at the sheet's default tier (T3), so they didn't count toward the conditioning
+    // goal. Conditioning sets and blocks at any other tier move to COND.
+    const cond = new Set(s.exercises.filter(e => e.familyId === 'fam-cond').map(e => e.id));
+    for (const x of s.sets) if (cond.has(x.exerciseId) && x.tier !== 'COND') x.tier = 'COND';
+    for (const ss of s.sessions) for (const b of ss.blocks || []) if (cond.has(b.exerciseId) && b.tier !== 'COND') { b.tier = 'COND'; b.slotId = s.slots.find(sl => sl.tier === 'COND' && sl.familyId === 'fam-cond')?.id ?? null; }
+    s.version = 24;
+  }
   return s;
 }
 

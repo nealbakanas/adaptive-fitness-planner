@@ -1383,6 +1383,10 @@ function histNewSet(s, block, ex, at, from = null) {
 }
 
 // Picking an exercise in the sheet: change a group to it, or add it as a new group with one set.
+// The tier for an exercise you add by hand: conditioning is always conditioning (so it counts toward that goal), the rest
+// is the tier you picked in the sheet.
+const tierFor = (ex, asked) => (L.isConditioning(state, ex) ? 'COND' : asked);
+
 function histPick(exerciseId) {
   const sh = ui.sheet, s = L.byId(state.sessions, sh.sessionId), ex = exOf(exerciseId);
   if (!s || !ex) return;
@@ -1392,13 +1396,14 @@ function histPick(exerciseId) {
     tidyBlocks(s);
   } else {
     const last = state.sets.filter(x => x.sessionId === s.id && x.done).reduce((m, x) => Math.max(m, x.loggedAt), s.firstSetAt ?? s.checkinAt ?? Date.now());
-    const block = { id: L.uid(), tier: sh.tier, slotId: slotIdFor(ex.id, sh.tier), exerciseId: ex.id, schemeId: null, swaps: [{ type: 'add', to: ex.id, at: Date.now() }] };
+    const tier = tierFor(ex, sh.tier);
+    const block = { id: L.uid(), tier, slotId: slotIdFor(ex.id, tier), exerciseId: ex.id, schemeId: null, swaps: [{ type: 'add', to: ex.id, at: Date.now() }] };
     (s.blocks ??= []).push(block);
     state.sets.push(histNewSet(s, block, ex, last + 1000));
   }
   ui.sheet = null; renderSheet();
   save(); render();
-  toast(sh.mode === 'histSwap' ? `Changed to ${ex.name}` : `Added ${ex.name} as ${sh.tier}`, () => restoreSnap(snap));
+  toast(sh.mode === 'histSwap' ? `Changed to ${ex.name}` : `Added ${ex.name} as ${tierFor(ex, sh.tier)}`, () => restoreSnap(snap));
 }
 
 // Moves a workout to another day, keeping its time of day: its sets, check-in and any mobility in it move together.
@@ -3376,11 +3381,12 @@ const actions = {
     if (sh.mode === 'histSwap' || sh.mode === 'histAdd') return histPick(d.id);
     if (sh.mode === 'swap') return swapTo(d.id);
     const s = currentSession();
-    const nb = addBlock(s, exOf(d.id), sh.tier);
+    const tier = tierFor(exOf(d.id), sh.tier);
+    const nb = addBlock(s, exOf(d.id), tier);
     if (sh.mode === 'pair') nb.pairOf = sh.blockId;
     ui.sheet = null;
     save(); render();
-    toast(`Added ${exOf(d.id).name} as ${sh.tier}`);
+    toast(`Added ${exOf(d.id).name} as ${tier}`);
   },
   addExCreate: () => {
     const sh = ui.sheet;

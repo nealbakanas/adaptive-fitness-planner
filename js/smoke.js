@@ -958,6 +958,33 @@ step('conditioning supersets: the bike is the superset idea for the first T1 and
   click('[data-k=minutes][data-v="45"]');
 });
 
+step('the bike added by hand is conditioning, during a workout and in History', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  click('[data-act=addEx]');
+  check('the add sheet starts at T3', q('#sheet [data-act=addExTier].on')?.dataset.t === 'T3');
+  click('#sheet [data-act=addExPick][data-id=ex-assault-bike]');
+  const b = sess.blocks.find(x => x.exerciseId === 'ex-assault-bike');
+  check('added as COND, toward the conditioning goal', b?.tier === 'COND' && !!b.slotId && st().slots.find(sl => sl.id === b.slotId)?.tier === 'COND', JSON.stringify(b));
+  for (const x of st().sets.filter(y => y.blockId === b.id)) { x.done = true; x.loggedAt = Date.now(); }
+  store.save();
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  // In History: add the bike to that workout.
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  click(qa('[data-act=histEdit]').find(x => x.dataset.id === sess.id));
+  click('[data-act=histAddEx]');
+  click('#sheet [data-act=addExPick][data-id=ex-assault-bike]');
+  const added = sess.blocks.filter(x => x.exerciseId === 'ex-assault-bike').at(-1);
+  check('History adds it as COND too', added?.tier === 'COND' && st().sets.filter(x => x.blockId === added.id).every(x => x.tier === 'COND'));
+  click('[data-act=histEditDone]');
+  click('[data-act=nav][data-tab=today]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
