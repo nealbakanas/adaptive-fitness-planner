@@ -598,6 +598,7 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
     if (tier === 'T2' && powerSets(sc) && !ex.explosive && e > 2.5) continue;
     let s = 0;
     if (tier === 'COND') {
+      if (sc.pairOnly) continue; // a superset's rounds, not a workout of its own
       // Conditioning takes at most about 40% of the workout (10 minutes at least), so the lifting keeps its share.
       if (ci?.minutes && sc.minutes > Math.max(10, 0.4 * ci.minutes)) continue;
       // Conditioning: in the dose; fewer calories on a tired or easy day, more on a fresh one or a sweat day; a change from last time.

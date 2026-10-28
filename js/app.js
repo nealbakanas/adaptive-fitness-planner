@@ -44,7 +44,7 @@ function defaultCheckin() {
     locationId: last?.locationId ?? state.locations[0]?.id,
     locationIds: (last?.locationIds ?? [last?.locationId ?? state.locations[0]?.id]).filter(id => L.byId(state.locations, id)),
     minutes: last?.minutes ?? 45,
-    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false, cond: false,
+    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false, cond: false, condPair: false,
   };
 }
 
@@ -287,6 +287,25 @@ function setBlockTier(s, b, tier, reason = null) {
 const readyText = r => r.tired ? 'Tired: explosive work becomes technique'
   : r.heavy.length ? `Heavy ${r.heavy.join('/')} work since yesterday: explosive work there becomes technique`
   : 'Fresh for power work';
+
+// Conditioning supersets: the bike (or whatever conditioning is here), or null when there's none or it's skipped today.
+function condPairExercise(s) {
+  if ((s.skip || []).includes('fam-cond')) return null;
+  return L.pickExercise(state, 'fam-cond', L.placeOf(state, s), 'COND');
+}
+// Calories per rest: more in a T1's longer rest.
+const condPairCal = main => (main.tier === 'T1' ? 8 : 6);
+// A round after each of the lift's sets; kept as a scheme so it can be edited (Settings → Schemes) and reused.
+function condPairScheme(main) {
+  const sets = schOf(main.schemeId)?.sets ?? 5, cal = condPairCal(main);
+  const id = `s-c-pair-${sets}x${cal}`;
+  let sc = schOf(id);
+  if (!sc) {
+    sc = { id, name: `${sets} × ${cal} cal in the rest`, sets, reps: cal, restSec: 0, minutes: Math.max(2, Math.round(sets * cal / 15)), tiers: ['COND'], pairOnly: true };
+    state.schemes.push(sc);
+  }
+  return sc;
+}
 
 function addBlock(s, ex, tier) {
   const b = { id: L.uid(), tier, slotId: slotIdFor(ex.id, tier), exerciseId: ex.id, schemeId: null, swaps: [{ type: 'add', to: ex.id, at: Date.now() }] };
@@ -821,6 +840,7 @@ function viewCheckin() {
     ${skipField(ci)}
     <label class="toggle"><input type="checkbox" data-ci-jumps ${ci.jumps ? 'checked' : ''}> Add jumps <span class="hint">one jumps block, toward your jumps goal</span></label>
     <label class="toggle"><input type="checkbox" data-ci-cond ${ci.cond ? 'checked' : ''}> Add conditioning <span class="hint">an EMOM on the bike, done last</span></label>
+    <label class="toggle"><input type="checkbox" data-ci-condpair ${ci.condPair ? 'checked' : ''}> Conditioning supersets <span class="hint">the bike in the rests of your first T1 and T2</span></label>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
     <details class="mixer" ${ui.mixOpen ? 'open' : ''} data-mix><summary>Or choose the mix <span class="hint">how many T1, T2 and T3 blocks · uses your goals first</span></summary>
@@ -884,11 +904,18 @@ function viewSession(s) {
 }
 
 // One superset idea per main block that has sets left and no partner yet, each from a different family.
+// With Conditioning supersets on at check-in, the first T1 and the first T2 get the bike instead.
 function pairIdeas(s, ordered, credit) {
   const out = new Map();
   const used = s.blocks.map(b => exOf(b.exerciseId)?.familyId);
+  const bike = s.condPair ? condPairExercise(s) : null;
+  const firstOf = tier => ordered.find(b => b.tier === tier);
   for (const b of ordered) {
     if (!['T1', 'T2', 'TECH'].includes(b.tier) || b.noPair || inPair(s, b) || !blockSets(b).some(x => !x.done)) continue;
+    if (bike && (b === firstOf('T1') || b === firstOf('T2'))) {
+      out.set(b.id, { exercise: bike, tier: 'COND', why: `conditioning superset: ${condPairCal(b)} cal on the bike in each rest` });
+      continue;
+    }
     const ex = exOf(b.exerciseId);
     const idea = ex && L.suggestPair(state, s, ex, { excludeFamilies: used, credit });
     if (!idea) continue;
@@ -982,7 +1009,7 @@ function viewBlock(s, b, credit, idea = null) {
     : group.length > 2 ? `Giant set with ${others}: one set of each, then rest` : `Superset with ${others}: alternate sets, rest after each round`;
   const pairHead = main ? `<div class="sslabel">↔ ${what}
     <button class="link" data-act="pairUnlink" data-b="${b.id}">Unlink</button></div>` : '';
-  const ideaRow = idea ? `<div class="pairidea"><span>Superset idea: <b>${esc(idea.exercise.name)}</b> <span class="meta">T3 · ${esc(idea.why)}</span></span>
+  const ideaRow = idea ? `<div class="pairidea"><span>Superset idea: <b>${esc(idea.exercise.name)}</b> <span class="meta">${idea.tier ?? 'T3'} · ${esc(idea.why)}</span></span>
     <span class="brow"><button class="small" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}">+ Add</button>
     <button class="small quiet" data-act="pairOpen" data-b="${b.id}">Other</button>
     <button class="small quiet" data-act="pairNo" data-b="${b.id}">No thanks</button></span></div>` : '';
@@ -3130,6 +3157,16 @@ const actions = {
 
   pairAdd: d => {
     const { s, b } = findBlock(d.b);
+    if (exOf(d.ex)?.familyId === 'fam-cond') {
+      // The bike in this lift's rest: a conditioning block paired with it, a round after each set.
+      const ex = exOf(d.ex);
+      const nb = { id: L.uid(), tier: 'COND', slotId: slotIdFor(ex.id, 'COND'), exerciseId: ex.id, schemeId: condPairScheme(b).id, swaps: [{ type: 'add', to: ex.id, at: Date.now() }], pairOf: b.id };
+      s.blocks.push(nb);
+      if (s.source === 'suggested') s.source = 'swapped';
+      genSets(s, nb);
+      save(); render();
+      return toast(`Superset: ${ex.name} in ${exOf(b.exerciseId).name}'s rest`);
+    }
     const nb = addBlock(s, exOf(d.ex), 'T3');
     nb.pairOf = b.id;
     nb.schemeId = schemeForBlock(s, exOf(d.ex), 'T3', nb).id; // now it only costs half its time
@@ -3956,6 +3993,8 @@ document.addEventListener('change', e => {
     ui.ci.jumps = el.checked;
   } else if (el.hasAttribute('data-ci-cond')) {
     ui.ci.cond = el.checked;
+  } else if (el.hasAttribute('data-ci-condpair')) {
+    ui.ci.condPair = el.checked;
   } else if (el.hasAttribute('data-import')) {
     importFile(el.files[0]);
   } else if (el.hasAttribute('data-fnfile')) {
