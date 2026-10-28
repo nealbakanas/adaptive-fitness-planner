@@ -29,11 +29,16 @@ export function paceFor(state, t = Date.now()) {
 
 // TECH is technique work: explosive movements practiced when tired or after heavy work, with its own weekly goal.
 // JUMP is jumps and plyometrics, counted in contacts: their own category, only in a workout when you ask for them.
-export const TIERS = ['T1', 'T2', 'T3', 'TECH', 'JUMP'];
-const BUILD_ORDER = ['T1', 'JUMP', 'T2', 'TECH', 'T3'];
+// COND is conditioning (EMOMs on the Assault bike), counted in calories: also only when you ask for it. Asked for, it's built
+// first so it keeps its time (on a short day the lifting gives way), and done last.
+export const TIERS = ['T1', 'T2', 'T3', 'TECH', 'JUMP', 'COND'];
+const BUILD_ORDER = ['COND', 'T1', 'JUMP', 'T2', 'TECH', 'T3'];
+const ON_REQUEST = { JUMP: ['jumps', 'jumps are off today (turn on Add jumps)'], COND: ['cond', 'conditioning is off today (turn on Add conditioning)'] };
+// Total reps in a scheme (calories for conditioning). A ladder adds `ramp` each round.
+export const schemeReps = sc => sc.sets * sc.reps + (sc.ramp || 0) * sc.sets * (sc.sets - 1) / 2;
 // Minutes on top of a scheme: warm-up sets (a ramp for heavy work, a couple for moderate), then the changeover to each
 // exercise (moving, loading, setting up; Settings → You). Jumps take none: they're done during the warm-up.
-export const WARMUP = { T1: 5, T2: 2, T3: 0, TECH: 1, JUMP: 0 };
+export const WARMUP = { T1: 5, T2: 2, T3: 0, TECH: 1, JUMP: 0, COND: 2 }; // conditioning: an easy spin first
 // With pace learned (js/pace.js): your own warm-up for an exercise, and your changeover at the location (`loc`, else the
 // build's), where there's enough data.
 export const changeover = state => Math.max(0, Number(state.settings?.changeover ?? 2) || 0);
@@ -391,7 +396,7 @@ export function autoSlotFor(state, s) {
   if (!ex || s.warmup) return null;
   const slot = slotFor(state, ex, s.tier);
   if (!slot) return null;
-  if (s.tier === 'T3' || s.tier === 'TECH' || s.tier === 'JUMP') return slot.id;
+  if (s.tier === 'T3' || s.tier === 'TECH' || s.tier === 'JUMP' || s.tier === 'COND') return slot.id;
   if (ex.metric !== 'load_reps') return ex.explosive ? slot.id : null; // jumps count by reps
   const total = setTotalLoad(state, s);
   const ref = s.refMax || dayBest(state, s);
@@ -440,10 +445,10 @@ export function creditWeek(state, t = Date.now()) {
 // ---------- suggestion ----------
 
 export const INTENT = {
-  auto: { T1: 1, T2: 1, T3: 1, TECH: 1, JUMP: 1 },
-  heavy: { T1: 2, T2: 1, T3: 0.6, TECH: 0.5, JUMP: 1 },
-  sweat: { T1: 0.5, T2: 1.5, T3: 1.4, TECH: 0.8, JUMP: 1 },
-  easy: { T1: 0.2, T2: 0.5, T3: 1.8, TECH: 1.5, JUMP: 1 },
+  auto: { T1: 1, T2: 1, T3: 1, TECH: 1, JUMP: 1, COND: 1 },
+  heavy: { T1: 2, T2: 1, T3: 0.6, TECH: 0.5, JUMP: 1, COND: 1 },
+  sweat: { T1: 0.5, T2: 1.5, T3: 1.4, TECH: 0.8, JUMP: 1, COND: 1 },
+  easy: { T1: 0.2, T2: 0.5, T3: 1.8, TECH: 1.5, JUMP: 1, COND: 1 },
 };
 
 // 1 (flat) .. 5 (great). Stored as fatigue (1 fresh .. 5 wrecked) = 6 - the energy picked at check-in; sleep 1..5 is optional.
@@ -562,7 +567,7 @@ export const schemeOptions = (state, tier) => state.schemes.filter(s => s.tiers.
 
 export function doseFit(state, tier, sc, dose = null) {
   const c = dose || state.tiers[tier];
-  const total = sc.sets * sc.reps;
+  const total = schemeReps(sc);
   return total >= c.repMin && total <= c.repMax;
 }
 
@@ -592,6 +597,17 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
     if (schemeTime(state, tier, ex.id, sc) > budget || overRepCap(ex, sc)) continue;
     if (tier === 'T2' && powerSets(sc) && !ex.explosive && e > 2.5) continue;
     let s = 0;
+    if (tier === 'COND') {
+      // Conditioning takes at most about 40% of the workout (10 minutes at least), so the lifting keeps its share.
+      if (ci?.minutes && sc.minutes > Math.max(10, 0.4 * ci.minutes)) continue;
+      // Conditioning: in the dose; fewer calories on a tired or easy day, more on a fresh one or a sweat day; a change from last time.
+      if (doseFit(state, tier, sc, dose)) s += 3;
+      const cal = schemeReps(sc) / 100;
+      if (e <= 2.5 || ci?.intent === 'easy') s -= cal; else if (e >= 3.5 || ci?.intent === 'sweat') s += cal;
+      if (recent.includes(sc.id)) s -= 1;
+      if (s > bestScore) { best = sc; bestScore = s; }
+      continue;
+    }
     if (doseFit(state, tier, sc, dose)) s += 3;
     if (e <= 2.5) s += tier === 'T3' ? sc.sets * 0.1 : (6 - sc.reps) * 0.3; // low energy: low reps, many sets (T3: more, shorter sets)
     else if (e >= 3.5 && !ex.explosive && tier !== 'T3' && ci?.intent !== 'easy') s += sc.sets * sc.reps * 0.04; // high energy: more volume, but not for power work or on an easy day
@@ -607,10 +623,11 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
   return best;
 }
 
-const TIER_CAP = { T1: 1, T2: 2, T3: 3, TECH: 2, JUMP: 1 };
+const TIER_CAP = { T1: 1, T2: 2, T3: 3, TECH: 2, JUMP: 1, COND: 1 };
 
 // Explosive power work goes first while you're fresh, then technique, then everything else in tier order.
 const blockRank = (state, b) => {
+  if (b.tier === 'COND') return 3; // conditioning last, so it doesn't take the legs from the lifting
   const ex = byId(state.exercises, b.exerciseId);
   if (!ex?.explosive) return 2;
   return b.tier === 'TECH' ? 1 : (b.tier === 'T1' || b.tier === 'T2' || b.tier === 'JUMP') ? 0 : 2;
@@ -637,23 +654,35 @@ export const buildSuggestion = (state, ci, t = Date.now(), opts = {}) => withTas
 function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, sessionBlocks = [] } = {}) {
   const scored = scoreSlots(state, ci, t);
   // Jumps are only in when you ask for them, and then whatever the scores say: they don't set the bar for other goals.
-  const top = Math.max(0, ...scored.filter(c => c.slot.tier !== 'JUMP').map(c => c.score));
+  const top = Math.max(0, ...scored.filter(c => !ON_REQUEST[c.slot.tier]).map(c => c.score));
   let budget = ci.minutes;
   const blocks = [];
-  const count = { T1: 0, T2: 0, T3: 0, TECH: 0, JUMP: 0 };
+  const count = { T1: 0, T2: 0, T3: 0, TECH: 0, JUMP: 0, COND: 0 };
   const famUsed = new Set(excludeFamilies); // e.g. T1 weighted dips and T3 dips both open: do them on different days
+  // Conditioning asked for with no open goal for it (met this week, or none): it still keeps its time, from the library.
+  if (ci.cond && !scored.some(c => c.slot.tier === 'COND') && !sessionBlocks.some(b => b.tier === 'COND')) {
+    const fam = state.slots.find(sl => sl.tier === 'COND')?.familyId ?? 'fam-cond';
+    const e = !famUsed.has(fam) && pickExercise(state, fam, placeOf(state, ci), 'COND');
+    const sc = e && pickScheme(state, 'COND', e, schemeRoom(state, 'COND', budget, e.id), ci, state.tiers.COND);
+    if (sc) {
+      blocks.push({ id: uid(), tier: 'COND', slotId: slotFor(state, e, 'COND')?.id ?? null, exerciseId: e.id, schemeId: sc.id, swaps: [] });
+      famUsed.add(fam);
+      count.COND++;
+      budget -= schemeTime(state, 'COND', e.id, sc) + overhead(state, 'COND', e.id);
+    }
+  }
   for (const tier of BUILD_ORDER) {
     for (const c of scored.filter(x => x.slot.tier === tier)) {
       // Jumps only come in when you turn them on at check-in; then the goal's jumps go in whatever the scores say.
-      if (tier === 'JUMP' && !ci.jumps) { c.note = 'jumps are off today (turn on Add jumps)'; continue; }
+      if (ON_REQUEST[tier] && !ci[ON_REQUEST[tier][0]]) { c.note = ON_REQUEST[tier][1]; continue; }
       if (c.waits) { c.note = 'power work waits for a fresh day'; continue; }
       // Wrecked (energy 1-2): one T2 at most, the rest of the time goes to T3s.
       if (count[tier] >= (tier === 'T2' && energy(ci) <= 2.5 ? 1 : TIER_CAP[tier])) { c.note = `${tier} cap reached`; continue; }
       if (famUsed.has(c.slot.familyId)) { c.note = 'same family already in this session'; continue; }
-      if (tier !== 'JUMP' && c.score < 0.25 * top) { c.note = 'score too low vs. top pick'; continue; }
+      if (!ON_REQUEST[tier] && c.score < 0.25 * top) { c.note = 'score too low vs. top pick'; continue; }
       // A tier the chosen intent pushes down must be nearly as urgent as the top pick, otherwise
       // tier order would still fill the session with it (sweat day, 5x5 squats).
-      if (tier !== 'JUMP' && INTENT[ci.intent || 'auto'][tier] < 1 && c.score < 0.6 * top) { c.note = `${ci.intent} intent favors other work`; continue; }
+      if (!ON_REQUEST[tier] && INTENT[ci.intent || 'auto'][tier] < 1 && c.score < 0.6 * top) { c.note = `${ci.intent} intent favors other work`; continue; }
       const exercise = tier === 'T3' ? variedAccessory(state, ci, c) : c.exercise;
       const sc = pickScheme(state, tier, exercise, schemeRoom(state, tier, budget, exercise.id), ci, slotDose(state, c.slot));
       if (!sc) { c.note = 'no scheme fits remaining time'; continue; }
@@ -671,7 +700,8 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
   let notes = [];
   // Jumps take no time, so asking for them still adds them when the goals use it all.
   const wantJump = ci.jumps && ![...sessionBlocks, ...blocks].some(b => b.tier === 'JUMP');
-  if (fill && (ci.minutes - goalMinutes >= 5 || wantJump)) {
+  const wantCond = ci.cond && ![...sessionBlocks, ...blocks].some(b => b.tier === 'COND');
+  if (fill && (ci.minutes - goalMinutes >= 5 || wantJump || wantCond)) {
     const f = fillTime(state, ci, t, blocks, ci.minutes - goalMinutes, [...famUsed], sessionBlocks);
     blocks.push(...f.blocks);
     notes = f.notes;
@@ -756,7 +786,7 @@ export function pairT3s(state, blocks, place = activeBuild?.state === state ? ac
     const t3Group = blocks.find(b => b.tier === 'T3' && !b.pairOf && b !== lone && blocks.filter(x => x.pairOf === b.id).length === 1
       && [b, ...blocks.filter(x => x.pairOf === b.id)].every(x => together(x, lone)));
     if (t3Group) { lone.pairOf = t3Group.id; continue; }
-    const best = blocks.filter(b => b.tier !== 'T3' && b.tier !== 'JUMP' && !grouped(b) && together(b, lone)) // jumps are warm-up, not a rest to fill
+    const best = blocks.filter(b => b.tier !== 'T3' && b.tier !== 'JUMP' && b.tier !== 'COND' && !grouped(b) && together(b, lone)) // jumps are warm-up, conditioning has no rest to fill
       .sort((a, b) => pairScore(state, ex(b), ex(lone)) - pairScore(state, ex(a), ex(lone)))[0];
     if (best) lone.pairOf = best.id;
   }
@@ -897,7 +927,7 @@ function trimToFit(state, blocks, minutes, removable) {
   const dropped = [];
   while (regroup(state, blocks) && blocksMinutes(state, blocks) > minutes + 1e-9) {
     let i = removable.findLastIndex(b => b.tier === 'T3');
-    if (i < 0) i = removable.findLastIndex(b => b.tier !== 'JUMP'); // no T3 to drop: the last other library pick
+    if (i < 0) i = removable.findLastIndex(b => b.tier !== 'JUMP' && b.tier !== 'COND'); // no T3 to drop: the last other library pick (not what you asked for)
     if (i < 0) break;
     const [gone] = removable.splice(i, 1);
     if (blocks !== removable) blocks.splice(blocks.indexOf(gone), 1);
@@ -1081,6 +1111,17 @@ function addJump(state, ci, k, existing = []) {
   return k.add(e, 'JUMP', `you asked for jumps: do them in your warm-up, they don't use the workout's time${energy(ci) <= 2.5 ? '; fewer contacts on a tired day' : ''}`);
 }
 
+// One conditioning block (the COND tier) when you turned on Add conditioning and the workout has none yet: the bike
+// (or whatever conditioning you have here), as one of your EMOMs that fits the time.
+function addCond(state, ci, k, existing = []) {
+  if (!ci.cond || [...existing, ...k.blocks].some(b => b.tier === 'COND')) return false;
+  const loc = placeOf(state, ci);
+  const fam = state.slots.find(sl => sl.tier === 'COND')?.familyId ?? 'fam-cond';
+  const e = pickExercise(state, fam, loc, 'COND');
+  if (!e) { k.notes.push('Conditioning is on, but nothing for it is here (add the Assault bike to this location in Settings → Locations).'); return false; }
+  return k.add(e, 'COND', 'you asked for conditioning: done last');
+}
+
 // Explosive lower-body work: a clean, and a second clean variation when there's time (jumps: Add jumps at check-in).
 // Not fresh: one technique block instead. Returns whether anything was added.
 function explosiveLower(state, ci, t, k) {
@@ -1103,6 +1144,7 @@ function buildFocusIn(state, ci, { region, explosive = false, accessoriesOnly = 
   const tired = energy(ci) <= 2.5;
   const easy = ci.intent === 'easy';
   addJump(state, ci, k, sessionBlocks);
+  addCond(state, ci, k, sessionBlocks);
   // Explosive lower days are led by jumps and cleans; they stand in for the heavy lifts.
   let led = false;
   if (explosive && !accessoriesOnly) {
@@ -1175,6 +1217,7 @@ function buildMixIn(state, ci, asked, t, { excludeFamilies = [], sessionBlocks =
   const k = libraryKit(state, ci, t, ci.minutes - blocksMinutes(state, blocks), [...famUsed], all.filter(isStrength).map(b => b.exerciseId), all.map(b => b.exerciseId));
   const have = tier => blocks.filter(b => b.tier === tier).length;
   addJump(state, ci, k, sessionBlocks);
+  addCond(state, ci, k, sessionBlocks);
   const halves = lean ? [FOCUS_MAIN[lean]] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]];
   for (const tier of ['T1', 'T2']) {
     while (have(tier) + k.count(tier) < (mix[tier] || 0) && k.budget >= 10
@@ -1234,6 +1277,7 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
   const pick = (tier, why, opts = {}, ok = () => true) => halves.some(ps => k.strength(ps.filter(ok), why, tier, opts));
   const strengthIn = tier => [...sessionBlocks, ...blocks, ...k.blocks].filter(b => b.tier === tier && isStrength(b)).length;
   addJump(state, ci, k, [...sessionBlocks, ...blocks]);
+  addCond(state, ci, k, [...sessionBlocks, ...blocks]);
   // Heavy day, not tired, no heavy lift in the session yet: one T1 lift you've loaded (it has an estimated max), from a
   // pattern whose half of the body hasn't had heavy work since yesterday.
   if (ci.intent === 'heavy' && energy(ci) > 2.5 && !strengthIn('T1') && k.budget >= 15) {

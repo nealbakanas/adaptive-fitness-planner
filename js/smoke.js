@@ -901,6 +901,32 @@ step('skip a category today: nothing from it is suggested', () => {
   check('tap again to un-skip', !(store.state && q(`[data-act=ciSkip][data-v="${fam}"]`).classList.contains('on')));
 });
 
+step('conditioning: Add conditioning, an EMOM on the bike, the EMOM clock', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  const box = q('input[data-ci-cond]');
+  check('check-in has Add conditioning, off by default', !!box && !box.checked);
+  box.checked = true; fire(box, 'change');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  const b = sess.blocks.find(x => x.tier === 'COND');
+  check('the workout has one conditioning block, last', !!b && sess.blocks.filter(x => x.tier === 'COND').length === 1 && [...document.querySelectorAll('section.block .tier')].at(-1)?.textContent.startsWith('COND'));
+  const card = [...document.querySelectorAll('section.block')].find(x => x.querySelector(`[data-b="${b.id}"]`));
+  check('in calories, every minute', /cal/.test(card.innerText) && /every \d:\d\d/.test(card.innerText) && /EMOM/.test(card.innerText), card.innerText.slice(0, 300));
+  const sc = st().schemes.find(x => x.id === b.schemeId);
+  click(card.querySelector('[data-act=emomStart]'));
+  check('Start EMOM runs the clock to round 2', Math.abs(st().timer.endsAt - Date.now() - sc.emom * 1000) < 2000 && /round 2/.test(st().timer.next));
+  const card2 = [...document.querySelectorAll('section.block')].find(x => x.querySelector(`[data-b="${b.id}"]`));
+  click(card2.querySelector('[data-act=check]'));
+  check('logging round 1 keeps the clock: the rest ends when round 2 starts', Math.abs(st().timer.endsAt - (b.emomStart + sc.emom * 1000)) < 1500, `${st().timer.endsAt - b.emomStart}`);
+  if (sc.ramp) check('a ladder adds a calorie each round', st().sets.filter(x => x.blockId === b.id).map(x => x.reps).join() === Array.from({ length: sc.sets }, (_, i) => sc.reps + i * sc.ramp).join());
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  const box2 = q('input[data-ci-cond]'); box2.checked = false; fire(box2, 'change');
+  st().timer = null;
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');

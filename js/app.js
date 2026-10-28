@@ -44,7 +44,7 @@ function defaultCheckin() {
     locationId: last?.locationId ?? state.locations[0]?.id,
     locationIds: (last?.locationIds ?? [last?.locationId ?? state.locations[0]?.id]).filter(id => L.byId(state.locations, id)),
     minutes: last?.minutes ?? 45,
-    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false,
+    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false, cond: false,
   };
 }
 
@@ -109,7 +109,7 @@ function warmHint(b, ex, i) {
 
 // One logged set as text: "185×5", "BW+45×3", "40s", "100m", "12 reps".
 const setAmount = (ex, s) => ex?.metric === 'load_reps' ? `${ex.bodyweight ? 'BW+' : ''}${s.load ?? 0}×${s.reps}`
-  : ex?.metric === 'time' ? `${s.time ?? '?'}s` : ex?.metric === 'distance' ? `${s.distance ?? '?'}m` : `${s.reps ?? ''} reps`;
+  : ex?.metric === 'time' ? `${s.time ?? '?'}s` : ex?.metric === 'distance' ? `${s.distance ?? '?'}m` : `${s.reps ?? ''} ${ex?.repUnit ?? 'reps'}`;
 
 // Most recent time logged for a timed exercise, so the next hold starts from it.
 function lastTime(exerciseId) {
@@ -212,7 +212,11 @@ function genSets(session, block) {
   for (const w of warmSets(block)) if (!w.done) w.exerciseId = ex.id; // unlogged warm-ups follow a swap
   const done = blockSets(block).length;
   const load = L.targetLoad(state, ex, block.tier, sc, session.checkinAt);
-  for (let i = done; i < sc.sets; i++) state.sets.push(newSet(session, block, ex, sc, load));
+  for (let i = done; i < sc.sets; i++) {
+    const st = newSet(session, block, ex, sc, load);
+    if (sc.ramp && st.reps != null) st.reps = sc.reps + i * sc.ramp; // a ladder: more each round
+    state.sets.push(st);
+  }
   // AMRAP last set: on by default for a lift you did it on last time at this tier.
   if (block.amrap === undefined && canAmrap(block, ex)) block.amrap = L.lastOutcome(state, ex.id, block.tier, session.checkinAt)?.amrap != null;
   markAmrap(block);
@@ -445,8 +449,19 @@ function nextLabelAfter(s, b) {
   return (n && setLabel(n)) ?? nextSetLabel(s);
 }
 
+// An EMOM block (scheme.emom: seconds per round) rests until the next round starts on its clock, which starts with
+// ▶ Start EMOM, or else at the first round you log. A rest set for today (⏱) still wins.
+function emomRest(b) {
+  const every = schOf(b.schemeId)?.emom;
+  if (!every || b.restSec != null) return null;
+  const now = Date.now();
+  b.emomStart ??= now;
+  const n = Math.floor((now - b.emomStart) / (every * 1000)) + 1;
+  return Math.max(1, Math.round((b.emomStart + n * every * 1000 - now) / 1000));
+}
+
 function startTimer(s, b, setId = null) {
-  const secs = effectiveRest(b);
+  const secs = emomRest(b) ?? effectiveRest(b);
   if (!secs) return;
   state.timer = { endsAt: Date.now() + secs * 1000, total: secs, blockId: b.id, setId, next: nextLabelAfter(s, b), warned: false, alerted: false };
   setWakeLock(true);
@@ -805,6 +820,7 @@ function viewCheckin() {
     <div class="field"><label>Lean <span class="hint">which half feels up for it today</span></label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
     ${skipField(ci)}
     <label class="toggle"><input type="checkbox" data-ci-jumps ${ci.jumps ? 'checked' : ''}> Add jumps <span class="hint">one jumps block, toward your jumps goal</span></label>
+    <label class="toggle"><input type="checkbox" data-ci-cond ${ci.cond ? 'checked' : ''}> Add conditioning <span class="hint">an EMOM on the bike, done last</span></label>
     <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
     <details class="mixer" ${ui.mixOpen ? 'open' : ''} data-mix><summary>Or choose the mix <span class="hint">how many T1, T2 and T3 blocks · uses your goals first</span></summary>
@@ -904,7 +920,10 @@ function viewBlock(s, b, credit, idea = null) {
   const progLine = !prog ? '' : prog.up
     ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()}: you hit every rep at ${prog.last.load} on ${lastDay}${prog.last.amrap != null ? `, ${prog.last.amrap} on the AMRAP set${prog.steps > 1 ? ' (more than double)' : ''}` : ''}</div>`
     : `<div class="dose prog">= ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} again: ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short on ${lastDay}. Hit them all to go up.</div>`;
-  const restBtn = `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ rest ${clock(effectiveRest(b))}${b.restSec != null ? ' (set today)' : ex.restSec != null ? ' (exercise)' : ''}</button>`;
+  const emom = sc.emom && b.restSec == null;
+  const restBtn = emom
+    ? `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ every ${clock(sc.emom)}</button>${blockSets(b).some(x => x.done) || b.emomStart ? '' : ` <button class="restchip go-emom" data-act="emomStart" data-b="${b.id}">▶ Start EMOM</button>`}`
+    : `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ rest ${clock(effectiveRest(b))}${b.restSec != null ? ' (set today)' : ex.restSec != null ? ' (exercise)' : ''}</button>`;
 
   let dose = '';
   const slot = b.slotId && L.byId(state.slots, b.slotId);
@@ -912,7 +931,7 @@ function viewBlock(s, b, credit, idea = null) {
     const r = credit.slots.get(slot.id);
     const agg = r?.days.get(L.dayKey()) || { reps: 0, sets: 0 };
     const need = L.slotDose(state, slot, b.tier).repMin;
-    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : 'qualifying reps'}`;
+    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : b.tier === 'COND' ? 'calories' : 'qualifying reps'}`;
     dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? '✓ Filled' : 'Toward'} ${esc(slotLabel(slot))}: ${prog}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
@@ -945,7 +964,7 @@ function viewBlock(s, b, credit, idea = null) {
       inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="load" value="${esc(st.load)}" placeholder="—"><span class="u">${sx.bodyweight ? '+' : ''}${unit()}</span>
         <span class="x">×</span><input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}">`;
     } else if (sx.metric === 'reps') {
-      inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">reps</span>`;
+      inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">${esc(sx.repUnit ?? 'reps')}</span>`;
     } else if (sx.metric === 'time') {
       inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>${st.done ? '' : goBtn(`data-act="workStart" data-id="${st.id}"`, state.timer?.target?.set === st.id)}`;
     } else if (sx.metric === 'distance') {
@@ -1149,7 +1168,7 @@ function weekBudgetCard() {
   const b = G.weekBudget(state);
   const src = k => b.fromHistory[k] ? 'from your last 4 weeks' : state.settings.week?.[k] ? 'you set this' : 'a starting guess';
   const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
-  const rows = [['T1', 'Heavy'], ['T2', 'Moderate'], ['T3', 'Accessory'], ['TECH', 'Technique'], ['JUMP', 'Jumps']].filter(([t]) => (t !== 'TECH' && t !== 'JUMP') || b.count[t])
+  const rows = [['T1', 'Heavy'], ['T2', 'Moderate'], ['T3', 'Accessory'], ['TECH', 'Technique'], ['JUMP', 'Jumps'], ['COND', 'Conditioning']].filter(([t]) => ['T1', 'T2', 'T3'].includes(t) || b.count[t])
     .map(([t, label]) => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${label}</span>
       <span class="meta">${t === 'JUMP' ? 'in your warm-up, no workout time' : `~${round(b.cost[t])} min each`}${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
   const verdict = b.room >= 0
@@ -1389,7 +1408,7 @@ function viewHistoryEdit(hs) {
       <span class="x">×</span><input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}">`;
     else if (sx?.metric === 'time') inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>`;
     else if (sx?.metric === 'distance') inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
-    else inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">reps</span>`;
+    else inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">${esc(sx?.repUnit ?? 'reps')}</span>`;
     return `<div class="set ${st.warmup ? 'warm' : ''}"><span class="n" ${st.warmup ? 'title="Warm-up"' : ''}>${st.warmup ? 'W' : i + 1}</span>${inputs}
       <button class="icon setdel" data-act="histDelSet" data-id="${st.id}" aria-label="Delete this set">✕</button></div>`;
   };
@@ -1666,6 +1685,7 @@ function settingsTiers() {
     T3: 'Accessory work, 10+ reps a set (GZCL: 30+ reps total)',
     TECH: 'Technique: quality explosive reps when tired or after a heavy day',
     JUMP: 'Jumps and plyometrics, counted in contacts. Only in a workout when you turn on Add jumps at check-in',
+    COND: 'Conditioning: EMOMs on the Assault bike, counted in calories. Only in a workout when you turn on Add conditioning at check-in',
   };
   return `<p class="meta pad">A session fills a goal when its counted sets reach the minimum reps for that tier. For T1 and T2, only sets at or above the minimum intensity count.</p>` +
     L.TIERS.map(t => {
@@ -1673,7 +1693,7 @@ function settingsTiers() {
       return `<div class="label"><span class="tier ${t}">${t}</span> ${desc[t]}</div><div class="menu">
         ${frow('Minimum reps', numIn(`tiers.${t}.repMin`, c.repMin), 'Working reps needed to count')}
         ${frow('Maximum reps', numIn(`tiers.${t}.repMax`, c.repMax), 'Upper end when picking schemes')}
-        ${t === 'JUMP' ? ''
+        ${t === 'JUMP' || t === 'COND' ? ''
           : t === 'T3' ? frow('Or minimum sets', numIn('tiers.T3.setMin', c.setMin), 'For time or bodyweight work')
           : t === 'TECH' ? frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max. Any load still counts.') + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))
           : frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max') + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))}
@@ -1687,7 +1707,7 @@ function settingsSchemes() {
       const list = state.schemes.filter(sc => sc.tiers.includes(t));
       return `<div class="label"><span class="tier ${t}">${t}</span></div><div class="menu">${list.map(sc =>
         `<button class="menurow" data-act="schemeEdit" data-id="${sc.id}"><span class="grow"><span class="name">${esc(sc.name)}</span>
-          <span class="meta">${sc.sets * sc.reps} reps · ${sc.minutes} min · rest ${clock(sc.restSec)}</span></span><span class="chev">›</span></button>`).join('')
+          <span class="meta">${L.schemeReps(sc)} ${sc.tiers.includes('COND') ? 'cal' : 'reps'} · ${sc.minutes} min · ${sc.emom ? `every ${clock(sc.emom)}` : `rest ${clock(sc.restSec)}`}</span></span><span class="chev">›</span></button>`).join('')
         || '<p class="muted pad">None yet.</p>'}</div>`;
     }).join('') + `<button class="addblock" data-act="schemeNew">+ Add scheme</button>`;
 }
@@ -2067,6 +2087,7 @@ const TIER_DESC = {
   T3: 'Accessory: 10+ reps a set, 30+ total. Any load counts.',
   TECH: 'Technique: crisp, low-volume explosive work when tired or after heavy days. Has its own goal.',
   JUMP: 'Jumps: plyometrics in short, fast sets, counted in contacts. Suggested only when you turn on Add jumps.',
+  COND: 'Conditioning: EMOMs on the Assault bike, counted in calories. Suggested only when you turn on Add conditioning.',
 };
 
 // Pick any exercise, from any family: mode 'add' adds a block, mode 'swap' replaces one.
@@ -2195,7 +2216,7 @@ function sheetSwapScheme(sh) {
     <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {
       const load = L.targetLoad(state, ex, b.tier, sc, s.checkinAt);
-      const bits = [`${time(sc)} min`, `${sc.sets * sc.reps} reps`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
+      const bits = [`${time(sc)} min`, `${L.schemeReps(sc)} ${b.tier === 'COND' ? 'cal' : 'reps'}`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
         load != null ? `${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : '', time(sc) > budget ? 'over time' : '',
         L.overRepCap(ex, sc) ? `over ${ex.maxReps}-rep cap` : ''].filter(Boolean);
       const dim = time(sc) > budget || L.overRepCap(ex, sc);
@@ -3205,6 +3226,16 @@ const actions = {
   },
 
   restEdit: d => openSheet({ type: 'rest', blockId: d.b, value: null, saveDefault: false }),
+  // The EMOM clock: round 1 starts now, and the timer counts down to round 2 (then each logged round to the next).
+  emomStart: d => {
+    const { s, b } = findBlock(d.b);
+    unlockAudio();
+    b.emomStart = Date.now();
+    const every = schOf(b.schemeId).emom;
+    state.timer = { endsAt: b.emomStart + every * 1000, total: every, blockId: b.id, setId: null, next: `${exOf(b.exerciseId)?.name ?? ''} · round 2`, warned: false, alerted: false };
+    setWakeLock(true);
+    save(); render();
+  },
   restNudge: d => {
     const { b } = findBlock(ui.sheet.blockId);
     ui.sheet.saveDefault = sheetEl.querySelector('#rest-save').checked;
@@ -3923,6 +3954,8 @@ document.addEventListener('change', e => {
     ui.ci.split = el.checked;
   } else if (el.hasAttribute('data-ci-jumps')) {
     ui.ci.jumps = el.checked;
+  } else if (el.hasAttribute('data-ci-cond')) {
+    ui.ci.cond = el.checked;
   } else if (el.hasAttribute('data-import')) {
     importFile(el.files[0]);
   } else if (el.hasAttribute('data-fnfile')) {
