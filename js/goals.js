@@ -25,7 +25,7 @@ function familyStats(state, now, days) {
     const day = L.dayKey(s.loggedAt);
     workouts.add(day);
     if (!byFam.has(ex.familyId)) {
-      byFam.set(ex.familyId, { days: new Set(), explosive: new Set(), loaded: new Set(), tiers: { T1: new Set(), T2: new Set(), T3: new Set(), TECH: new Set(), JUMP: new Set() }, reps: new Map(), uses: new Map() });
+      byFam.set(ex.familyId, { days: new Set(), explosive: new Set(), loaded: new Set(), tiers: { T1: new Set(), T2: new Set(), T3: new Set(), TECH: new Set(), JUMP: new Set(), COND: new Set() }, reps: new Map(), uses: new Map() });
     }
     const f = byFam.get(ex.familyId);
     f.days.add(day);

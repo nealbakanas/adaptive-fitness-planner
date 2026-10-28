@@ -1,5 +1,5 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
-import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES } from './seed.js';
+import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES, COND_TIER, COND_SCHEMES, COND_FAMILY, condExercise } from './seed.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
@@ -256,7 +256,8 @@ export function migrate(s) {
     // v17: the Basement has no kettlebell, dip belt, pull-up bar, rings or dip station. Only a Basement that still has
     // the full starter gear list is changed; one you've edited is left alone.
     const basement = s.locations.find(l => l.id === 'loc-basement');
-    if (basement && EQUIPMENT.every(eq => basement.equipment.includes(eq))) basement.equipment = basement.equipment.filter(eq => !NOT_IN_BASEMENT.includes(eq));
+    // (the starter list as it was then: no bike)
+    if (basement && EQUIPMENT.filter(eq => eq !== 'assault-bike').every(eq => basement.equipment.includes(eq))) basement.equipment = basement.equipment.filter(eq => !NOT_IN_BASEMENT.includes(eq));
     s.version = 17;
   }
   if (s.version < 18) {
@@ -292,6 +293,19 @@ export function migrate(s) {
   if (s.version < 22) {
     // v22: weekly reviews (js/review.js). `reviews` arrives as [] from the defaults above; a goal with quota 0 is paused.
     s.version = 22;
+  }
+  if (s.version < 23) {
+    // v23: conditioning (the COND tier): the Assault bike (at the Basement), its family, the EMOM schemes and a weekly goal,
+    // suggested only when you turn on Add conditioning. Anything you already have with these ids stays as it is.
+    s.tiers.COND ??= { ...COND_TIER };
+    if (!s.families.some(f => f.id === COND_FAMILY.id)) s.families.push({ ...COND_FAMILY });
+    if (!s.exercises.some(e => e.id === 'ex-assault-bike')) s.exercises.push(condExercise());
+    for (const sc of COND_SCHEMES) if (!s.schemes.some(x => x.id === sc.id)) s.schemes.push({ ...sc, tiers: [...sc.tiers] });
+    if (!s.equipment.includes('assault-bike')) s.equipment.push('assault-bike');
+    const basement = s.locations.find(l => l.id === 'loc-basement');
+    if (basement && !basement.equipment.includes('assault-bike')) basement.equipment.push('assault-bike');
+    if (!s.slots.some(sl => sl.tier === 'COND')) s.slots.push({ id: 'sl-cond-bike', familyId: 'fam-cond', tier: 'COND', quota: 1, priority: 2 });
+    s.version = 23;
   }
   return s;
 }

@@ -356,6 +356,7 @@ button.quiet { color: var(--muted); }
 /* ---------- technique tier and readiness ---------- */
 .tier.TECH { background: #e9c46a; }
 .tier.JUMP { background: #8ecae6; color: #102a35; }
+.tier.COND { background: #f28bb3; color: #3b0d20; }
 .sub.ready { color: var(--warn); margin-top: 2px; }
 .sub.ready.good { color: var(--good); }
 
@@ -469,7 +470,7 @@ button.small.on { border-color: var(--accent); color: var(--accent); }
 .histedit .setdel { margin-left: auto; color: var(--muted); border: none; background: none; min-width: 36px; }
 select.tierpick { appearance: none; border: none; font-weight: 700; padding: 6px 12px; min-height: 0; width: auto; border-radius: 8px; color: #111; cursor: pointer; }
 select.tierpick.T1 { background: var(--t1); } select.tierpick.T2 { background: var(--t2); } select.tierpick.T3 { background: var(--t3); }
-select.tierpick.TECH { background: #e9c46a; } select.tierpick.JUMP { background: #8ecae6; }
+select.tierpick.TECH { background: #e9c46a; } select.tierpick.JUMP { background: #8ecae6; } select.tierpick.COND { background: #f28bb3; }
 .histhead .small { margin-left: auto; }
 .histedit .bhead { position: relative; padding-right: 40px; }
 select.tierpick { width: auto; flex: none; }

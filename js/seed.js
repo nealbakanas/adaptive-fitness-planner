@@ -7,6 +7,7 @@ export const EQUIPMENT = [
   'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell',
   'dip-belt', 'pullup-bar', 'rings', 'dip-station', 'bands', 'ab-wheel', 'box',
   'hyper-pro', 'leg-developer', // Freak Athlete Hyper Pro and its leg extension / leg curl attachment
+  'assault-bike', // air bike for conditioning
 ];
 // Everything the library knows about, including gear only the Garage Strength exercises use (not at any location to start).
 export const ALL_EQUIPMENT = [...EQUIPMENT, ...GS_EQUIPMENT];
@@ -24,7 +25,7 @@ export const defaultAnytime = (equipment, bodyweight = false) => !bodyweight && 
 
 // Region matters for explosive work: heavy work in a region makes explosive work there technique, not power.
 const FAMILY_REGION = { 'fam-squat': 'lower', 'fam-vpull': 'upper', 'fam-dip': 'upper', 'fam-clean': 'full', 'fam-incline': 'upper',
-  'fam-upperback': 'upper', 'fam-arms': 'upper', 'fam-core': 'full', 'fam-jumps': 'lower',
+  'fam-upperback': 'upper', 'fam-arms': 'upper', 'fam-core': 'full', 'fam-jumps': 'lower', 'fam-cond': 'full',
   'fam-hams': 'lower', 'fam-hinge': 'lower', 'fam-quads': 'lower', 'fam-calves': 'lower',
   ...Object.fromEntries(GS_FAMILIES.map(f => [f.id, f.region])) };
 const EXPLOSIVE_FAMILIES = ['fam-clean', 'fam-jumps', ...GS_FAMILIES.filter(f => f.explosive).map(f => f.id)];
@@ -50,6 +51,22 @@ export const JUMP_TIER = { repMin: 12, repMax: 30, intMin: null, intMax: null };
 const jsc = (sets, reps, minutes) => ({ id: `s-j-${sets}x${reps}`, name: `${sets}×${reps}`, sets, reps, restSec: 60, minutes, tiers: ['JUMP'] });
 export const JUMP_SCHEMES = [jsc(4, 3, 5), jsc(5, 3, 6), jsc(6, 3, 7), jsc(3, 5, 5), jsc(4, 5, 6), jsc(5, 5, 7), jsc(3, 8, 6)];
 
+// Conditioning (the COND tier): calories on the Assault bike, as EMOM workouts. Sets are rounds, reps are calories,
+// `emom` the seconds each round has (work, then the rest of the interval), `ramp` the calories added each round.
+// Counted in calories per session. Only in a workout when you turn on Add conditioning. Also added by the v23 upgrade.
+export const COND_TIER = { repMin: 90, repMax: 400, intMin: null, intMax: null };
+const csc = (id, name, sets, reps, emom, minutes, more = {}) => ({ id, name, sets, reps, restSec: 0, emom, minutes, tiers: ['COND'], ...more });
+export const COND_SCHEMES = [
+  csc('s-c-emom10x12', 'EMOM 10 · 12 cal', 10, 12, 60, 10),
+  csc('s-c-emom12x15', 'EMOM 12 · 15 cal', 12, 15, 60, 12),
+  csc('s-c-emom20x10', 'EMOM 20 · 10 cal', 20, 10, 60, 20),
+  csc('s-c-e2mom8x15', 'E2MOM 16 · 15 cal', 8, 15, 120, 16),   // every 2 minutes: work one, rest one
+  csc('s-c-e2mom5x20', 'E2MOM 10 · 20 cal sprint', 5, 20, 120, 10),
+  csc('s-c-ladder10', 'EMOM 10 ladder · 5→14 cal', 10, 5, 60, 10, { ramp: 1 }), // one more calorie each minute
+];
+export const COND_FAMILY = { id: 'fam-cond', name: 'Conditioning', defaultExerciseId: 'ex-assault-bike' };
+export const condExercise = () => ex('ex-assault-bike', 'Assault bike', 'fam-cond', 1, 'reps', ['assault-bike'], { repUnit: 'cal', role: 'accessory' });
+
 export function seed() {
   const families = [
     { id: 'fam-squat', name: 'Squat pattern', defaultExerciseId: 'ex-back-squat' },
@@ -61,6 +78,7 @@ export function seed() {
     { id: 'fam-arms', name: 'Arms (pump)', defaultExerciseId: 'ex-db-curl' },
     { id: 'fam-core', name: 'Core', defaultExerciseId: 'ex-hanging-knee' },
     { id: 'fam-jumps', name: 'Jumps', defaultExerciseId: 'ex-broad-jump' },
+    { ...COND_FAMILY },
     { id: 'fam-hams', name: 'Hamstrings', defaultExerciseId: 'ex-nordic' },
     { id: 'fam-hinge', name: 'Hinge', defaultExerciseId: 'ex-back-ext' },
     { id: 'fam-quads', name: 'Quads', defaultExerciseId: 'ex-leg-ext' },
@@ -118,6 +136,7 @@ export function seed() {
     ex('ex-depth-jump', 'Depth jump', 'fam-jumps', 1, 'reps', ['box'], { maxReps: 5 }),
     ex('ex-box-jump', 'Box jump', 'fam-jumps', 2, 'reps', ['box'], { maxReps: 5 }),
     ex('ex-broad-jump', 'Broad jump', 'fam-jumps', 3, 'reps', [], { maxReps: 5 }),
+    condExercise(),
     ex('ex-jump-squat', 'Jump squat', 'fam-jumps', 4, 'reps', [], { maxReps: 8 }),
     ex('ex-skater-jump', 'Skater jump', 'fam-jumps', 5, 'reps', [], { maxReps: 8 }),
     ex('ex-jump-lunge', 'Jump lunge', 'fam-jumps', 6, 'reps', [], { maxReps: 10 }),
@@ -183,6 +202,7 @@ export function seed() {
     sc('s-t2-10x3', 10, 3, 60, 13, ['T2']),
     // Jumps, counted in contacts: short sets so every one is fast, on about a minute's rest.
     ...JUMP_SCHEMES,
+    ...COND_SCHEMES,
   ];
 
   const slots = [
@@ -196,6 +216,8 @@ export function seed() {
     { id: 'sl-t3-core', familyId: 'fam-core', tier: 'T3', quota: 2, priority: 1 },
     // Jumps: their own category, counted in contacts. Only suggested on days you turn on Add jumps.
     { id: 'sl-t2-jumps', familyId: 'fam-jumps', tier: 'JUMP', quota: 2, priority: 2, repMin: 12, repMax: 20 },
+    // Conditioning: an EMOM on the bike. Only suggested on days you turn on Add conditioning.
+    { id: 'sl-cond-bike', familyId: 'fam-cond', tier: 'COND', quota: 1, priority: 2 },
     // Technique: the same explosive lifts practiced when tired or after heavy work. Credits only this goal.
     { id: 'sl-tq-clean', familyId: 'fam-clean', tier: 'TECH', quota: 2, priority: 1 },
     // Hamstrings: deficit RDLs as moderate (T2) loaded work. Names the exercise so Nordics don't stand in for it.
@@ -203,7 +225,7 @@ export function seed() {
   ];
 
   return {
-    version: 22,
+    version: 23,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -235,6 +257,8 @@ export function seed() {
       TECH: { repMin: 8, repMax: 16, intMin: 0.5, intMax: 0.7 },
       // Jumps: contacts per session. No load, so no intensity.
       JUMP: JUMP_TIER,
+      // Conditioning: calories per session.
+      COND: COND_TIER,
     },
     equipment: [...ALL_EQUIPMENT], // grows as you add gear in the app
     families, exercises, schemes, slots,

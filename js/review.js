@@ -21,6 +21,7 @@ export const REASONS = {
   time: 'Never fit the time',
   others: 'Other goals came first',
   jumps: 'Jumps were off at check-in',
+  cond: 'Conditioning was off at check-in',
   workouts: 'Not enough workouts',
   short: 'Done, but short of the reps',
   fewer: 'Picked fewer times than its quota',
@@ -46,6 +47,7 @@ function slipReason(state, sl, r, wk) {
   if (notes.some(n => /no scheme fits/.test(n))) return 'time';
   if (notes.some(n => /score too low|cap reached|favors other work/.test(n))) return 'others';
   if (notes.some(n => /jumps are off/.test(n))) return 'jumps';
+  if (notes.some(n => /conditioning is off/.test(n))) return 'cond';
   if (wk.workouts < sl.quota) return 'workouts';
   if (r && r.days.size > r.exposures) return 'short';
   return r?.filled ? 'fewer' : 'none';

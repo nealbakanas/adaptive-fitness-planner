@@ -901,6 +901,63 @@ step('skip a category today: nothing from it is suggested', () => {
   check('tap again to un-skip', !(store.state && q(`[data-act=ciSkip][data-v="${fam}"]`).classList.contains('on')));
 });
 
+step('conditioning: Add conditioning, an EMOM on the bike, the EMOM clock', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  const box = q('input[data-ci-cond]');
+  check('check-in has Add conditioning, off by default', !!box && !box.checked);
+  box.checked = true; fire(box, 'change');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  const b = sess.blocks.find(x => x.tier === 'COND');
+  check('the workout has one conditioning block, last', !!b && sess.blocks.filter(x => x.tier === 'COND').length === 1 && [...document.querySelectorAll('section.block .tier')].at(-1)?.textContent.startsWith('COND'));
+  const card = [...document.querySelectorAll('section.block')].find(x => x.querySelector(`[data-b="${b.id}"]`));
+  check('in calories, every minute', /cal/.test(card.innerText) && /every \d:\d\d/.test(card.innerText) && /EMOM/.test(card.innerText), card.innerText.slice(0, 300));
+  const sc = st().schemes.find(x => x.id === b.schemeId);
+  click(card.querySelector('[data-act=emomStart]'));
+  check('Start EMOM runs the clock to round 2', Math.abs(st().timer.endsAt - Date.now() - sc.emom * 1000) < 2000 && /round 2/.test(st().timer.next));
+  const card2 = [...document.querySelectorAll('section.block')].find(x => x.querySelector(`[data-b="${b.id}"]`));
+  click(card2.querySelector('[data-act=check]'));
+  check('logging round 1 keeps the clock: the rest ends when round 2 starts', Math.abs(st().timer.endsAt - (b.emomStart + sc.emom * 1000)) < 1500, `${st().timer.endsAt - b.emomStart}`);
+  if (sc.ramp) check('a ladder adds a calorie each round', st().sets.filter(x => x.blockId === b.id).map(x => x.reps).join() === Array.from({ length: sc.sets }, (_, i) => sc.reps + i * sc.ramp).join());
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  const box2 = q('input[data-ci-cond]'); box2.checked = false; fire(box2, 'change');
+  st().timer = null;
+});
+
+step('conditioning supersets: the bike is the superset idea for the first T1 and T2', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  click('[data-k=minutes][data-v="90"]');
+  const box = q('input[data-ci-condpair]');
+  check('check-in has Conditioning supersets, off by default', !!box && !box.checked);
+  box.checked = true; fire(box, 'change');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  const ideaFor = b => [...document.querySelectorAll('.pairidea')].find(x => x.querySelector(`[data-act=pairAdd][data-b="${b.id}"]`));
+  const t1 = sess.blocks.find(b => b.tier === 'T1'), t2s = sess.blocks.filter(b => b.tier === 'T2' && !sess.blocks.some(x => x.pairOf === b.id));
+  check('the workout has a T1 and a T2', !!t1 && t2s.length > 0, sess.blocks.map(b => b.tier).join());
+  check('the first T1 gets the bike', /Assault bike/.test(ideaFor(t1)?.innerText ?? '') && /COND/.test(ideaFor(t1).innerText), ideaFor(t1)?.innerText);
+  const order = [...document.querySelectorAll('[data-act=pairAdd]')].map(x => x.dataset.b);
+  const firstT2 = sess.blocks.filter(b => b.tier === 'T2').sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).find(b => ideaFor(b));
+  check('the first T2 gets the bike', firstT2 && /Assault bike/.test(ideaFor(firstT2).innerText));
+  const later = sess.blocks.filter(b => b.tier === 'T2' && b !== firstT2 && ideaFor(b));
+  check('later T2s get the usual ideas', later.every(b => !/Assault bike/.test(ideaFor(b).innerText)));
+  click(ideaFor(t1).querySelector('[data-act=pairAdd]'));
+  const nb = sess.blocks.find(b => b.pairOf === t1.id);
+  const sets = st().sets.filter(x => x.blockId === nb?.id);
+  check('+ Add pairs a bike round with each T1 set', nb?.tier === 'COND' && nb.exerciseId === 'ex-assault-bike'
+    && sets.length === st().schemes.find(x => x.id === t1.schemeId).sets && sets.every(x => x.reps === 8), JSON.stringify(nb));
+  check('shown as a superset in the rest', /Superset with/.test(text()));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  const box2 = q('input[data-ci-condpair]'); box2.checked = false; fire(box2, 'change');
+  click('[data-k=minutes][data-v="45"]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
