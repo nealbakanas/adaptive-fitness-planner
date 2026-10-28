@@ -2343,6 +2343,18 @@ test('v24: bike sets added by hand at T3 move to conditioning and count toward i
   ok(L.isConditioning(m, L.byId(m.exercises, 'ex-assault-bike')) && !L.isConditioning(m, L.byId(m.exercises, 'ex-db-curl')));
 });
 
+test('conditioning counts at 90 calories or 8 rounds: an EMOM 10 at 8 cal counts, a 5-round superset alone does not', () => {
+  const s = seed();
+  const at = L.weekBounds(s).start + 3600e3;
+  const log = (n, cal, day) => { for (let i = 0; i < n; i++) s.sets.push({ id: L.uid(), sessionId: `d${day}`, blockId: `d${day}`, exerciseId: 'ex-assault-bike', tier: 'COND', reps: cal, done: true, loggedAt: at + day * DAY + i * 6e4 }); };
+  log(5, 8, 0); // a T1 superset: 40 cal, 5 rounds
+  eq(L.creditWeek(s).slots.get('sl-cond-bike').filled, 0);
+  log(10, 8, 1); // EMOM 10 · 8 cal: 80 cal, 10 rounds
+  eq(L.creditWeek(s).slots.get('sl-cond-bike').filled, 1);
+  const old = seed(); old.version = 23; delete old.tiers.COND.setMin;
+  eq(migrate(old).tiers.COND.setMin, 8);
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

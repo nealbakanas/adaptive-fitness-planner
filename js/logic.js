@@ -383,6 +383,7 @@ export function slotDose(state, slot, tier = slot?.tier) {
 
 export function doseMet(cfg, tier, agg) {
   if (tier === 'T3') return agg.reps >= cfg.repMin || agg.sets >= (cfg.setMin || 3);
+  if (tier === 'COND') return agg.reps >= cfg.repMin || agg.sets >= (cfg.setMin || 8); // calories, or rounds (an EMOM of 8+)
   return agg.reps >= cfg.repMin;
 }
 

@@ -958,7 +958,7 @@ function viewBlock(s, b, credit, idea = null) {
     const r = credit.slots.get(slot.id);
     const agg = r?.days.get(L.dayKey()) || { reps: 0, sets: 0 };
     const need = L.slotDose(state, slot, b.tier).repMin;
-    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : b.tier === 'COND' ? 'calories' : 'qualifying reps'}`;
+    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : b.tier === 'COND' ? `${agg.reps}/${need} cal or ${agg.sets}/${cfg.setMin || 8} rounds` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : b.tier === 'COND' ? 'calories' : 'qualifying reps'}`;
     dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? '✓ Filled' : 'Toward'} ${esc(slotLabel(slot))}: ${prog}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
@@ -1226,7 +1226,8 @@ function viewWeek() {
   h += `<div class="sectionhead"><h3>Weekly goals</h3><div class="brow"><button class="small" data-act="gsOpen">Suggest from history</button><button class="small" data-act="goalNew">+ Add goal</button></div></div>
     <div class="card flush">${slots.map(r => {
     const pips = Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
-    const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? a.reps + ' reps' : a.sets + ' sets'}${a.met ? ' ✓' : ' (partial)'}`).join(' · ');
+    const unitOf = r.slot.tier === 'COND' ? ['cal', 'rounds'] : r.slot.tier === 'JUMP' ? ['contacts', 'sets'] : ['reps', 'sets'];
+    const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? `${a.reps} ${unitOf[0]}` : `${a.sets} ${unitOf[1]}`}${a.met ? ' ✓' : ' (partial)'}`).join(' · ');
     const ex = exOf(r.slot.exerciseId);
     const name = ex?.name ?? famOf(r.slot.familyId)?.name;
     const sub = [r.slot.quota ? '' : 'paused', ex ? famOf(r.slot.familyId)?.name : 'any exercise in family', days].filter(Boolean).join(' · ');
@@ -1725,7 +1726,7 @@ function settingsTiers() {
       return `<div class="label"><span class="tier ${t}">${t}</span> ${desc[t]}</div><div class="menu">
         ${frow('Minimum reps', numIn(`tiers.${t}.repMin`, c.repMin), 'Working reps needed to count')}
         ${frow('Maximum reps', numIn(`tiers.${t}.repMax`, c.repMax), 'Upper end when picking schemes')}
-        ${t === 'JUMP' || t === 'COND' ? ''
+        ${t === 'JUMP' ? '' : t === 'COND' ? frow('Or minimum rounds', numIn('tiers.COND.setMin', c.setMin ?? 8), 'An EMOM of this many rounds counts, whatever the calories')
           : t === 'T3' ? frow('Or minimum sets', numIn('tiers.T3.setMin', c.setMin), 'For time or bodyweight work')
           : t === 'TECH' ? frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max. Any load still counts.') + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))
           : frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max') + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))}
