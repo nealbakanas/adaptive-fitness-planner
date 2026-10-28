@@ -2316,6 +2316,20 @@ test('conditioning: fewer calories on a tired or easy day, more on a fresh or sw
   ok(L.pickScheme(s, 'COND', bike, 10, ci(), s.tiers.COND).minutes <= 10, 'fits the time');
 });
 
+test('conditioning is never a superset idea, however much you use the bike', () => {
+  const s = seed();
+  // Lots of bike lately, and you love it.
+  for (let i = 0; i < 30; i++) s.sets.push({ id: `bk${i}`, sessionId: `bk${i % 5}`, blockId: 'bk', exerciseId: 'ex-assault-bike', tier: 'COND', reps: 15, done: true, loggedAt: Date.now() - (i % 5 + 1) * DAY });
+  L.byId(s.exercises, 'ex-assault-bike').pref = 'fav';
+  const c = ci({ minutes: 60, cond: true });
+  for (const m of s.exercises.filter(e => !e.archived)) ok(L.suggestPair(s, c, m)?.exercise.id !== 'ex-assault-bike', m.name);
+  for (const minutes of [30, 45, 60, 90]) {
+    const r = L.buildSuggestion(s, ci({ minutes, cond: true }));
+    const b = r.blocks.find(x => x.exerciseId === 'ex-assault-bike');
+    ok(b && b.tier === 'COND' && !b.pairOf && !r.blocks.some(x => x.pairOf === b.id), `${minutes}`);
+  }
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

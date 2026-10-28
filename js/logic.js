@@ -798,7 +798,8 @@ export function pairT3s(state, blocks, place = activeBuild?.state === state ? ac
 export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = creditWeek(state) } = {}) {
   const loc = placeOf(state, ci);
   // A T1/T2 goal's own lift is a main lift, not something to squeeze into a rest; its easier variations are fair game.
-  const skip = new Set([...excludeFamilies, ...(ci?.skip || [])]);
+  // Conditioning is its own block, done last: never something to squeeze into a rest.
+  const skip = new Set([...excludeFamilies, ...(ci?.skip || []), 'fam-cond', ...state.slots.filter(sl => sl.tier === 'COND').map(sl => sl.familyId)]);
   const goalLift = sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId;
   const mainLifts = new Set(state.slots.filter(sl => sl.tier === 'T1' || sl.tier === 'T2').map(goalLift));
   // Heavy-goal lifts: support work picks a different lift for the pattern when there is one, so it complements them.
