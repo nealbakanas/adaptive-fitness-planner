@@ -958,7 +958,7 @@ function viewBlock(s, b, credit, idea = null) {
     const r = credit.slots.get(slot.id);
     const agg = r?.days.get(L.dayKey()) || { reps: 0, sets: 0 };
     const need = L.slotDose(state, slot, b.tier).repMin;
-    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : b.tier === 'COND' ? 'calories' : 'qualifying reps'}`;
+    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : b.tier === 'COND' ? `${agg.reps}/${need} cal or ${agg.sets}/${cfg.setMin || 8} rounds` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : b.tier === 'COND' ? 'calories' : 'qualifying reps'}`;
     dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? '✓ Filled' : 'Toward'} ${esc(slotLabel(slot))}: ${prog}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
@@ -1226,7 +1226,8 @@ function viewWeek() {
   h += `<div class="sectionhead"><h3>Weekly goals</h3><div class="brow"><button class="small" data-act="gsOpen">Suggest from history</button><button class="small" data-act="goalNew">+ Add goal</button></div></div>
     <div class="card flush">${slots.map(r => {
     const pips = Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
-    const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? a.reps + ' reps' : a.sets + ' sets'}${a.met ? ' ✓' : ' (partial)'}`).join(' · ');
+    const unitOf = r.slot.tier === 'COND' ? ['cal', 'rounds'] : r.slot.tier === 'JUMP' ? ['contacts', 'sets'] : ['reps', 'sets'];
+    const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? `${a.reps} ${unitOf[0]}` : `${a.sets} ${unitOf[1]}`}${a.met ? ' ✓' : ' (partial)'}`).join(' · ');
     const ex = exOf(r.slot.exerciseId);
     const name = ex?.name ?? famOf(r.slot.familyId)?.name;
     const sub = [r.slot.quota ? '' : 'paused', ex ? famOf(r.slot.familyId)?.name : 'any exercise in family', days].filter(Boolean).join(' · ');
@@ -1383,6 +1384,10 @@ function histNewSet(s, block, ex, at, from = null) {
 }
 
 // Picking an exercise in the sheet: change a group to it, or add it as a new group with one set.
+// The tier for an exercise you add by hand: conditioning is always conditioning (so it counts toward that goal), the rest
+// is the tier you picked in the sheet.
+const tierFor = (ex, asked) => (L.isConditioning(state, ex) ? 'COND' : asked);
+
 function histPick(exerciseId) {
   const sh = ui.sheet, s = L.byId(state.sessions, sh.sessionId), ex = exOf(exerciseId);
   if (!s || !ex) return;
@@ -1392,13 +1397,14 @@ function histPick(exerciseId) {
     tidyBlocks(s);
   } else {
     const last = state.sets.filter(x => x.sessionId === s.id && x.done).reduce((m, x) => Math.max(m, x.loggedAt), s.firstSetAt ?? s.checkinAt ?? Date.now());
-    const block = { id: L.uid(), tier: sh.tier, slotId: slotIdFor(ex.id, sh.tier), exerciseId: ex.id, schemeId: null, swaps: [{ type: 'add', to: ex.id, at: Date.now() }] };
+    const tier = tierFor(ex, sh.tier);
+    const block = { id: L.uid(), tier, slotId: slotIdFor(ex.id, tier), exerciseId: ex.id, schemeId: null, swaps: [{ type: 'add', to: ex.id, at: Date.now() }] };
     (s.blocks ??= []).push(block);
     state.sets.push(histNewSet(s, block, ex, last + 1000));
   }
   ui.sheet = null; renderSheet();
   save(); render();
-  toast(sh.mode === 'histSwap' ? `Changed to ${ex.name}` : `Added ${ex.name} as ${sh.tier}`, () => restoreSnap(snap));
+  toast(sh.mode === 'histSwap' ? `Changed to ${ex.name}` : `Added ${ex.name} as ${tierFor(ex, sh.tier)}`, () => restoreSnap(snap));
 }
 
 // Moves a workout to another day, keeping its time of day: its sets, check-in and any mobility in it move together.
@@ -1720,7 +1726,7 @@ function settingsTiers() {
       return `<div class="label"><span class="tier ${t}">${t}</span> ${desc[t]}</div><div class="menu">
         ${frow('Minimum reps', numIn(`tiers.${t}.repMin`, c.repMin), 'Working reps needed to count')}
         ${frow('Maximum reps', numIn(`tiers.${t}.repMax`, c.repMax), 'Upper end when picking schemes')}
-        ${t === 'JUMP' || t === 'COND' ? ''
+        ${t === 'JUMP' ? '' : t === 'COND' ? frow('Or minimum rounds', numIn('tiers.COND.setMin', c.setMin ?? 8), 'An EMOM of this many rounds counts, whatever the calories')
           : t === 'T3' ? frow('Or minimum sets', numIn('tiers.T3.setMin', c.setMin), 'For time or bodyweight work')
           : t === 'TECH' ? frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max. Any load still counts.') + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))
           : frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max') + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))}
@@ -3376,11 +3382,12 @@ const actions = {
     if (sh.mode === 'histSwap' || sh.mode === 'histAdd') return histPick(d.id);
     if (sh.mode === 'swap') return swapTo(d.id);
     const s = currentSession();
-    const nb = addBlock(s, exOf(d.id), sh.tier);
+    const tier = tierFor(exOf(d.id), sh.tier);
+    const nb = addBlock(s, exOf(d.id), tier);
     if (sh.mode === 'pair') nb.pairOf = sh.blockId;
     ui.sheet = null;
     save(); render();
-    toast(`Added ${exOf(d.id).name} as ${sh.tier}`);
+    toast(`Added ${exOf(d.id).name} as ${tier}`);
   },
   addExCreate: () => {
     const sh = ui.sheet;

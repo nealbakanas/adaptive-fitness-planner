@@ -54,7 +54,7 @@ export const JUMP_SCHEMES = [jsc(4, 3, 5), jsc(5, 3, 6), jsc(6, 3, 7), jsc(3, 5,
 // Conditioning (the COND tier): calories on the Assault bike, as EMOM workouts. Sets are rounds, reps are calories,
 // `emom` the seconds each round has (work, then the rest of the interval), `ramp` the calories added each round.
 // Counted in calories per session. Only in a workout when you turn on Add conditioning. Also added by the v23 upgrade.
-export const COND_TIER = { repMin: 90, repMax: 400, intMin: null, intMax: null };
+export const COND_TIER = { repMin: 90, repMax: 400, setMin: 8, intMin: null, intMax: null }; // 90 calories, or 8 rounds
 const csc = (id, name, sets, reps, emom, minutes, more = {}) => ({ id, name, sets, reps, restSec: 0, emom, minutes, tiers: ['COND'], ...more });
 export const COND_SCHEMES = [
   csc('s-c-emom10x12', 'EMOM 10 · 12 cal', 10, 12, 60, 10),
@@ -225,7 +225,7 @@ export function seed() {
   ];
 
   return {
-    version: 23,
+    version: 24,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday

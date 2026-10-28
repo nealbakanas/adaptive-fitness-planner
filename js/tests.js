@@ -222,7 +222,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 23);
+  eq(m.version, 24);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -241,7 +241,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 23);
+  eq(m.version, 24);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -513,7 +513,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 23);
+  eq(m.version, 24);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -675,7 +675,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 23);
+  eq(m.version, 24);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -702,7 +702,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 23);
+  eq(m.version, 24);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1224,7 +1224,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 23);
+  eq(m.version, 24);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1383,7 +1383,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 23);
+  eq(m.version, 24);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1476,10 +1476,10 @@ test('v19: data saved before it opens with savedAt unset, and the summary counts
   s.version = 18;
   delete s.savedAt;
   const m = migrate(s);
-  eq([m.version, m.savedAt], [23, null]);
+  eq([m.version, m.savedAt], [24, null]);
   s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
   s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
-  eq(V.summaryOf(s), { version: 23, workouts: 1, sets: 1 });
+  eq(V.summaryOf(s), { version: 24, workouts: 1, sets: 1 });
 });
 atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
   if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
@@ -1642,7 +1642,7 @@ test('merge: settings merge key by key; whole states keep both devices\' work an
   eq(m.sessions.map(x => x.id), ['ls', 'rs']);
   ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
   ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
-  eq(migrate(m).version, 23);
+  eq(migrate(m).version, 24);
 });
 test('sync plan: what to do for each situation', () => {
   const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
@@ -1878,7 +1878,7 @@ atest('sync: another device saving mid-push is merged and retried; offline and o
     const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
     fake.putRow(EMAIL, future);
     const nv = await Sync.sync();
-    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 23);
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 24);
   });
 });
 atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
@@ -2271,7 +2271,7 @@ test('conditioning: the upgrade adds the bike, its EMOMs and a goal once; scheme
   old.schemes = old.schemes.filter(sc => !sc.tiers.includes('COND')); old.slots = old.slots.filter(sl => sl.tier !== 'COND');
   for (const l of old.locations) l.equipment = l.equipment.filter(q => q !== 'assault-bike');
   const m = migrate(old);
-  eq(m.version, 23);
+  eq(m.version, 24);
   ok(m.tiers.COND.repMin === 90 && m.families.some(f => f.id === 'fam-cond') && L.byId(m.exercises, 'ex-assault-bike').repUnit === 'cal');
   eq(m.schemes.filter(sc => sc.tiers.includes('COND')).length, 6);
   eq(m.slots.filter(sl => sl.tier === 'COND').map(sl => sl.quota), [1]);
@@ -2328,6 +2328,31 @@ test('conditioning is never a superset idea, however much you use the bike', () 
     const b = r.blocks.find(x => x.exerciseId === 'ex-assault-bike');
     ok(b && b.tier === 'COND' && !b.pairOf && !r.blocks.some(x => x.pairOf === b.id), `${minutes}`);
   }
+});
+
+test('v24: bike sets added by hand at T3 move to conditioning and count toward its goal', () => {
+  const s = seed(); s.version = 23;
+  const at = L.weekBounds(s).start + 3600e3;
+  s.sessions.push({ id: 'am', status: 'done', source: 'custom', locationId: 'loc-basement', firstSetAt: at, checkinAt: at, blocks: [{ id: 'bb', tier: 'T3', slotId: null, exerciseId: 'ex-assault-bike', schemeId: 's-t3-3x15', swaps: [] }] });
+  for (let i = 0; i < 10; i++) s.sets.push({ id: `am${i}`, sessionId: 'am', blockId: 'bb', exerciseId: 'ex-assault-bike', tier: 'T3', reps: 12, done: true, loggedAt: at + i * 6e4 });
+  ok(L.creditWeek(s).slots.get('sl-cond-bike').filled === 0, 'before: not counted');
+  const m = migrate(s);
+  ok(m.sets.filter(x => x.sessionId === 'am').every(x => x.tier === 'COND') && m.sessions.find(x => x.id === 'am').blocks[0].tier === 'COND');
+  eq(m.sessions.find(x => x.id === 'am').blocks[0].slotId, 'sl-cond-bike');
+  eq(L.creditWeek(m).slots.get('sl-cond-bike').filled, 1, 'after: 120 cal counts');
+  ok(L.isConditioning(m, L.byId(m.exercises, 'ex-assault-bike')) && !L.isConditioning(m, L.byId(m.exercises, 'ex-db-curl')));
+});
+
+test('conditioning counts at 90 calories or 8 rounds: an EMOM 10 at 8 cal counts, a 5-round superset alone does not', () => {
+  const s = seed();
+  const at = L.weekBounds(s).start + 3600e3;
+  const log = (n, cal, day) => { for (let i = 0; i < n; i++) s.sets.push({ id: L.uid(), sessionId: `d${day}`, blockId: `d${day}`, exerciseId: 'ex-assault-bike', tier: 'COND', reps: cal, done: true, loggedAt: at + day * DAY + i * 6e4 }); };
+  log(5, 8, 0); // a T1 superset: 40 cal, 5 rounds
+  eq(L.creditWeek(s).slots.get('sl-cond-bike').filled, 0);
+  log(10, 8, 1); // EMOM 10 · 8 cal: 80 cal, 10 rounds
+  eq(L.creditWeek(s).slots.get('sl-cond-bike').filled, 1);
+  const old = seed(); old.version = 23; delete old.tiers.COND.setMin;
+  eq(migrate(old).tiers.COND.setMin, 8);
 });
 
 await queue;

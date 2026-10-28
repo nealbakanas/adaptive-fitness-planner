@@ -34,6 +34,8 @@ export function paceFor(state, t = Date.now()) {
 export const TIERS = ['T1', 'T2', 'T3', 'TECH', 'JUMP', 'COND'];
 const BUILD_ORDER = ['COND', 'T1', 'JUMP', 'T2', 'TECH', 'T3'];
 const ON_REQUEST = { JUMP: ['jumps', 'jumps are off today (turn on Add jumps)'], COND: ['cond', 'conditioning is off today (turn on Add conditioning)'] };
+// Conditioning exercises: the conditioning family, or any family with a conditioning goal.
+export const isConditioning = (state, ex) => !!ex && (ex.familyId === 'fam-cond' || state.slots.some(sl => sl.tier === 'COND' && sl.familyId === ex.familyId));
 // Total reps in a scheme (calories for conditioning). A ladder adds `ramp` each round.
 export const schemeReps = sc => sc.sets * sc.reps + (sc.ramp || 0) * sc.sets * (sc.sets - 1) / 2;
 // Minutes on top of a scheme: warm-up sets (a ramp for heavy work, a couple for moderate), then the changeover to each
@@ -381,6 +383,7 @@ export function slotDose(state, slot, tier = slot?.tier) {
 
 export function doseMet(cfg, tier, agg) {
   if (tier === 'T3') return agg.reps >= cfg.repMin || agg.sets >= (cfg.setMin || 3);
+  if (tier === 'COND') return agg.reps >= cfg.repMin || agg.sets >= (cfg.setMin || 8); // calories, or rounds (an EMOM of 8+)
   return agg.reps >= cfg.repMin;
 }
 
