@@ -985,6 +985,44 @@ step('the bike added by hand is conditioning, during a workout and in History', 
   click('[data-act=nav][data-tab=today]');
 });
 
+step('continue a finished workout, from History or the check-in screen', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  const b = sess.blocks.find(x => x.tier !== 'JUMP');
+  const sets = () => st().sets.filter(x => x.blockId === b.id && !x.warmup);
+  const planned = sets().length;
+  click(qa('section.block [data-act=check]').find(x => sets().some(y => y.id === x.dataset.id)));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  check('finishing keeps only what was logged', sess.status === 'done' && sets().length === 1);
+  check('the check-in screen offers to continue it', !!q(`[data-act=sessionContinue][data-id="${sess.id}"]`));
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  const btn = q(`[data-act=sessionContinue][data-id="${sess.id}"]`);
+  check('History has Continue on a finished workout', !!btn);
+  click(btn);
+  check('it opens again on Today, with its unlogged sets back', sess.status === 'open' && st().sessions.filter(x => x.status === 'open').length === 1
+    && sets().length === planned && sets().filter(x => x.done).length === 1 && /Today/.test(q('#app h1')?.innerText ?? ''), `${sets().length}/${planned}`);
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  // One from an earlier day asks first, then carries on today.
+  sess.day = L.dayKey(Date.now() - 864e5); store.save(); // as if it was yesterday's
+  const old = sess;
+  {
+    click('[data-act=nav][data-tab=week]');
+    click('[data-act=histOpen]');
+    click(q(`[data-act=sessionContinue][data-id="${old.id}"]`));
+    check('an earlier day asks first', /Continue this workout today/.test(sheet()) && old.status === 'done');
+    click('#sheet [data-act=confirmYes]');
+    check('and then it is open today', old.status === 'open' && old.day === L.dayKey());
+    click('[data-act=finish]');
+    if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  }
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
