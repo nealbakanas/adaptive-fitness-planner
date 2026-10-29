@@ -1023,6 +1023,47 @@ step('continue a finished workout, from History or the check-in screen', () => {
   }
 });
 
+step('sets added in History, then Continue: asks whether they were done, and merges them into the workout', () => {
+  const st = () => store.state;
+  const run = answer => {
+    click('[data-act=nav][data-tab=today]');
+    onlyAt('loc-basement');
+    click('[data-act=suggest]');
+    const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+    const [first, later] = sess.blocks.filter(b => b.tier !== 'JUMP' && b.tier !== 'COND');
+    // This morning: only the first exercise.
+    for (const x of st().sets.filter(y => y.blockId === first.id && !y.warmup)) { x.done = true; x.loggedAt = Date.now() - 4 * 3600e3; }
+    sess.firstSetAt = Date.now() - 4 * 3600e3;
+    store.save();
+    click('[data-act=finish]');
+    if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+    // Then in History: add the later exercise (as planned), with three sets.
+    click('[data-act=nav][data-tab=week]');
+    click('[data-act=histOpen]');
+    click(qa('[data-act=histEdit]').find(x => x.dataset.id === sess.id));
+    click('[data-act=histAddEx]');
+    click(`#sheet [data-act=addExTier][data-t="${later.tier}"]`);
+    click(`#sheet [data-act=addExPick][data-id="${later.exerciseId}"]`);
+    for (let i = 0; i < 2; i++) click(qa('.histedit [data-act=histAddSet]').at(-1));
+    const added = () => st().sets.filter(x => x.sessionId === sess.id && x.exerciseId === later.exerciseId && x.tier === later.tier);
+    check(`(${answer}) History logged 3 sets as done`, added().filter(x => x.done).length === 3);
+    click('[data-act=histEditDone]');
+    click(q(`[data-act=sessionContinue][data-id="${sess.id}"]`));
+    check(`(${answer}) continuing asks about them`, /added in History/.test(text()) && !!q('[data-act=laterDone]') && !!q('[data-act=laterPlanned]'), text().slice(0, 400));
+    const blocksOf = () => sess.blocks.filter(b => b.exerciseId === later.exerciseId && b.tier === later.tier);
+    const sc = st().schemes.find(x => x.id === later.schemeId);
+    click(answer === 'done' ? '[data-act=laterDone]' : '[data-act=laterPlanned]');
+    const doneNow = added().filter(x => x.done).length;
+    check(`(${answer}) one block for the exercise, no missing-scheme card`, blocksOf().length === 1 && !/Missing exercise or scheme/.test(text()) && !/added in History/.test(text()));
+    if (answer === 'done') check('(done) they stay logged, and the block has no more than its scheme left to do', doneNow === 3 && added().filter(x => !x.done).length === Math.max(0, sc.sets - 3));
+    else check('(planned) nothing counts until you log it, and the block has its sets to do', doneNow === 0 && added().length === sc.sets, `${doneNow} done of ${added().length}`);
+    click('[data-act=finish]');
+    if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  };
+  run('planned');
+  run('done');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
