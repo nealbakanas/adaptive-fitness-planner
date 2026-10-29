@@ -858,6 +858,14 @@ function viewCheckin() {
   return h;
 }
 
+function laterBanner(s) {
+  const later = laterSets(s);
+  if (!later.length) return '';
+  const names = [...new Set(later.map(x => exOf(x.exerciseId)?.name).filter(Boolean))].join(', ');
+  return `<div class="banner">${later.length} set${later.length === 1 ? '' : 's'} (${esc(names)}) ${later.length === 1 ? 'was' : 'were'} added in History, so ${later.length === 1 ? 'it counts' : 'they count'} as done. Did you do ${later.length === 1 ? 'it' : 'them'}?
+    <div class="brow"><button class="small" data-act="laterPlanned">Not yet: doing them now</button><button class="small" data-act="laterDone">Yes, done</button></div></div>`;
+}
+
 function viewSession(s) {
   const loc = L.placeOf(state, s);
   const credit = L.creditWeek(state);
@@ -870,6 +878,7 @@ function viewSession(s) {
     <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)}${L.leanOf(s) ? ` · leaning ${L.leanOf(s)}` : ''} · est ${est} min${paced ? ' (your pace)' : ''}</div>${s.skip?.length ? `<div class="sub">Skipping today: ${esc(s.skip.map(id => famOf(id)?.name).filter(Boolean).join(', '))}</div>` : ''}${burst ? '<div class="sub">Log each set as you finish it to teach the app your pace.</div>' : ''}${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
     ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
     <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
+  h += laterBanner(s);
   if (!s.blocks.length) {
     h += `<div class="card muted">Nothing from your weekly goals fits this location and time. Add an exercise below, use a plan, or check in with more time.</div>`;
   }
@@ -1381,8 +1390,43 @@ function histNewSet(s, block, ex, at, from = null) {
     load: loaded ? (from?.load ?? L.lastLoad(state, ex.id)) : null,
     reps: ['load_reps', 'reps'].includes(ex.metric) ? from?.reps ?? null : null,
     time: ex.metric === 'time' ? from?.time ?? lastTime(ex.id) : null, distance: ex.metric === 'distance' ? from?.distance ?? null : null,
-    done: true, loggedAt: at, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}),
+    done: true, loggedAt: at, addedLater: true, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}),
   };
+}
+
+// Sets added in the History editor (logged as done after the fact; before addedLater, those were the ones with no scheme).
+// Continuing a workout asks about them: done, or what you're about to do.
+const laterSets = s => s.source === 'imported' ? [] : state.sets.filter(x => x.sessionId === s.id && x.done && !x.warmup && (x.addedLater || x.schemeId == null));
+
+// A scheme for a block of sets logged in History: one with that many sets of those reps, else the usual pick.
+function schemeForSets(s, b, sets) {
+  const reps = Number(sets[0]?.reps) || null;
+  return L.schemeOptions(state, b.tier).find(sc => sc.sets === sets.length && (reps == null || sc.reps === reps))
+    ?? schemeForBlock(s, exOf(b.exerciseId), b.tier, b);
+}
+
+// `done`: they were done (they stay logged, in the workout's block for that exercise); else they're the plan for now
+// (unticked, or dropped when the workout already has that exercise waiting).
+function resolveLater(s, done) {
+  const byBlock = new Map();
+  for (const x of laterSets(s)) byBlock.set(x.blockId, [...(byBlock.get(x.blockId) || []), x]);
+  for (const [blockId, sets] of byBlock) {
+    let b = s.blocks.find(x => x.id === blockId);
+    if (!b) { b = { id: blockId, tier: sets[0].tier, slotId: slotIdFor(sets[0].exerciseId, sets[0].tier), exerciseId: sets[0].exerciseId, schemeId: null, swaps: [] }; s.blocks.push(b); }
+    const twin = s.blocks.find(x => x !== b && x.exerciseId === b.exerciseId && x.tier === b.tier && schOf(x.schemeId));
+    const target = schOf(b.schemeId) ? b : twin ?? b;
+    if (!done && target !== b) { state.sets = state.sets.filter(x => !sets.includes(x)); continue; } // the workout has it waiting already
+    if (!schOf(target.schemeId)) target.schemeId = schemeForSets(s, target, sets).id;
+    for (const x of sets) {
+      x.blockId = target.id; x.schemeId = target.schemeId; delete x.addedLater;
+      if (!done) { x.done = false; delete x.loggedAt; }
+    }
+    if (done) genSets(s, target); // the rest of its scheme, if any is left
+  }
+  s.blocks = s.blocks.filter(b => state.sets.some(x => x.blockId === b.id));
+  for (const b of s.blocks) if (b.pairOf && !s.blocks.some(x => x.id === b.pairOf)) delete b.pairOf;
+  const first = state.sets.filter(x => x.sessionId === s.id && x.done && x.loggedAt).map(x => x.loggedAt);
+  s.firstSetAt = first.length ? Math.min(...first) : null;
 }
 
 // Picking an exercise in the sheet: change a group to it, or add it as a new group with one set.
@@ -2973,6 +3017,8 @@ const actions = {
     if (s.day === L.dayKey()) return go();
     askConfirm('Continue this workout today?', 'It opens again with its unlogged sets. It stays under its own date in History; the sets you log now count for today.', 'Continue', go);
   },
+  laterDone: () => { const s = currentSession(); if (!s) return; resolveLater(s, true); save(); render(); toast('Kept as done'); },
+  laterPlanned: () => { const s = currentSession(); if (!s) return; resolveLater(s, false); save(); render(); toast('Unticked: they count once you log them'); },
   resume: d => {
     const cur = currentSession();
     if (cur) { cur.status = 'paused'; cur.pausedAt = Date.now(); }
