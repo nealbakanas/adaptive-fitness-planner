@@ -827,7 +827,9 @@ function viewCheckin() {
   if (doneToday.length) {
     const sets = state.sets.filter(x => x.done && !x.warmup && doneToday.some(s => s.id === x.sessionId));
     const rest = restSummary(sets);
-    h += `<div class="card muted">Done today: ${doneToday.length} session${doneToday.length > 1 ? 's' : ''}, ${sets.length} sets${rest ? ` · ${rest.text}` : ''}.</div>`;
+    const last = [...doneToday].sort((a, b) => (b.endedAt ?? b.checkinAt) - (a.endedAt ?? a.checkinAt))[0];
+    h += `<div class="card muted">Done today: ${doneToday.length} session${doneToday.length > 1 ? 's' : ''}, ${sets.length} sets${rest ? ` · ${rest.text}` : ''}.
+      <button class="link" data-act="sessionContinue" data-id="${last.id}">Continue ${doneToday.length > 1 ? 'the last one' : 'it'}</button></div>`;
   }
   const where = ci.locationIds?.length ? ci.locationIds : [ci.locationId];
   h += `<div class="field"><label>Where <span class="hint">tap more than one if you'll move between them</span></label><div class="seg">${state.locations.map(l =>
@@ -1497,7 +1499,7 @@ function viewHistory(hs) {
       }).join('');
     const editable = s && s.status !== 'open' && s.status !== 'paused';
     return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span>
-      ${editable ? `<button class="small" data-act="histEdit" data-id="${s.id}">Edit</button>` : ''}</div>${lines}</div>`;
+      ${editable ? `<span class="brow">${s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${s.id}">Continue</button>` : ''}<button class="small" data-act="histEdit" data-id="${s.id}">Edit</button></span>` : ''}</div>${lines}</div>`;
   };
   return `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
     <input class="search" id="histq" placeholder="Search an exercise" value="${esc(hs.q)}" data-histq>
@@ -2950,6 +2952,26 @@ const actions = {
     setWakeLock(false);
     save(); render(); window.scrollTo(0, 0);
     toast('Paused. Resume it from Today when you have time.');
+  },
+  // A finished workout, open again: its unlogged sets come back, and anything open now is paused. One from an earlier day
+  // carries on today (it stays under its own date in History; what you log now is today's).
+  sessionContinue: d => {
+    const s = L.byId(state.sessions, d.id);
+    if (!s || s.status !== 'done') return;
+    const go = () => {
+      const cur = currentSession();
+      if (cur && cur !== s) { cur.status = 'paused'; cur.pausedAt = Date.now(); }
+      s.status = 'open';
+      s.day = L.dayKey();
+      s.reopenedAt = Date.now();
+      delete s.pausedAt; delete s.endedAt;
+      for (const b of s.blocks || []) if (exOf(b.exerciseId) && schOf(b.schemeId)) genSets(s, b);
+      ui.history = null; ui.tab = 'today'; ui.sheet = null; renderSheet();
+      save(); render(); window.scrollTo(0, 0);
+      toast('Workout reopened. Finish it again when you\'re done.');
+    };
+    if (s.day === L.dayKey()) return go();
+    askConfirm('Continue this workout today?', 'It opens again with its unlogged sets. It stays under its own date in History; the sets you log now count for today.', 'Continue', go);
   },
   resume: d => {
     const cur = currentSession();
