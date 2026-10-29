@@ -1008,7 +1008,7 @@ function viewBlock(s, b, credit, idea = null) {
     } else if (sx.metric === 'distance') {
       inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
     }
-    return `<div class="set ${st.done ? 'done' : ''} ${st.amrap ? 'amrap' : ''}"><span class="n">${i + 1}</span>${inputs}${st.amrap ? '<span class="amraptag">AMRAP</span>' : ''}${other}
+    return `<div class="set ${st.done ? 'done' : ''} ${st.amrap ? 'amrap' : ''}"><span class="n">${i + 1}</span>${inputs}${st.amrap ? '<span class="amraptag">AMRAP</span>' : ''}${st.done && st.pr ? `<span class="prtag" title="${esc(st.prText ?? 'Personal record')}" aria-label="${esc(st.prText ?? 'Personal record')}">🏆</span>` : ''}${other}
       <button class="check" data-act="check" data-id="${st.id}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
   }).join('');
 
@@ -1434,6 +1434,13 @@ function resolveLater(s, done) {
 // is the tier you picked in the sheet.
 const tierFor = (ex, asked) => (L.isConditioning(state, ex) ? 'COND' : asked);
 
+// Records the set's personal record on it (L.setPR), or clears it. Returns whether it is one.
+function markPR(st) {
+  const pr = st.done ? L.setPR(state, st) : null;
+  if (pr) { st.pr = pr.kind; st.prText = pr.text; } else { delete st.pr; delete st.prText; }
+  return !!pr;
+}
+
 function histPick(exerciseId) {
   const sh = ui.sheet, s = L.byId(state.sessions, sh.sessionId), ex = exOf(exerciseId);
   if (!s || !ex) return;
@@ -1535,7 +1542,7 @@ function viewHistory(hs) {
       if (m.status === 'open') bits.push('in progress');
     }
     const lines = e.groups.map(g => `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(g.ex?.name ?? '?')}</span>
-      <span class="meta">${esc(histSets(g))}</span></span></div>`).join('')
+      <span class="meta">${esc(histSets(g))}${g.sets.some(x => x.pr) ? ` · <span class="prtag" title="${esc(g.sets.filter(x => x.pr).map(x => x.prText).join('; '))}">🏆</span> ${esc(g.sets.filter(x => x.pr).map(x => x.prText).at(-1) ?? 'PR')}` : ''}</span></span></div>`).join('')
       + e.mob.map(it => {
         const ex = itemEx(it);
         return `<div class="histex"><span class="tier MOB">${it.def ? 'JUMP' : 'MOB'}</span><span class="grow"><span class="name">${esc(ex?.name ?? '?')}</span>
@@ -2872,11 +2879,13 @@ const actions = {
         state.timer = null;
         toast(`Next: ${setLabel(next)}`);
       } else if (timerCfg().autoStart && b) startTimer(s, b, st.id);
+      if (markPR(st)) toast(`🏆 ${st.prText}`);
     } else {
       st.done = false;
       delete st.loggedAt;
       delete st.restSec;
       delete st.restPlan;
+      markPR(st);
       if (state.timer?.setId === st.id) state.timer = null; // un-logging a set cancels its rest
     }
     save(); render();
@@ -3994,6 +4003,7 @@ document.addEventListener('change', e => {
   if (d.set) {
     const st = L.byId(state.sets, d.set);
     st[d.f] = el.value === '' ? null : Number(el.value);
+    if (st.done) { const was = st.pr; if (markPR(st) && !was) toast(`🏆 ${st.prText}`); if (was !== st.pr) render(); }
     save();
   } else if (d.hgtier !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit), g = s && histGroups(s).find(x => x.key === d.hgtier);

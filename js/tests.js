@@ -2355,6 +2355,31 @@ test('conditioning counts at 90 calories or 8 rounds: an EMOM 10 at 8 cal counts
   eq(migrate(old).tiers.COND.setMin, 8);
 });
 
+// ---------- personal records ----------
+test('PRs: heaviest load, most reps at a load or more, best estimated max; holds and reps-only work; never the first time', () => {
+  const s = seed();
+  let t = Date.now() - 30 * DAY;
+  const log = (exerciseId, load, reps, extra = {}) => { const x = { id: L.uid(), sessionId: 'p', blockId: 'p', exerciseId, tier: 'T2', load, reps, done: true, loggedAt: (t += 6e4), ...extra }; s.sets.push(x); return x; };
+  const first = log('ex-back-squat', 225, 6);
+  eq(L.setPR(s, first), null, 'first time');
+  log('ex-back-squat', 235, 3);
+  const eight = log('ex-back-squat', 225, 8);
+  eq(L.setPR(s, eight), { kind: 'reps', text: 'Rep PR: 8 at 225 lb (best was 6)' });
+  eq(L.setPR(s, log('ex-back-squat', 225, 8)), null, 'tying it is not a record');
+  eq(L.setPR(s, log('ex-back-squat', 245, 1)).kind, 'weight');
+  eq(L.setPR(s, s.sets.at(-1)).text, 'Weight PR: 245 lb (best was 235 lb)');
+  eq(L.setPR(s, log('ex-back-squat', 230, 7)).text, 'Rep PR: 7 at 230 lb (best was 3)', 'at 230 or more, only 235 × 3 and 245 × 1 came before');
+  eq(L.setPR(s, log('ex-back-squat', 200, 12)).kind, 'reps', 'most reps at 200 or more');
+  ok(!L.setPR(s, log('ex-back-squat', 135, 5, { warmup: true })), 'warm-ups never');
+  // Reps-only and holds.
+  log('ex-ring-dip', null, 10);
+  eq(L.setPR(s, log('ex-ring-dip', null, 12)).text, 'Rep PR: 12 in a set (best was 10)');
+  log('ex-sorensen', null, null, { time: 60 });
+  eq(L.setPR(s, log('ex-sorensen', null, null, { time: 75 })).text, 'Hold PR: 75s (best was 60s)');
+  // Looking back in History: only what came before counts.
+  eq(L.setPR(s, eight).kind, 'reps', 'later sets don\'t take a record away');
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

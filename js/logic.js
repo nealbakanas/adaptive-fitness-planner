@@ -231,6 +231,48 @@ export function setTotalLoad(state, s) {
 
 export const setE1rm = (state, s) => epley(setTotalLoad(state, s), Number(s.reps));
 
+// ---------- personal records ----------
+
+// A working set that beats every earlier one of the exercise: { kind, text } or null. The heaviest load, else the most reps
+// at that load or more (225 × 8 when 225 had only ever gone 6), else the best estimated max; for reps-only work the most
+// reps in a set, for holds the longest. The first time you do something isn't a record, and jumps and conditioning
+// don't have them.
+export function setPR(state, s) {
+  const ex = byId(state.exercises, s.exerciseId);
+  if (!ex || !s.done || s.warmup || s.tier === 'JUMP' || s.tier === 'COND') return null;
+  const at = s.loggedAt ?? Infinity;
+  const prev = state.sets.filter(x => x.done && !x.warmup && x.id !== s.id && x.exerciseId === s.exerciseId && (x.loggedAt ?? 0) < at);
+  if (!prev.length) return null;
+  const u = state.settings?.unit ?? 'lb';
+  const num = v => (v === '' || v == null ? null : Number(v));
+  const reps = num(s.reps);
+  const best = xs => Math.max(...xs);
+  if (ex.metric === 'load_reps') {
+    const load = num(s.load) ?? 0;
+    if (!(reps >= 1)) return null;
+    const show = l => `${ex.bodyweight ? 'BW+' : ''}${l}${ex.bodyweight ? '' : ` ${u}`}`;
+    const loaded = prev.filter(x => num(x.reps) >= 1).map(x => ({ load: num(x.load) ?? 0, reps: num(x.reps) }));
+    if (!loaded.length) return null;
+    const top = best(loaded.map(x => x.load));
+    if (load > top) return { kind: 'weight', text: `Weight PR: ${show(load)} (best was ${show(top)})` };
+    const mostAt = best(loaded.filter(x => x.load >= load).map(x => x.reps));
+    if (reps > mostAt) return { kind: 'reps', text: `Rep PR: ${reps} at ${show(load)} (best was ${mostAt})` };
+    const e = setE1rm(state, s), beforeE = best([0, ...prev.map(x => setE1rm(state, x) || 0)]);
+    if (e && beforeE && e > beforeE + 0.5) return { kind: 'e1rm', text: `Estimated max PR: ${Math.round(e)} ${u} (best was ${Math.round(beforeE)})` };
+    return null;
+  }
+  if (ex.metric === 'reps') {
+    const before = prev.map(x => num(x.reps)).filter(x => x != null);
+    if (reps != null && before.length && reps > best(before)) return { kind: 'reps', text: `Rep PR: ${reps} in a set (best was ${best(before)})` };
+    return null;
+  }
+  if (ex.metric === 'time') {
+    const t = num(s.time), before = prev.map(x => num(x.time)).filter(x => x != null);
+    if (t != null && before.length && t > best(before)) return { kind: 'time', text: `Hold PR: ${t}s (best was ${best(before)}s)` };
+  }
+  return null;
+}
+
 // Only heavy and moderate work (T1/T2) sets the max. Light technique or pump sessions would
 // otherwise push real sessions out of the window and drag every suggested load down.
 // Warm-up sets never count: not toward a max, a goal, a target load or the heavy-work rules.
