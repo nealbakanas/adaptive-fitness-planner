@@ -718,7 +718,16 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
     }
   }
   for (const tier of BUILD_ORDER) {
-    for (const c of scored.filter(x => x.slot.tier === tier)) {
+    // Regenerate (ci.variant) takes the tier's open goals in turn: the top three that could go in today rotate, so
+    // power cleans one time and snatches the next.
+    let cands = scored.filter(x => x.slot.tier === tier);
+    if (ci.variant) {
+      const ready = cands.filter(x => !x.waits).slice(0, 3);
+      const k = ci.variant % Math.max(1, ready.length);
+      const turn = [...ready.slice(k), ...ready.slice(0, k)];
+      cands = [...turn, ...cands.filter(x => !turn.includes(x))];
+    }
+    for (const c of cands) {
       // Jumps only come in when you turn them on at check-in; then the goal's jumps go in whatever the scores say.
       if (ON_REQUEST[tier] && !ci[ON_REQUEST[tier][0]]) { c.note = ON_REQUEST[tier][1]; continue; }
       // Leaning one way: the other half's strength goals (T1/T2) wait, unless the week runs out before they could be done.

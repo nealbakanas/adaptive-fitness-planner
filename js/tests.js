@@ -2405,6 +2405,21 @@ test('leaning upper: lower-body T1/T2 goals wait, unless the week runs out first
   ok(!L.buildSuggestion(s, c).scored.some(x => x.slot.id === 'fs' && /leaning/.test(x.note || '')), 'last day');
 });
 
+test('Regenerate takes open goals of a tier in turn: power clean, then snatch', () => {
+  const s = seed(); s.settings.onboarded = true;
+  const sn = s.families.find(f => /snatch/i.test(f.name)).id;
+  s.slots = [
+    { id: 'z', familyId: 'fam-ohp', exerciseId: 'gs-z-press', tier: 'T1', quota: 1, priority: 3 },
+    { id: 'cl', familyId: 'fam-clean', tier: 'T2', quota: 3, priority: 2 },
+    { id: 'sn', familyId: sn, tier: 'T2', quota: 1, priority: 2 },
+  ];
+  s.settings.weekStartDay = (new Date().getDay() + 3) % 7;
+  const fam = v => L.buildSuggestion(s, ci({ minutes: 30, fatigue: 3, lean: 'upper', variant: v })).blocks.filter(b => b.tier === 'T2').map(b => L.byId(s.exercises, b.exerciseId).familyId);
+  eq(fam(0), ['fam-clean']);
+  eq(fam(1), [sn]);
+  eq(fam(2), ['fam-clean']);
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;
