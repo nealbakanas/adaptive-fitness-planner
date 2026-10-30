@@ -240,7 +240,7 @@ function slotIdFor(exerciseId, tier) {
 
 // Best scheme for an exercise added or re-tiered by hand: fits the time left if possible, never over its rep cap.
 function schemeForBlock(s, ex, tier, exceptBlock) {
-  const budget = tier === 'JUMP' ? Infinity : sessionBudget(s, exceptBlock) - L.overhead(state, tier, ex.id, s.locationId); // jumps are warm-up time
+  const budget = L.takesTime(tier) ? sessionBudget(s, exceptBlock) - L.overhead(state, tier, ex.id, s.locationId) : Infinity; // jumps are warm-up time
   const dose = L.slotDose(state, L.slotFor(state, ex, tier), tier);
   return L.pickScheme(state, tier, ex, Math.max(budget, 0), s, dose)
     || L.pickScheme(state, tier, ex, Infinity, s, dose)
@@ -290,8 +290,9 @@ const readyText = r => r.tired ? 'Tired: explosive work becomes technique'
 
 // Conditioning supersets: the bike (or whatever conditioning is here), or null when there's none or it's skipped today.
 function condPairExercise(s) {
-  if ((s.skip || []).includes('fam-cond')) return null;
-  return L.pickExercise(state, 'fam-cond', L.placeOf(state, s), 'COND');
+  const fam = L.conditioningFamily(state);
+  if ((s.skip || []).includes(fam)) return null;
+  return L.pickExercise(state, fam, L.placeOf(state, s), 'COND');
 }
 // Calories per rest: more in a T1's longer rest.
 const condPairCal = main => (main.tier === 'T1' ? 8 : 6);
@@ -352,7 +353,7 @@ function reviewDecide(ids, status) {
   if (changed) toast(ids.length > 1 ? 'Goals changed' : 'Goal changed');
 }
 
-const whyRows = res => res.scored.map(c => ({ slotId: c.slot.id, label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note }));
+const whyRows = res => res.scored.map(c => ({ slotId: c.slot.id, label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note, ...(c.hold ? { hold: c.hold } : {}) }));
 
 function createSession(blocks, source, extra = {}) {
   const s = {
@@ -969,7 +970,8 @@ function viewBlock(s, b, credit, idea = null) {
     const r = credit.slots.get(slot.id);
     const agg = r?.days.get(L.dayKey()) || { reps: 0, sets: 0 };
     const need = L.slotDose(state, slot, b.tier).repMin;
-    const prog = b.tier === 'T3' ? `${agg.reps}/${need} reps or ${agg.sets}/${cfg.setMin} sets` : b.tier === 'COND' ? `${agg.reps}/${need} cal or ${agg.sets}/${cfg.setMin || 8} rounds` : `${agg.reps}/${need} ${b.tier === 'TECH' ? 'technique reps' : b.tier === 'JUMP' ? 'contacts' : b.tier === 'COND' ? 'calories' : 'qualifying reps'}`;
+    const orSets = L.TIER[b.tier]?.orSets;
+    const prog = orSets ? `${agg.reps}/${need} ${L.repUnit(b.tier)} or ${agg.sets}/${cfg.setMin || orSets} ${L.setUnit(b.tier)}` : `${agg.reps}/${need} ${L.doseUnit(b.tier)}`;
     dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? '✓ Filled' : 'Toward'} ${esc(slotLabel(slot))}: ${prog}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
@@ -1206,9 +1208,9 @@ function weekBudgetCard() {
   const b = G.weekBudget(state);
   const src = k => b.fromHistory[k] ? 'from your last 4 weeks' : state.settings.week?.[k] ? 'you set this' : 'a starting guess';
   const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
-  const rows = [['T1', 'Heavy'], ['T2', 'Moderate'], ['T3', 'Accessory'], ['TECH', 'Technique'], ['JUMP', 'Jumps'], ['COND', 'Conditioning']].filter(([t]) => ['T1', 'T2', 'T3'].includes(t) || b.count[t])
+  const rows = L.TIERS.filter(t => L.TIER[t].core || b.count[t]).map(t => [t, L.TIER[t].label])
     .map(([t, label]) => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${label}</span>
-      <span class="meta">${t === 'JUMP' ? 'in your warm-up, no workout time' : `~${round(b.cost[t])} min each`}${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
+      <span class="meta">${L.takesTime(t) ? `~${round(b.cost[t])} min each` : 'in your warm-up, no workout time'}${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
   const verdict = b.room >= 0
     ? `Your goals take about <b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes. Room for about <b>${b.addT2} more T2</b> or <b>${b.addT3} more T3</b> sessions a week (or a mix).`
     : `Your goals need about <b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> more than the ${round(b.total)} you train. Some will slip to next week: lower a quota or two, accessories first.`;
@@ -1237,7 +1239,7 @@ function viewWeek() {
   h += `<div class="sectionhead"><h3>Weekly goals</h3><div class="brow"><button class="small" data-act="gsOpen">Suggest from history</button><button class="small" data-act="goalNew">+ Add goal</button></div></div>
     <div class="card flush">${slots.map(r => {
     const pips = Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
-    const unitOf = r.slot.tier === 'COND' ? ['cal', 'rounds'] : r.slot.tier === 'JUMP' ? ['contacts', 'sets'] : ['reps', 'sets'];
+    const unitOf = [L.repUnit(r.slot.tier), L.setUnit(r.slot.tier)];
     const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? `${a.reps} ${unitOf[0]}` : `${a.sets} ${unitOf[1]}`}${a.met ? ' ✓' : ' (partial)'}`).join(' · ');
     const ex = exOf(r.slot.exerciseId);
     const name = ex?.name ?? famOf(r.slot.familyId)?.name;
@@ -1764,6 +1766,15 @@ function settingsMaxes() {
     groups.filter(([, list]) => list.length).map(([label, list]) => `<div class="label">${label}</div><div class="menu">${list.map(row).join('')}</div>`).join('');
 }
 
+// A tier's own settings, from what the tier is (L.TIER): an or-sets minimum, a target load range, or an intensity floor.
+function tierRows(t, c) {
+  const k = L.TIER[t];
+  if (k.orSets) return frow(`Or minimum ${L.setUnit(t)}`, numIn(`tiers.${t}.setMin`, c.setMin ?? k.orSets), k.orSetsHint);
+  if (k.targetLoad) return frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max. Any load still counts.') + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax));
+  if (k.strength) return frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max') + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax));
+  return '';
+}
+
 function settingsTiers() {
   const desc = {
     T1: 'Heavy sets of 1–3 on main lifts (GZCL: 85–100%, 10–15 reps)',
@@ -1779,10 +1790,7 @@ function settingsTiers() {
       return `<div class="label"><span class="tier ${t}">${t}</span> ${desc[t]}</div><div class="menu">
         ${frow('Minimum reps', numIn(`tiers.${t}.repMin`, c.repMin), 'Working reps needed to count')}
         ${frow('Maximum reps', numIn(`tiers.${t}.repMax`, c.repMax), 'Upper end when picking schemes')}
-        ${t === 'JUMP' ? '' : t === 'COND' ? frow('Or minimum rounds', numIn('tiers.COND.setMin', c.setMin ?? 8), 'An EMOM of this many rounds counts, whatever the calories')
-          : t === 'T3' ? frow('Or minimum sets', numIn('tiers.T3.setMin', c.setMin), 'For time or bodyweight work')
-          : t === 'TECH' ? frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max. Any load still counts.') + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))
-          : frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max') + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax))}
+        ${tierRows(t, c)}
       </div>`;
     }).join('');
 }
@@ -1793,7 +1801,7 @@ function settingsSchemes() {
       const list = state.schemes.filter(sc => sc.tiers.includes(t));
       return `<div class="label"><span class="tier ${t}">${t}</span></div><div class="menu">${list.map(sc =>
         `<button class="menurow" data-act="schemeEdit" data-id="${sc.id}"><span class="grow"><span class="name">${esc(sc.name)}</span>
-          <span class="meta">${L.schemeReps(sc)} ${sc.tiers.includes('COND') ? 'cal' : 'reps'} · ${sc.minutes} min · ${sc.emom ? `every ${clock(sc.emom)}` : `rest ${clock(sc.restSec)}`}</span></span><span class="chev">›</span></button>`).join('')
+          <span class="meta">${L.schemeReps(sc)} ${L.repUnit(sc.tiers[0])} · ${sc.minutes} min · ${sc.emom ? `every ${clock(sc.emom)}` : `rest ${clock(sc.restSec)}`}</span></span><span class="chev">›</span></button>`).join('')
         || '<p class="muted pad">None yet.</p>'}</div>`;
     }).join('') + `<button class="addblock" data-act="schemeNew">+ Add scheme</button>`;
 }
@@ -2302,7 +2310,7 @@ function sheetSwapScheme(sh) {
     <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {
       const load = L.targetLoad(state, ex, b.tier, sc, s.checkinAt);
-      const bits = [`${time(sc)} min`, `${L.schemeReps(sc)} ${b.tier === 'COND' ? 'cal' : 'reps'}`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
+      const bits = [`${time(sc)} min`, `${L.schemeReps(sc)} ${L.repUnit(b.tier)}`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
         load != null ? `${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : '', time(sc) > budget ? 'over time' : '',
         L.overRepCap(ex, sc) ? `over ${ex.maxReps}-rep cap` : ''].filter(Boolean);
       const dim = time(sc) > budget || L.overRepCap(ex, sc);
@@ -3240,7 +3248,7 @@ const actions = {
 
   pairAdd: d => {
     const { s, b } = findBlock(d.b);
-    if (exOf(d.ex)?.familyId === 'fam-cond') {
+    if (L.isConditioning(state, exOf(d.ex))) {
       // The bike in this lift's rest: a conditioning block paired with it, a round after each set.
       const ex = exOf(d.ex);
       const nb = { id: L.uid(), tier: 'COND', slotId: slotIdFor(ex.id, 'COND'), exerciseId: ex.id, schemeId: condPairScheme(b).id, swaps: [{ type: 'add', to: ex.id, at: Date.now() }], pairOf: b.id };

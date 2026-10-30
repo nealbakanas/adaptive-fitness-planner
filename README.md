@@ -23,7 +23,8 @@ After the first visit it works offline: `sw.js` fetches from the network first (
 | `js/seed.js` | Seed locations, families, exercises, schemes, slots, tier doses |
 | `js/library.js` | Garage Strength Movement Library: new families, ~230 exercises with their videos, mobility drills (source list in `data/garage-strength-library.md`) |
 | `js/store.js` | Load/save/migrate the single JSON state blob |
-| `js/logic.js` | Pure rules: estimated max, dose crediting, slot scoring, scheme/exercise choice |
+| `js/logic.js` | Pure rules: estimated max, dose crediting, slot scoring, scheme/exercise choice. **What each tier is lives in one table, `TIER`** (strength or not, takes workout time, turned on at check-in, units, or-sets dose, pairable, records, order, warm-up, cap, intent weights); code asks it (`isStrength`, `takesTime`, `requestOf`, `repUnit`…) instead of naming tiers. Extras you turn on at check-in share one path (`REQUESTED`), and a goal held back carries a code (`hold`) the weekly review reads |
+| `js/review.js`, `js/pace.js`, `js/taste.js` | The weekly review, learned pace and learned taste (pure functions) |
 | `js/app.js` | Views, bottom sheets, rest timer, event handling |
 | `js/goals.js` | Suggested weekly goals from history (pure functions) |
 | `js/programs.js` | Fixed multi-week programs (Air Alert 2): chart, exercises, progress (pure functions) |

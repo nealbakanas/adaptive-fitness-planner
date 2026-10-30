@@ -2420,6 +2420,36 @@ test('Regenerate takes open goals of a tier in turn: power clean, then snatch', 
   eq(fam(2), ['fam-clean']);
 });
 
+test('tiers: every tier is fully described in L.TIER, and derived tables follow it', () => {
+  for (const t of L.TIERS) {
+    const k = L.TIER[t];
+    ok(typeof k.label === 'string' && typeof k.warmup === 'number' && typeof k.cap === 'number', t);
+    if (k.request) ok(typeof k.off === 'string' && /turn on/.test(k.off), `${t}: a request tier says how to turn it on`);
+    eq(L.WARMUP[t], k.warmup);
+    eq(L.INTENT.auto[t], 1, `${t}: auto wants everything`);
+  }
+  eq(L.TIERS.filter(L.isStrength), ['T1', 'T2']);
+  eq(L.TIERS.filter(t => !L.takesTime(t)), ['JUMP']);
+  eq(L.TIERS.filter(t => L.requestOf(t)), ['JUMP', 'COND']);
+  eq([L.repUnit('COND'), L.setUnit('COND'), L.doseUnit('T1'), L.repUnit('T3')], ['cal', 'rounds', 'qualifying reps', 'reps']);
+});
+
+test('the weekly review reads why a goal was held back from its code, as it did from the note', () => {
+  const s = seed(); s.settings.onboarded = true;
+  s.settings.weekStartDay = (new Date().getDay() + 3) % 7;
+  const w = L.weekBounds(s, Date.now() - 7 * DAY).start;
+  const c = ci({ minutes: 30, fatigue: 2, lean: 'upper' });
+  const r = L.buildSuggestion(s, c, w + 2 * DAY + 3600e3);
+  const rows = r.scored.map(x => ({ slotId: x.slot.id, label: '?', score: x.score, why: x.why, picked: !!x.picked, note: x.note, ...(x.hold ? { hold: x.hold } : {}) }));
+  ok(rows.some(x => x.hold === 'lean') && rows.some(x => x.hold === 'jumps'), JSON.stringify(rows.map(x => x.hold)));
+  s.sessions.push({ id: 'w', status: 'done', source: 'suggested', firstSetAt: w + 2 * DAY + 3600e3, checkinAt: w + 2 * DAY, blocks: [], why: rows });
+  const codes = R.weekReview(s, w).goals;
+  // The same rows without codes (an older workout) give the same reasons.
+  const s2 = structuredClone(s); for (const x of s2.sessions[0].why) delete x.hold;
+  eq(R.weekReview(s2, w).goals.map(g => g.reason), codes.map(g => g.reason));
+  ok(codes.some(g => g.reason === 'lean') && codes.some(g => g.reason === 'jumps'), JSON.stringify(codes.map(g => g.reason)));
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

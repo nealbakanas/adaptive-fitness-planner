@@ -15,6 +15,7 @@ Done items move to the changelog in the PRs, not here.
 - **"Add jumps" label wraps** on a narrow phone.
 - **Several locations:** blocks aren't grouped by location, so a workout can go Basement → Office → Basement.
 - **Tests pin the data version number** in a dozen places; every version bump edits them all.
+- **Pace** (`js/pace.js`) still names the jumps tier (it can't import the tier table without a circular import).
 
 ## Things to check with real use
 
