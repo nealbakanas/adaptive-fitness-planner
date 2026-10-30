@@ -474,3 +474,5 @@ select.tierpick.TECH { background: #e9c46a; } select.tierpick.JUMP { background:
 .histhead .small { margin-left: auto; }
 .histedit .bhead { position: relative; padding-right: 40px; }
 select.tierpick { width: auto; flex: none; }
+/* A personal record on a logged set (L.setPR). */
+.prtag { font-size: 18px; line-height: 1; margin-left: 4px; filter: drop-shadow(0 0 4px rgba(255, 200, 60, .45)); }

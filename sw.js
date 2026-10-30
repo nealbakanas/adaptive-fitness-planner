@@ -1,6 +1,6 @@
 // Offline support and rest-timer notifications.
 
-const CACHE = 'afp-v21'; // bump with every release: the page shows it under Settings, so you can tell which version you're on
+const CACHE = 'afp-v23'; // bump with every release: the page shows it under Settings, so you can tell which version you're on
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json',
   'js/app.js', 'js/logic.js', 'js/store.js', 'js/seed.js', 'js/fitnotes.js', 'js/goals.js', 'js/mobility.js', 'js/programs.js', 'js/library.js', 'js/onboard.js', 'js/vault.js', 'js/cloud.js', 'js/cloud-config.js', 'js/sync.js', 'js/merge.js', 'js/taste.js', 'js/pace.js', 'js/review.js',

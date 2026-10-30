@@ -2355,6 +2355,71 @@ test('conditioning counts at 90 calories or 8 rounds: an EMOM 10 at 8 cal counts
   eq(migrate(old).tiers.COND.setMin, 8);
 });
 
+// ---------- personal records ----------
+test('PRs: heaviest load, most reps at a load or more, best estimated max; holds and reps-only work; never the first time', () => {
+  const s = seed();
+  let t = Date.now() - 30 * DAY;
+  const log = (exerciseId, load, reps, extra = {}) => { const x = { id: L.uid(), sessionId: 'p', blockId: 'p', exerciseId, tier: 'T2', load, reps, done: true, loggedAt: (t += 6e4), ...extra }; s.sets.push(x); return x; };
+  const first = log('ex-back-squat', 225, 6);
+  eq(L.setPR(s, first), null, 'first time');
+  log('ex-back-squat', 235, 3);
+  const eight = log('ex-back-squat', 225, 8);
+  eq(L.setPR(s, eight), { kind: 'reps', text: 'Rep PR: 8 at 225 lb (best was 6)' });
+  eq(L.setPR(s, log('ex-back-squat', 225, 8)), null, 'tying it is not a record');
+  eq(L.setPR(s, log('ex-back-squat', 245, 1)).kind, 'weight');
+  eq(L.setPR(s, s.sets.at(-1)).text, 'Weight PR: 245 lb (best was 235 lb)');
+  eq(L.setPR(s, log('ex-back-squat', 230, 7)).text, 'Rep PR: 7 at 230 lb (best was 3)', 'at 230 or more, only 235 × 3 and 245 × 1 came before');
+  eq(L.setPR(s, log('ex-back-squat', 200, 12)).kind, 'reps', 'most reps at 200 or more');
+  ok(!L.setPR(s, log('ex-back-squat', 135, 5, { warmup: true })), 'warm-ups never');
+  // Reps-only and holds.
+  log('ex-ring-dip', null, 10);
+  eq(L.setPR(s, log('ex-ring-dip', null, 12)).text, 'Rep PR: 12 in a set (best was 10)');
+  log('ex-sorensen', null, null, { time: 60 });
+  eq(L.setPR(s, log('ex-sorensen', null, null, { time: 75 })).text, 'Hold PR: 75s (best was 60s)');
+  // Looking back in History: only what came before counts.
+  eq(L.setPR(s, eight).kind, 'reps', 'later sets don\'t take a record away');
+});
+
+test('leaning upper: lower-body T1/T2 goals wait, unless the week runs out first', () => {
+  const s = seed(); s.settings.onboarded = true;
+  // Your goals: T1 Z press, T2 front squat, T2 cleans; upper-body pump work.
+  s.slots = [
+    { id: 'z', familyId: 'fam-ohp', exerciseId: 'gs-z-press', tier: 'T1', quota: 1, priority: 3 },
+    { id: 'fs', familyId: 'fam-squat', exerciseId: 'ex-front-squat', tier: 'T2', quota: 1, priority: 2 },
+    { id: 'cl', familyId: 'fam-clean', tier: 'T2', quota: 3, priority: 2 },
+    { id: 'ub', familyId: 'fam-upperback', tier: 'T3', quota: 2, priority: 1 },
+    { id: 'ar', familyId: 'fam-arms', tier: 'T3', quota: 2, priority: 1 },
+  ];
+  s.settings.weekStartDay = (new Date().getDay() + 3) % 7; // three days left
+  const c = ci({ minutes: 30, fatigue: 5, lean: 'upper' }); // wrecked
+  const names = r => r.blocks.map(b => L.byId(s.exercises, b.exerciseId).name);
+  const r = L.buildSuggestion(s, c);
+  ok(!r.blocks.some(b => b.exerciseId === 'ex-front-squat'), names(r).join(', '));
+  ok(r.blocks.some(b => b.exerciseId === 'gs-z-press'), 'Z press stays');
+  ok(r.scored.some(x => x.slot.id === 'fs' && /leaning upper: lower-body strength work waits \(3 days left\)/.test(x.note)));
+  ok(r.blocks.every(b => b.tier === 'T1' || b.tier === 'T3' || b.tier === 'TECH'), `the rest is T3 (or technique): ${names(r).join(', ')}`);
+  // Either way: it can come in.
+  ok(!L.buildSuggestion(s, { ...c, lean: 'either' }).scored.some(x => /leaning/.test(x.note || '')));
+  // The last day of the week: now or not this week, so it isn't held back.
+  s.settings.weekStartDay = (new Date().getDay() + 1) % 7;
+  ok(!L.buildSuggestion(s, c).scored.some(x => x.slot.id === 'fs' && /leaning/.test(x.note || '')), 'last day');
+});
+
+test('Regenerate takes open goals of a tier in turn: power clean, then snatch', () => {
+  const s = seed(); s.settings.onboarded = true;
+  const sn = s.families.find(f => /snatch/i.test(f.name)).id;
+  s.slots = [
+    { id: 'z', familyId: 'fam-ohp', exerciseId: 'gs-z-press', tier: 'T1', quota: 1, priority: 3 },
+    { id: 'cl', familyId: 'fam-clean', tier: 'T2', quota: 3, priority: 2 },
+    { id: 'sn', familyId: sn, tier: 'T2', quota: 1, priority: 2 },
+  ];
+  s.settings.weekStartDay = (new Date().getDay() + 3) % 7;
+  const fam = v => L.buildSuggestion(s, ci({ minutes: 30, fatigue: 3, lean: 'upper', variant: v })).blocks.filter(b => b.tier === 'T2').map(b => L.byId(s.exercises, b.exerciseId).familyId);
+  eq(fam(0), ['fam-clean']);
+  eq(fam(1), [sn]);
+  eq(fam(2), ['fam-clean']);
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

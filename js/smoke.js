@@ -1064,6 +1064,39 @@ step('sets added in History, then Continue: asks whether they were done, and mer
   run('done');
 });
 
+step('a PR shows a trophy on the set and says what it beat', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  const b = sess.blocks.find(x => st().exercises.find(e => e.id === x.exerciseId)?.metric === 'load_reps' && !st().exercises.find(e => e.id === x.exerciseId)?.bodyweight);
+  const ex = st().exercises.find(e => e.id === b.exerciseId);
+  // The best so far at 225: 6 reps, and nothing heavier.
+  st().sets = st().sets.filter(x => !(x.exerciseId === ex.id && x.done && x.sessionId !== sess.id));
+  st().sets.push({ id: 'pr-before', sessionId: 'pr-old', blockId: 'pr-old', exerciseId: ex.id, tier: b.tier, load: 225, reps: 6, done: true, loggedAt: Date.now() - 2 * 864e5 });
+  store.save();
+  const set = st().sets.find(x => x.blockId === b.id && !x.warmup && !x.done);
+  setVal(q(`[data-set="${set.id}"][data-f=load]`), '225');
+  setVal(q(`[data-set="${set.id}"][data-f=reps]`), '8');
+  click(`[data-act=check][data-id="${set.id}"]`);
+  const row = q(`[data-act=check][data-id="${set.id}"]`).closest('.set');
+  check('the set gets a trophy', !!row.querySelector('.prtag'), row.outerHTML.slice(0, 300));
+  check('and a toast says it: 8 at 225, best was 6', [...document.querySelectorAll('.toast')].some(x => /🏆 Rep PR: 8 at 225 lb \(best was 6\)/.test(x.textContent)));
+  check('the record is kept on the set', set.pr === 'reps' && /8 at 225/.test(set.prText));
+  click(`[data-act=check][data-id="${set.id}"]`);
+  check('un-logging takes it away', !set.pr && !q(`[data-act=check][data-id="${set.id}"]`).closest('.set').querySelector('.prtag'));
+  click(`[data-act=check][data-id="${set.id}"]`);
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  check('History shows the trophy with the record', [...document.querySelectorAll('.histex')].some(x => /🏆/.test(x.innerText) && /Rep PR: 8 at 225/.test(x.innerText)));
+  click('[data-act=nav][data-tab=today]');
+  st().sets = st().sets.filter(x => x.id !== 'pr-before');
+  store.save();
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
