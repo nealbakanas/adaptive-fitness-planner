@@ -603,7 +603,7 @@ export function scoreSlots(state, ci, t = Date.now()) {
     else if (half) { score *= 0.5; why.push(`leaning ${lean} ×0.5`); }
     // A short pocket of time, or a day you'll split up: favor things you can do right now with no setup.
     if ((ci.split || ci.minutes <= 20) && exercise.anytime) { score *= 1.5; why.push('can do anywhere ×1.5'); }
-    out.push({ slot: sl, exercise, score, why, waits });
+    out.push({ slot: sl, exercise, score, why, waits, remaining, daysLeft });
   }
   return out.sort((a, b) => b.score - a.score);
 }
@@ -721,6 +721,9 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
     for (const c of scored.filter(x => x.slot.tier === tier)) {
       // Jumps only come in when you turn them on at check-in; then the goal's jumps go in whatever the scores say.
       if (ON_REQUEST[tier] && !ci[ON_REQUEST[tier][0]]) { c.note = ON_REQUEST[tier][1]; continue; }
+      // Leaning one way: the other half's strength goals (T1/T2) wait, unless the week runs out before they could be done.
+      const lean = leanOf(ci), half = lean && (tier === 'T1' || tier === 'T2') && bodyRegion(state, c.exercise);
+      if (half && half !== lean && c.remaining < c.daysLeft) { c.note = `leaning ${lean}: ${half}-body strength work waits (${c.daysLeft} days left)`; continue; }
       if (c.waits) { c.note = 'power work waits for a fresh day'; continue; }
       // Wrecked (energy 1-2): one T2 at most, the rest of the time goes to T3s.
       if (count[tier] >= (tier === 'T2' && energy(ci) <= 2.5 ? 1 : TIER_CAP[tier])) { c.note = `${tier} cap reached`; continue; }

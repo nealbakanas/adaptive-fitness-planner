@@ -20,6 +20,7 @@ export const REASONS = {
   fresh: 'Waited for a fresh day (power work)',
   time: 'Never fit the time',
   others: 'Other goals came first',
+  lean: 'You leaned the other way',
   jumps: 'Jumps were off at check-in',
   cond: 'Conditioning was off at check-in',
   workouts: 'Not enough workouts',
@@ -46,6 +47,7 @@ function slipReason(state, sl, r, wk) {
   if (notes.some(n => /waits for a fresh day/.test(n))) return 'fresh';
   if (notes.some(n => /no scheme fits/.test(n))) return 'time';
   if (notes.some(n => /score too low|cap reached|favors other work/.test(n))) return 'others';
+  if (notes.some(n => /^leaning \w+: /.test(n))) return 'lean';
   if (notes.some(n => /jumps are off/.test(n))) return 'jumps';
   if (notes.some(n => /conditioning is off/.test(n))) return 'cond';
   if (wk.workouts < sl.quota) return 'workouts';

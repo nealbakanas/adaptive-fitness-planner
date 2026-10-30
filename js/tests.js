@@ -2380,6 +2380,31 @@ test('PRs: heaviest load, most reps at a load or more, best estimated max; holds
   eq(L.setPR(s, eight).kind, 'reps', 'later sets don\'t take a record away');
 });
 
+test('leaning upper: lower-body T1/T2 goals wait, unless the week runs out first', () => {
+  const s = seed(); s.settings.onboarded = true;
+  // Your goals: T1 Z press, T2 front squat, T2 cleans; upper-body pump work.
+  s.slots = [
+    { id: 'z', familyId: 'fam-ohp', exerciseId: 'gs-z-press', tier: 'T1', quota: 1, priority: 3 },
+    { id: 'fs', familyId: 'fam-squat', exerciseId: 'ex-front-squat', tier: 'T2', quota: 1, priority: 2 },
+    { id: 'cl', familyId: 'fam-clean', tier: 'T2', quota: 3, priority: 2 },
+    { id: 'ub', familyId: 'fam-upperback', tier: 'T3', quota: 2, priority: 1 },
+    { id: 'ar', familyId: 'fam-arms', tier: 'T3', quota: 2, priority: 1 },
+  ];
+  s.settings.weekStartDay = (new Date().getDay() + 3) % 7; // three days left
+  const c = ci({ minutes: 30, fatigue: 5, lean: 'upper' }); // wrecked
+  const names = r => r.blocks.map(b => L.byId(s.exercises, b.exerciseId).name);
+  const r = L.buildSuggestion(s, c);
+  ok(!r.blocks.some(b => b.exerciseId === 'ex-front-squat'), names(r).join(', '));
+  ok(r.blocks.some(b => b.exerciseId === 'gs-z-press'), 'Z press stays');
+  ok(r.scored.some(x => x.slot.id === 'fs' && /leaning upper: lower-body strength work waits \(3 days left\)/.test(x.note)));
+  ok(r.blocks.every(b => b.tier === 'T1' || b.tier === 'T3' || b.tier === 'TECH'), `the rest is T3 (or technique): ${names(r).join(', ')}`);
+  // Either way: it can come in.
+  ok(!L.buildSuggestion(s, { ...c, lean: 'either' }).scored.some(x => /leaning/.test(x.note || '')));
+  // The last day of the week: now or not this week, so it isn't held back.
+  s.settings.weekStartDay = (new Date().getDay() + 1) % 7;
+  ok(!L.buildSuggestion(s, c).scored.some(x => x.slot.id === 'fs' && /leaning/.test(x.note || '')), 'last day');
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;
