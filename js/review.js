@@ -36,6 +36,16 @@ export const weekOf = (state, t) => L.weekBounds(state, t);
 const doableAnywhere = (state, sl, tier = sl.tier, exerciseId = sl.exerciseId) =>
   state.locations.some(loc => L.pickExercise(state, sl.familyId, loc, tier, exerciseId));
 
+// The builder's reasons for holding a goal back (logic.js hold codes), in the order a slipped goal is explained by them.
+// `family` (the same family was already in the workout) doesn't explain a slip on its own.
+const HOLD_ORDER = ['fresh', 'time', 'others', 'lean', 'jumps', 'cond'];
+// Workouts saved before hold codes: read the note.
+function legacyHold(note = '') {
+  return /waits for a fresh day/.test(note) ? 'fresh' : /no scheme fits/.test(note) ? 'time'
+    : /score too low|cap reached|favors other work/.test(note) ? 'others' : /^leaning \w+: /.test(note) ? 'lean'
+    : /jumps are off/.test(note) ? 'jumps' : /conditioning is off/.test(note) ? 'cond' : null;
+}
+
 function slipReason(state, sl, r, wk) {
   if (!doableAnywhere(state, sl)) return 'gear';
   const label = slotLabel(state, sl);
@@ -43,13 +53,10 @@ function slipReason(state, sl, r, wk) {
   const blocks = wk.sessions.flatMap(s => (s.blocks || []).filter(b => b.slotId === sl.id));
   const removed = wk.sessions.flatMap(s => (s.removed || []).filter(x => (x.slotId ? x.slotId === sl.id : x.tier === sl.tier && L.byId(state.exercises, x.exerciseId)?.familyId === sl.familyId)));
   if (removed.length || blocks.some(b => (b.swaps || []).some(w => w.type === 'exercise'))) return 'swapped';
-  const notes = rows.filter(w => !w.picked).map(w => w.note || '');
-  if (notes.some(n => /waits for a fresh day/.test(n))) return 'fresh';
-  if (notes.some(n => /no scheme fits/.test(n))) return 'time';
-  if (notes.some(n => /score too low|cap reached|favors other work/.test(n))) return 'others';
-  if (notes.some(n => /^leaning \w+: /.test(n))) return 'lean';
-  if (notes.some(n => /jumps are off/.test(n))) return 'jumps';
-  if (notes.some(n => /conditioning is off/.test(n))) return 'cond';
+  // Why it was held back on the days it came up, in this order (first match wins).
+  const holds = new Set(rows.filter(w => !w.picked).map(w => w.hold ?? legacyHold(w.note)));
+  const why = HOLD_ORDER.find(h => holds.has(h));
+  if (why) return why;
   if (wk.workouts < sl.quota) return 'workouts';
   if (r && r.days.size > r.exposures) return 'short';
   return r?.filled ? 'fewer' : 'none';
