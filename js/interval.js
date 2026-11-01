@@ -5,7 +5,7 @@
 
 export const DEFAULT_PRESETS = [
   { id: 'iv-tabata', name: 'Tabata', work: 20, rest: 10, rounds: 8, sets: 1, setRest: 60, prep: 10 },
-  { id: 'iv-tabata-6x2', name: 'Tabata 6 × 2', work: 20, rest: 10, rounds: 6, sets: 2, setRest: 60, prep: 10 },
+  { id: 'iv-tabata-2x6', name: 'Tabata 2 × 6', work: 20, rest: 10, rounds: 2, sets: 6, setRest: 60, prep: 10 }, // 20/10, 20/10, a minute's rest; six times
   { id: 'iv-emom-10', name: 'EMOM 10', work: 60, rest: 0, rounds: 10, sets: 1, setRest: 0, prep: 10 },
   { id: 'iv-30-30', name: '30/30 × 10', work: 30, rest: 30, rounds: 10, sets: 1, setRest: 0, prep: 10 },
 ];
