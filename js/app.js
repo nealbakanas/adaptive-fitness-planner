@@ -6,6 +6,7 @@ import * as Taste from './taste.js';
 import { MIN_CHANGEOVERS } from './pace.js';
 import * as R from './review.js';
 import * as I from './interval.js';
+import * as THP from './thp.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -1037,6 +1038,7 @@ function viewSession(s) {
     ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
     <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   h += laterBanner(s);
+  if (s.planNote) h += `<div class="card muted plannote">${esc(s.planNote)}</div>`;
   if (!s.blocks.length) {
     h += `<div class="card muted">Nothing from your weekly goals fits this location and time. Add an exercise below, use a plan, or check in with more time.</div>`;
   }
@@ -1774,9 +1776,19 @@ function viewPlans() {
     `<button class="row" data-act="mobStart" data-id="${r.id}"><span>${esc(r.name)}</span><span class="meta">${r.items.length} exercises${lastRoutine(r.id)}</span></button>`).join('')}
     <button class="row add" data-act="mobPick" data-mode="new">Pick body parts ›</button></div></div>
     <div class="sectionhead"><h3>Saved plans</h3></div>`;
-  if (!state.plans.length) h += `<p class="muted">Hand-built sessions you can pick instead of the suggestion. Choosing one is logged as an override.</p>`;
-  h += state.plans.map(p => `<button class="card row" data-act="planEdit" data-id="${p.id}"><span><b>${esc(p.name)}</b>
-    <span class="meta">${esc(p.items.map(it => `${it.tier} ${exOf(it.exerciseId)?.name ?? '?'} ${schOf(it.schemeId)?.name ?? ''}`).join(' · '))}</span></span><span>›</span></button>`).join('');
+  const own = state.plans.filter(p => !p.group);
+  if (!own.length) h += `<p class="muted">Hand-built sessions you can pick instead of the suggestion. Choosing one is logged as an override.</p>`;
+  const planItems = p => esc(p.items.map(it => `${it.tier} ${exOf(it.exerciseId)?.name ?? '?'} ${schOf(it.schemeId)?.name ?? ''}`).join(' · '));
+  h += own.map(p => `<button class="card row" data-act="planEdit" data-id="${p.id}"><span><b>${esc(p.name)}</b>
+    <span class="meta">${planItems(p)}</span></span><span>›</span></button>`).join('');
+  // Plan groups (the THP-style jump plan): a heading, what it's about, and each day with Start and Edit.
+  for (const g of [...new Set(state.plans.filter(p => p.group).map(p => p.group))]) {
+    const about = g === THP.THP_GROUP ? THP.THP_ABOUT : '';
+    h += `<div class="sectionhead"><h3>${esc(g)}</h3></div>${about ? `<p class="meta pad">${esc(about)}</p>` : ''}`;
+    h += state.plans.filter(p => p.group === g).map(p => `<div class="card plangroup"><b>${esc(p.name)}</b>
+      <div class="meta">${planItems(p)}</div>${p.note ? `<p class="meta">${esc(p.note)}</p>` : ''}
+      <div class="brow"><button class="small primary" data-act="startPlan" data-id="${p.id}">Start</button><button class="small" data-act="planEdit" data-id="${p.id}">Edit</button></div></div>`).join('');
+  }
   h += `<div class="sectionhead"><h3>Mobility routines</h3><button class="small" data-act="mobRoutineNew">+ New routine</button></div>`;
   h += state.mobility.routines.map(r => `<button class="card row" data-act="mobRoutineEdit" data-id="${r.id}"><span><b>${esc(r.name)}</b>
     <span class="meta">${esc(r.items.map(id => mobEx(id)?.name ?? '?').join(' · '))}</span></span><span>›</span></button>`).join('')
@@ -3003,8 +3015,11 @@ const actions = {
 
   startPlan: d => {
     const p = L.byId(state.plans, d.id);
-    createSession(planBlocks(p), 'custom', { planId: p.id });
-    render();
+    const cur = currentSession();
+    if (cur) { cur.status = 'paused'; cur.pausedAt = Date.now(); toast('Paused your open workout. Resume it from Today later.'); }
+    createSession(planBlocks(p), 'custom', { planId: p.id, ...(p.note ? { planNote: p.note } : {}) });
+    ui.tab = 'today';
+    render(); window.scrollTo(0, 0);
   },
 
   check: d => {

@@ -227,7 +227,7 @@ export function seed() {
   ];
 
   return {
-    version: 26,
+    version: 27,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday

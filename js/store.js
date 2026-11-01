@@ -1,5 +1,6 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
 import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES, COND_TIER, COND_SCHEMES, COND_FAMILY, condExercise, DEFAULT_PRESETS } from './seed.js';
+import { addThpPlan } from './thp.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
@@ -329,6 +330,12 @@ export function migrate(s) {
     if (i >= 0 && next && !presets.some(p => p.id === next.id)) presets[i] = { ...next };
     if (s.intervals?.last?.id === 'iv-tabata-6x2') s.intervals.last = null;
     s.version = 26;
+  }
+  if (s.version < 27) {
+    // v27: the THP-style jump plan in the Plans tab (js/thp.js): four saved plans, a daily isometrics routine, and the
+    // plan-only Max approach jump. Suggestions don't change. (A new install doesn't get it: it's an add-on.)
+    addThpPlan(s);
+    s.version = 27;
   }
   return s;
 }

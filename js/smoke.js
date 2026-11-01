@@ -27,6 +27,7 @@ wipe();
 await (await import('./vault.js')).wipe(); // the second copy too, or a run would recover the last one's data
 await import('./app.js');
 const store = await import('./store.js');
+const THP = await import('./thp.js');
 const { state } = store;
 const L = await import('./logic.js');
 await new Promise(r => setTimeout(r, 200));
@@ -1151,6 +1152,22 @@ step('the Timer tab: the log screen after the run', () => {
     store.save();
     click('[data-act=nav][data-tab=today]');
   }
+});
+
+step('the THP-style jump plan in Plans: start a day, see its notes, sets count as usual', () => {
+  const st = () => store.state;
+  THP.addThpPlan(st()); store.save();
+  click('[data-act=nav][data-tab=plans]');
+  check('Plans shows the THP-style jump plan with its four days', /THP-style jump plan/.test(text()) && qa('.plangroup').length === 4 && /High day A/.test(text()) && /Jump day/.test(text()));
+  check('and the daily isos routine', /THP daily isos/.test(text()));
+  click('.plangroup [data-act=startPlan][data-id=plan-thp-high-a]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  check('Start opens it on Today with its notes', sess?.planId === 'plan-thp-high-a' && /Today/.test(q('#app h1').innerText) && /pause doubles/.test(q('.plannote')?.innerText ?? ''));
+  check('with its exercises: power clean, broad jumps, back squat, hip thrust', ['ex-power-clean', 'ex-broad-jump', 'ex-back-squat', 'ex-hip-thrust'].every(id => sess.blocks.some(b => b.exerciseId === id)));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  st().plans = st().plans.filter(p => !p.group); store.save();
+  click('[data-act=nav][data-tab=today]');
 });
 
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
