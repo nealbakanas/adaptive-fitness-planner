@@ -2,6 +2,7 @@
 
 import { mobilitySeed } from './mobility.js';
 import { DEFAULT_PRESETS } from './interval.js';
+export { DEFAULT_PRESETS };
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 
 export const EQUIPMENT = [
@@ -226,7 +227,7 @@ export function seed() {
   ];
 
   return {
-    version: 25,
+    version: 26,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday

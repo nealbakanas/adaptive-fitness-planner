@@ -1,5 +1,5 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
-import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES, COND_TIER, COND_SCHEMES, COND_FAMILY, condExercise } from './seed.js';
+import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES, COND_TIER, COND_SCHEMES, COND_FAMILY, condExercise, DEFAULT_PRESETS } from './seed.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises } from './mobility.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
@@ -320,6 +320,15 @@ export function migrate(s) {
   if (s.version < 25) {
     // v25: the Timer tab. `intervals` (presets, last used) and `intervalRun` arrive from the defaults above.
     s.version = 25;
+  }
+  if (s.version < 26) {
+    // v26: the built-in Tabata 6 × 2 (6 rounds, 2 sets) becomes Tabata 2 × 6: 20/10 twice, a minute's rest, six times.
+    const presets = s.intervals?.presets;
+    const i = presets?.findIndex(p => p.id === 'iv-tabata-6x2') ?? -1;
+    const next = DEFAULT_PRESETS.find(p => p.id === 'iv-tabata-2x6');
+    if (i >= 0 && next && !presets.some(p => p.id === next.id)) presets[i] = { ...next };
+    if (s.intervals?.last?.id === 'iv-tabata-6x2') s.intervals.last = null;
+    s.version = 26;
   }
   return s;
 }
