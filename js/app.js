@@ -5,6 +5,7 @@ import * as Cloud from './cloud.js';
 import * as Taste from './taste.js';
 import { MIN_CHANGEOVERS } from './pace.js';
 import * as R from './review.js';
+import * as I from './interval.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -17,7 +18,7 @@ const appEl = document.getElementById('app');
 const navEl = document.getElementById('nav');
 const sheetEl = document.getElementById('sheet');
 
-const TABS = [['today', 'Today'], ['week', 'Week'], ['library', 'Library'], ['plans', 'Plans'], ['more', 'Settings']];
+const TABS = [['today', 'Today'], ['week', 'Week'], ['timer', 'Timer'], ['library', 'Library'], ['plans', 'Plans'], ['more', 'Settings']];
 const INTENTS = [['auto', 'You pick'], ['heavy', 'Heavy'], ['sweat', 'Sweat'], ['easy', 'Easy']];
 const LEANS = [['either', 'Either'], ['upper', 'Upper body'], ['lower', 'Lower body']];
 const TIMES = [10, 15, 20, 30, 45, 60, 90];
@@ -667,8 +668,8 @@ function render() {
     return;
   }
   navEl.hidden = false;
-  navEl.innerHTML = TABS.map(([k, t]) => `<button data-act="nav" data-tab="${k}" class="${ui.tab === k ? 'on' : ''}">${t}</button>`).join('');
-  const views = { today: viewToday, week: viewWeek, library: viewLibrary, plans: viewPlans, more: viewSettings };
+  navEl.innerHTML = TABS.map(([k, t]) => `<button data-act="nav" data-tab="${k}" class="${ui.tab === k ? 'on' : ''} ${k === 'timer' && state.intervalRun ? 'live' : ''}" ${k === 'timer' && state.intervalRun ? 'aria-label="Timer, running"' : ''}>${t}</button>`).join('');
+  const views = { today: viewToday, week: viewWeek, timer: viewTimer, library: viewLibrary, plans: viewPlans, more: viewSettings };
   appEl.innerHTML = globalBanners() + views[ui.tab]();
   renderSheet();
   renderTimer();
@@ -769,6 +770,162 @@ function programCards() {
         <button data-act="progOpen" data-id="${d.id}">Program ›</button></div></div>`;
   }).join('');
 }
+
+// ---------- the Timer tab: interval timers (js/interval.js) ----------
+
+// The timer being set up: the last one you ran, else the first preset, with the bike (or a conditioning exercise) in it.
+function ivDraft() {
+  if (ui.iv) return ui.iv;
+  const base = state.intervals?.last ?? state.intervals?.presets?.[0] ?? I.DEFAULT_PRESETS[0];
+  const cfg = I.clean(base);
+  if (!cfg.exercises.length || !cfg.exercises.every(exOf)) {
+    const bike = exOf('ex-assault-bike') ?? state.exercises.find(e => !e.archived && L.isConditioning(state, e)) ?? state.exercises.find(e => !e.archived);
+    cfg.exercises = bike ? [bike.id] : [];
+  }
+  ui.iv = { ...cfg, presetId: base.id ?? null };
+  return ui.iv;
+}
+
+// Exercises for a set: conditioning first, then everything by name.
+function ivExerciseOptions(sel) {
+  const live = state.exercises.filter(e => !e.archived || e.id === sel);
+  const cond = live.filter(e => L.isConditioning(state, e)).sort((a, b) => a.name.localeCompare(b.name));
+  const rest = live.filter(e => !L.isConditioning(state, e)).sort((a, b) => a.name.localeCompare(b.name));
+  const o = list => list.map(e => `<option value="${esc(e.id)}" ${e.id === sel ? 'selected' : ''}>${esc(e.name)}</option>`).join('');
+  return `<optgroup label="Conditioning">${o(cond)}</optgroup><optgroup label="Everything else">${o(rest)}</optgroup>`;
+}
+
+function viewTimer() {
+  if (state.intervalRun) return viewIntervalRun(state.intervalRun);
+  if (ui.ivLog) return viewIntervalLog(ui.ivLog);
+  const d = ivDraft();
+  const presets = state.intervals?.presets ?? [];
+  const field = (k, label, val, hint = '') => `<div class="field"><label for="iv-${k}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
+    <input id="iv-${k}" class="num" inputmode="${k === 'rounds' || k === 'sets' ? 'numeric' : 'text'}" data-iv="${k}" value="${esc(val)}"></div>`;
+  const sets = Array.from({ length: d.sets }, (_, i) => `<div class="field"><label for="iv-ex-${i}">${d.sets > 1 ? `Set ${i + 1}` : 'Exercise'}</label>
+    <select id="iv-ex-${i}" data-ivex="${i}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`).join('');
+  return `<header class="top"><h1>Timer</h1></header>
+    <div class="chips">${presets.map(p => `<button class="chip ${d.presetId === p.id ? 'on' : ''}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
+    <div class="card">
+      <div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div>
+      <div class="row2 fields">${field('work', 'Work', clock(d.work), 'm:ss')}${field('rest', 'Rest', clock(d.rest), '0 for EMOM')}</div>
+      <div class="row2 fields">${field('rounds', 'Rounds', d.rounds)}${field('sets', 'Sets', d.sets)}</div>
+      <div class="row2 fields">${field('setRest', 'Rest between sets', clock(d.setRest))}${field('prep', 'Get ready', clock(d.prep))}</div>
+      ${sets}
+      <p class="meta">${esc(I.describe(d))}. Rounds you finish count toward your goals: conditioning toward the conditioning goal, anything else toward its own.</p>
+      <div class="brow"><button class="primary big" data-act="ivStart">Start</button></div>
+      <div class="brow"><button class="small" data-act="ivSave">${d.presetId && presets.some(p => p.id === d.presetId && !p.id.startsWith('iv-')) ? 'Save changes' : 'Save as a timer'}</button>
+        ${d.presetId && !d.presetId.startsWith('iv-') ? '<button class="small quiet" data-act="ivDel">Delete this timer</button>' : ''}</div>
+    </div>`;
+}
+
+function viewIntervalRun(run) {
+  const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
+  return `<header class="top"><h1>${esc(run.cfg.name)}</h1></header>
+    <div class="ivrun ${at?.phase.kind ?? 'done'}" id="iv-run">${ivRunInner(run, list, at)}</div>
+    <div class="brow ivbtns">${run.pausedAt ? '<button class="primary big" data-act="ivResume">Resume</button>' : '<button class="big" data-act="ivPause">Pause</button>'}
+      <button class="big" data-act="ivSkip">Skip</button><button class="big danger" data-act="ivStop">Stop</button></div>`;
+}
+
+const IV_LABEL = { prep: 'Get ready', work: 'Work', rest: 'Rest', setRest: 'Rest between sets' };
+function ivRunInner(run, list, at) {
+  if (!at) return '<div class="ivclock">Done</div>';
+  const c = run.cfg, p = at.phase;
+  const ex = exOf(p.exerciseId)?.name ?? '';
+  const next = at.next ? `Next: ${IV_LABEL[at.next.kind]}${at.next.kind === 'work' ? ` · ${esc(exOf(at.next.exerciseId)?.name ?? '')}` : ''}` : 'Last one';
+  return `<div class="ivfill" style="width:${Math.min(100, at.frac * 100)}%"></div>
+    <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}</div>
+    <div class="ivclock">${clock(at.rem)}</div>
+    <div class="ivsub">${p.kind === 'prep' ? esc(ex) : `${esc(ex)} · round ${p.round} of ${c.rounds}${c.sets > 1 ? ` · set ${p.set} of ${c.sets}` : ''}`}</div>
+    <div class="ivnext">${next}</div>`;
+}
+
+// After a run: what you did, ready to log. Totals are per set (calories for the bike, else reps); blank still logs the rounds.
+function viewIntervalLog(lg) {
+  const done = I.roundsDone(I.phases(lg.cfg), lg.ms);
+  if (!done.length) return `<header class="top"><h1>Timer</h1></header><div class="card"><p>No rounds finished, so there's nothing to log.</p>
+    <div class="brow"><button class="primary" data-act="ivDiscard">OK</button></div></div>`;
+  const open = currentSession();
+  return `<header class="top"><h1>Log it</h1></header>
+    <div class="card"><p class="meta">${esc(lg.cfg.name)} · ${clock(Math.round(lg.ms / 1000))}. ${open ? 'Goes into the workout you have open.' : 'Saved as its own workout today.'}</p>
+    ${done.map(d => {
+      const ex = exOf(d.exerciseId);
+      const unitWord = ex?.repUnit ?? (ex?.metric === 'time' ? null : 'reps');
+      return `<div class="field"><label for="iv-total-${d.set}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')} · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}</label>
+        ${unitWord ? `<input id="iv-total-${d.set}" class="num" inputmode="numeric" data-ivtotal="${d.set}" value="${esc(lg.totals?.[d.set] ?? '')}" placeholder="total ${esc(unitWord)}">` : `<span class="meta">${lg.cfg.work}s a round</span>`}</div>`;
+    }).join('')}
+    <div class="brow"><button class="primary big" data-act="ivLog">Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
+}
+
+// A scheme for a block of timer rounds (kept, so the block has one; never suggested: manualOnly).
+function intervalScheme(cfg, tier, reps) {
+  const id = `s-i-${cfg.rounds}x${cfg.work}-${cfg.rest}-${tier}`;
+  let sc = schOf(id);
+  if (!sc) {
+    sc = { id, name: cfg.rest ? `${cfg.rounds} × ${cfg.work}s on / ${cfg.rest}s off` : `EMOM ${cfg.rounds} (every ${clock(cfg.work)})`, sets: cfg.rounds, reps: reps || 1, restSec: cfg.rest,
+      minutes: Math.max(1, Math.round(cfg.rounds * (cfg.work + cfg.rest) / 60)), tiers: [tier], manualOnly: true, ...(cfg.rest ? {} : { emom: cfg.work }) };
+    state.schemes.push(sc);
+  }
+  return sc;
+}
+
+// Logs a run: a block per set, a set per round finished (at the time it ended), the set's total spread over its rounds.
+// Into the open workout if there is one, else a workout of its own.
+function logIntervals(lg) {
+  const cfg = I.clean(lg.cfg), done = I.roundsDone(I.phases(cfg), lg.ms);
+  if (!done.length) return 0;
+  const open = currentSession();
+  const s = open ?? { id: L.uid(), day: L.dayKey(lg.startedAt), checkinAt: lg.startedAt, firstSetAt: null, status: 'done', source: 'interval',
+    locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round(I.totalSecs(cfg) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
+  let n = 0;
+  for (const d of done) {
+    const ex = exOf(d.exerciseId);
+    if (!ex) continue;
+    const tier = tierFor(ex, 'T3');
+    const reps = I.spread(lg.totals?.[d.set], d.rounds.length);
+    const sc = intervalScheme(cfg, tier, reps[0]);
+    const b = { id: L.uid(), tier, slotId: slotIdFor(ex.id, tier), exerciseId: ex.id, schemeId: sc.id, swaps: [], interval: cfg.name };
+    s.blocks.push(b);
+    d.rounds.forEach((r, i) => {
+      state.sets.push({ id: L.uid(), sessionId: s.id, blockId: b.id, exerciseId: ex.id, tier, schemeId: sc.id, load: null,
+        reps: ['reps', 'load_reps'].includes(ex.metric) ? reps[i] : null, time: ex.metric === 'time' ? cfg.work : null, distance: null,
+        done: true, loggedAt: lg.startedAt + r.endMs, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}) });
+      n++;
+    });
+  }
+  const first = Math.min(...state.sets.filter(x => x.sessionId === s.id && x.done && x.loggedAt).map(x => x.loggedAt));
+  if (!s.firstSetAt || first < s.firstSetAt) s.firstSetAt = first;
+  if (!open) state.sessions.push(s);
+  return n;
+}
+
+// The run, every quarter second: beeps at each change and in the last three seconds, and the clock on screen.
+let ivLast = null;
+function tickInterval() {
+  const run = state.intervalRun;
+  if (!run || run.pausedAt) return;
+  const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
+  if (!at) {
+    beep(3, 880);
+    if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
+    ui.ivLog = { cfg: run.cfg, startedAt: run.startedAt, ms: I.totalSecs(run.cfg) * 1000, totals: {} };
+    state.intervalRun = null; ivLast = null;
+    setWakeLock(false);
+    save(); render();
+    return;
+  }
+  if (ivLast !== at.i) {
+    if (ivLast != null) {
+      if (at.phase.kind === 'work') { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(250); }
+      else { beep(2, 520); if (timerCfg().vibrate) navigator.vibrate?.([120, 80, 120]); }
+    }
+    ivLast = at.i;
+  }
+  if (at.rem <= 3 && run.beeped !== `${at.i}:${at.rem}`) { run.beeped = `${at.i}:${at.rem}`; beep(1, 660); }
+  const el = document.getElementById('iv-run');
+  if (el && ui.tab === 'timer') { el.className = `ivrun ${at.phase.kind}`; el.innerHTML = ivRunInner(run, list, at); }
+}
+setInterval(tickInterval, 250);
 
 function viewProgram(id) {
   const d = P.programDef(id), p = P.progress(state, id);
@@ -3037,6 +3194,60 @@ const actions = {
   },
   laterDone: () => { const s = currentSession(); if (!s) return; resolveLater(s, true); save(); render(); toast('Kept as done'); },
   laterPlanned: () => { const s = currentSession(); if (!s) return; resolveLater(s, false); save(); render(); toast('Unticked: they count once you log them'); },
+  ivPreset: d => {
+    const p = (state.intervals?.presets ?? []).find(x => x.id === d.id);
+    if (!p) return;
+    const keep = ivDraft().exercises; // a preset without exercises keeps the ones you picked
+    ui.iv = { ...I.clean(p), presetId: p.id };
+    if (!ui.iv.exercises.length) ui.iv.exercises = keep;
+    render();
+  },
+  ivSave: () => {
+    const d = ivDraft(), list = (state.intervals.presets ??= []);
+    const mine = d.presetId && !d.presetId.startsWith('iv-') && list.find(p => p.id === d.presetId);
+    const cfg = I.clean(d);
+    if (mine) Object.assign(mine, cfg, { id: mine.id });
+    else { const id = `ivu-${L.uid()}`; list.push({ ...cfg, id }); d.presetId = id; }
+    save(); render(); toast(`Saved “${cfg.name}”`);
+  },
+  ivDel: () => askConfirm('Delete this timer?', 'Your logged rounds stay.', 'Delete', () => {
+    state.intervals.presets = state.intervals.presets.filter(p => p.id !== ui.iv?.presetId);
+    ui.iv = null; save(); render();
+  }),
+  ivStart: () => {
+    const d = ivDraft(), cfg = I.clean(d);
+    if (!cfg.exercises.length) return toast('Pick an exercise first');
+    state.intervals.last = { ...cfg, id: d.presetId ?? undefined };
+    state.intervalRun = { cfg, startedAt: Date.now(), pausedAt: null, pausedMs: 0 };
+    ivLast = null;
+    unlockAudio(); setWakeLock(true);
+    save(); render(); window.scrollTo(0, 0);
+  },
+  ivPause: () => { const r = state.intervalRun; if (r && !r.pausedAt) { r.pausedAt = Date.now(); save(); render(); } },
+  ivResume: () => { const r = state.intervalRun; if (r?.pausedAt) { r.pausedMs = (r.pausedMs || 0) + Date.now() - r.pausedAt; r.pausedAt = null; unlockAudio(); save(); render(); } },
+  ivSkip: () => {
+    const r = state.intervalRun; if (!r) return;
+    const list = I.phases(r.cfg), ms = I.elapsed(r), at = I.phaseAt(list, ms);
+    if (!at) return;
+    r.startedAt -= I.phaseStart(list, at.i + 1) - ms; // jump to the start of the next phase
+    save(); tickInterval(); render();
+  },
+  ivStop: () => {
+    const r = state.intervalRun; if (!r) return;
+    ui.ivLog = { cfg: r.cfg, startedAt: r.startedAt, ms: I.elapsed(r), totals: {} };
+    state.intervalRun = null; ivLast = null;
+    setWakeLock(false);
+    save(); render();
+  },
+  ivLog: () => {
+    const lg = ui.ivLog; if (!lg) return;
+    for (const el of document.querySelectorAll('[data-ivtotal]')) lg.totals[el.dataset.ivtotal] = el.value;
+    const n = logIntervals(lg);
+    ui.ivLog = null;
+    save(); render();
+    toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}` : 'Nothing to log');
+  },
+  ivDiscard: () => { ui.ivLog = null; render(); },
   resume: d => {
     const cur = currentSession();
     if (cur) { cur.status = 'paused'; cur.pausedAt = Date.now(); }
@@ -4022,6 +4233,18 @@ document.addEventListener('change', e => {
   } else if (d.hloc !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit);
     if (s) { s.locationId = el.value || null; delete s.locationIds; save(); }
+  } else if (d.iv !== undefined) {
+    const v = ivDraft();
+    if (d.iv === 'name') v.name = el.value;
+    else if (['work', 'rest', 'setRest', 'prep'].includes(d.iv)) v[d.iv] = /^\s*0+(:0+)?\s*$/.test(el.value) ? 0 : parseMSS(el.value) ?? v[d.iv];
+    else v[d.iv] = Number(el.value) || v[d.iv];
+    Object.assign(v, I.clean(v), { presetId: v.presetId });
+    render();
+  } else if (d.ivex !== undefined) {
+    const v = ivDraft();
+    const ex = Array.from({ length: v.sets }, (_, i) => I.exerciseFor(v, i + 1));
+    ex[Number(d.ivex)] = el.value;
+    v.exercises = ex;
   } else if (d.hdur !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit), v = Math.round(Number(el.value));
     if (s) { if (el.value.trim() !== '' && v > 0) s.durationMin = v; else delete s.durationMin; save(); }

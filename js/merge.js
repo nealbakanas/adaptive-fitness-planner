@@ -41,7 +41,7 @@ export function mergeById(base, local, remote, newer) {
 }
 
 const ARRAYS = ['sessions', 'sets', 'exercises', 'families', 'slots', 'schemes', 'plans', 'locations', 'reviews'];
-const OBJECTS = ['settings', 'tiers', 'programs', 'imports'];
+const OBJECTS = ['settings', 'tiers', 'programs', 'imports', 'intervals'];
 const MOBILITY_ARRAYS = ['exercises', 'routines', 'sessions'];
 
 // Merges two whole states. `base` may be null. Returns a new state (not yet migrated). `timer` stays this device's.
