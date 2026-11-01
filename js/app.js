@@ -286,7 +286,7 @@ function setBlockTier(s, b, tier, reason = null) {
 
 const readyText = r => r.tired ? 'Tired: explosive work becomes technique'
   : r.heavy.length ? `Heavy ${r.heavy.join('/')} work since yesterday: explosive work there becomes technique`
-  : 'Fresh for power work';
+  : r.low ? 'Low energy: power work stays, in short sets' : 'Fresh for power work';
 
 // Conditioning supersets: the bike (or whatever conditioning is here), or null when there's none or it's skipped today.
 function condPairExercise(s) {
@@ -1694,7 +1694,8 @@ function settingsYou() {
       ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`, 'Weekly goals reset on this day')}
     </div>
     <div class="label">Suggestions</div>
-    <div class="menu">${frow('Rest what you trained yesterday', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1), 'The day after heavy or moderate lower-body work, lower-body strength goals wait and upper-body ones come first (and the other way round)')}
+    <div class="menu">${frow('Power work on low-energy days', switchIn('settings.recovery.powerWhenTired', st.recovery?.powerWhenTired !== false), 'Cleans and snatches stay power work at energy 1–2, in short sets. Off: they become technique work')}
+      ${frow('Rest what you trained yesterday', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1), 'The day after heavy or moderate lower-body work, lower-body strength goals wait and upper-body ones come first (and the other way round)')}
       ${frow('Learn from my swaps', switchIn('settings.learnTaste', st.learnTaste !== false), 'Suggestions follow what you swap to, swap away from and remove. Favorites and Never suggest always count')}
       <button class="menurow" data-act="tasteForget"><span class="grow"><span class="name">Forget what it learned</span>
         <span class="meta">${st.tasteSince ? `Earlier swaps are ignored since ${esc(new Date(st.tasteSince).toLocaleDateString())}` : 'Starts it fresh; your history stays'}</span></span></button></div>

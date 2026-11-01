@@ -52,6 +52,24 @@ step('fresh suggestion', () => {
   click('[data-act=finish]');
 });
 
+step('low energy keeps power work (the default), with the switch in Settings', () => {
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=you]');
+  const sw = q('input[data-bind="settings.recovery.powerWhenTired"]');
+  check('Settings has Power work on low-energy days, on', !!sw && sw.checked);
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  click('[data-k=energy][data-v="1"]');
+  click('[data-act=suggest]');
+  check('the header says power work stays', /Low energy: power work stays/.test(text()), text().slice(0, 300));
+  click('[data-act=recheck]');
+  // The rest of these steps check the technique-when-tired mode.
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=you]');
+  const off = q('input[data-bind="settings.recovery.powerWhenTired"]');
+  off.checked = false; fire(off, 'change');
+  check('the switch turns it off', store.state.settings.recovery.powerWhenTired === false);
+  click('[data-act=nav][data-tab=today]');
+});
+
 step('tired check-in gives technique', () => {
   onlyAt('loc-basement');
   click('[data-k=energy][data-v="1"]');
@@ -71,6 +89,7 @@ step('power block while tired offers one-tap technique', () => {
   check('block is now technique', !!jump && /TECH/.test(jump.innerText), jump?.innerText.slice(0, 80));
   check('technique scheme chosen', !!jump && /[2-3]/.test(jump.querySelector('[data-act=swapScheme]').innerText));
   click('[data-act=recheck]');
+  store.state.settings.recovery.powerWhenTired = true; store.save();
 });
 
 step('choose the mix, then regenerate it', () => {

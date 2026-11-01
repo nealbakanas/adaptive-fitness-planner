@@ -164,6 +164,7 @@ test('a block does not make itself not-fresh', () => {
 });
 test('tired makes everything explosive not fresh', () => {
   const s = seed();
+  s.settings.recovery.powerWhenTired = false; // the technique-when-tired mode
   ok(!L.powerReadiness(s, ci({ fatigue: 4 }), s.exercises.find(e => e.id === 'ex-broad-jump')).fresh);
   ok(!L.powerReadiness(s, ci({ fatigue: 3, sleep: 1 }), s.exercises.find(e => e.id === 'ex-broad-jump')).fresh);
 });
@@ -182,6 +183,7 @@ test('fresh day: power work first, no technique block', () => {
 });
 test('tired day: no explosive power blocks, technique instead', () => {
   const s = seed();
+  s.settings.recovery.powerWhenTired = false; // the technique-when-tired mode
   const r = L.buildSuggestion(s, ci({ fatigue: 5 }));
   const ex = id => s.exercises.find(e => e.id === id);
   ok(r.blocks.some(b => b.tier === 'TECH'), 'technique block present');
@@ -460,6 +462,7 @@ test('suggested goals: replace, add without duplicates, and undo', () => {
 });
 test('with suggested goals, a tired day does technique cleans instead of heavy ones', () => {
   const s = history();
+  s.settings.recovery.powerWhenTired = false; // the technique-when-tired mode
   G.applyGoals(s, G.suggestGoals(s).rows, 'replace');
   const nextWeek = Date.now() + 7 * DAY; // this week's goals are already done in this history
   const r = L.buildSuggestion(s, ci({ fatigue: 4 }), nextWeek);
@@ -588,6 +591,7 @@ test('extra time adds goal work from families not already in the workout', () =>
 });
 test('tired reasons talk about energy (5 fresh), not fatigue', () => {
   const s = seed();
+  s.settings.recovery.powerWhenTired = false; // the technique-when-tired mode
   const r = L.powerReadiness(s, ci({ fatigue: 5 }), s.exercises.find(e => e.id === 'ex-broad-jump'));
   ok(r.reasons.some(x => /energy 1/.test(x)), r.reasons.join());
 });
@@ -738,6 +742,7 @@ test('warm-up sets never count: max, goals, target load, heavy work', () => {
 
 test('focused workouts: upper and lower from the whole library, explosive first when fresh', () => {
   const s = seed();
+  s.settings.recovery.powerWhenTired = false; // the technique-when-tired mode
   const names = res => res.blocks.map(b => `${b.tier} ${s.exercises.find(e => e.id === b.exerciseId).name}`);
   const region = id => s.exercises.find(e => e.id === id).region;
   const pat = id => L.movementPattern(s, s.exercises.find(e => e.id === id));
@@ -2382,6 +2387,7 @@ test('PRs: heaviest load, most reps at a load or more, best estimated max; holds
 
 test('leaning upper: lower-body T1/T2 goals wait, unless the week runs out first', () => {
   const s = seed(); s.settings.onboarded = true;
+  s.settings.recovery.powerWhenTired = false; // the technique-when-tired mode
   // Your goals: T1 Z press, T2 front squat, T2 cleans; upper-body pump work.
   s.slots = [
     { id: 'z', familyId: 'fam-ohp', exerciseId: 'gs-z-press', tier: 'T1', quota: 1, priority: 3 },
@@ -2448,6 +2454,26 @@ test('the weekly review reads why a goal was held back from its code, as it did 
   const s2 = structuredClone(s); for (const x of s2.sessions[0].why) delete x.hold;
   eq(R.weekReview(s2, w).goals.map(g => g.reason), codes.map(g => g.reason));
   ok(codes.some(g => g.reason === 'lean') && codes.some(g => g.reason === 'jumps'), JSON.stringify(codes.map(g => g.reason)));
+});
+
+test('power work on low-energy days (the default): cleans stay power work at energy 1, in short sets; off: technique', () => {
+  const s = seed(); s.settings.onboarded = true;
+  const clean = L.byId(s.exercises, 'ex-power-clean');
+  eq(L.powerReadiness(s, ci({ fatigue: 5 }), clean).fresh, true, 'tired alone no longer holds power work back');
+  const r = L.buildSuggestion(s, ci({ fatigue: 5, minutes: 45 }));
+  const power = r.blocks.filter(b => L.byId(s.exercises, b.exerciseId).explosive && (b.tier === 'T1' || b.tier === 'T2'));
+  ok(power.length > 0, r.blocks.map(b => `${b.tier} ${L.byId(s.exercises, b.exerciseId).name}`).join(', '));
+  ok(power.every(b => L.byId(s.schemes, b.schemeId).reps <= 3), 'short sets');
+  eq(L.readinessSummary(s, ci({ fatigue: 5 })).low, true);
+  // Heavy lower work since yesterday still makes it technique.
+  s.sets.push({ id: 'h', sessionId: 'h', blockId: 'h', exerciseId: 'ex-back-squat', tier: 'T1', load: 300, reps: 3, done: true, loggedAt: Date.now() - 3600e3 });
+  ok(!L.powerReadiness(s, ci({ fatigue: 5 }), clean).fresh);
+  // Off: tired makes it technique, as before.
+  const o = seed(); o.settings.recovery.powerWhenTired = false;
+  ok(!L.powerReadiness(o, ci({ fatigue: 5 }), clean).fresh);
+  // Older data without the setting gets the default.
+  const old = seed(); delete old.settings.recovery.powerWhenTired;
+  ok(L.powerReadiness(old, ci({ fatigue: 5 }), clean).fresh);
 });
 
 await queue;
