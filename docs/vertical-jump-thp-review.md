@@ -1,147 +1,224 @@
 # Vertical jump: THP vs. your programming, and a hybrid
 
-*For review. Nov 2026.*
+*For review. Nov 2026, second version: it now draws on 20 full THP podcast transcripts.*
 
-## What THP is (and what's knowable)
+## Sources and how much to trust them
 
-THP Strength is Isaiah Rivera's (50.5" tested vertical) and John Evans's online jump coaching. The program itself is
-paid ($79–139/month), individualized from an intake questionnaire, and delivered a week at a time in TeamBuildr. So
-**its exact sets, reps and weekly layout aren't public.** What follows comes from their own podcast transcripts,
-their free Skool group's description, and two third-party reviews. Treat anything labeled *inferred* as my reading,
-not THP's prescription.
+THP Strength is Isaiah Rivera's (50.5" tested approach vertical) and John Evans's online jump coaching. John also
+coaches four of the six people who have tested 50". Their paid programs are individualized and not public. Everything
+below comes from the following sources:
 
-## THP distilled
+- **Their own words.** I read about 20 full transcripts of the THP Strength podcast, which also runs as their YouTube
+  channel, out of 118 published. The titles are listed in the sources at the end.
+- **Their free material** and two third-party reviews.
+- **Not the videos themselves.** YouTube blocks caption downloads from this server, so videos that aren't also
+  podcast episodes (for example *Do This 6 Week Plan If You Want A 40 Inch Vertical*, *Vertical Jump Training Phases
+  Explained*, *How To Write A Vertical Jump Program: Macrocycles*) aren't covered unless the same content aired as
+  a podcast. If you want them included, paste a transcript or watch and summarize.
 
-1. **Reactive strength is the quality to improve.** They frame the jump as how well you store and release energy
-   through your tendons ("stiffness"). They measure it as RSI, flight time ÷ ground contact time, and it only counts if
-   jump height rises too. Strong lifters with low RSI have a "deficit" to train.
-2. **A force-velocity sequence, over about 3 months.** First volume, then max strength, then speed. Within a month
-   they go from lower force to higher force and velocity, and over a year from general to specific. This is
-   Verkhoshansky's *conjugate-sequence* (block) idea, which they name directly.
-3. **Isometrics are the base of the pyramid.** They use about 45 s holds at roughly 70% effort, short of compression
-   and pain, often daily, for tendons (patellar and Achilles). Heavy slow resistance comes next, every other day, then
-   elastic work. Their free material includes an "isometric week" for patellar tendon rehab.
-4. **Strength builds the reserve.** Squats (including singles about 3×/week for weak athletes), power cleans (they
-   single out cleans from blocks for rate of force development), and barbell squat jumps for power. Strength "creates
-   reserves for adaptation" that later show up as higher RSI.
-5. **Low-volume, high-quality plyometrics.** Depth jumps progress from about 12" to 18" to 24". They add repeat hops
-   and max approach jumps. Keep it simple: a few good drills, kept for a while.
-6. **The lower leg is a staple.** Calf and Achilles work runs from isometrics to volume calf raises, then heavy calf
-   raises, supramaximal eccentrics, and fast calf raises (banded), before landing in plyos, sprints and cleans. Example:
-   calf raise 4×5 at about 75% with a 3 s hold at the bottom.
-7. **Sprinting and approach speed.** Upright sprinting and "train like a track athlete" come up repeatedly. A faster
-   approach only helps if you can still "use the energy."
-8. **Fresh, short, sharp sessions.** Plyos come first, strength after, on leg days. Each session opens with a knee and
-   tendon check. Sessions are "short but sharp," and they jump higher after strings of 3–4 well-dosed sessions. They
-   watch for overreaching.
-9. **Test regularly.** Track repeat-hop RSI (6 hops, average of the best 3; good is high 2s, very good low 3s) and max
-   approach jumps (flight time, contact time, height). They use MyJump2 or 240 fps phone video.
-10. **Technique is worth inches.** Approach, penultimate step and arm swing are coached from video.
+Where I'm interpreting rather than quoting them, it says *(my read)*.
 
-## Your current programming (from the app)
+## How THP trains: the system
 
-| Area | What you have |
-|---|---|
-| Heavy (T1) | Barbell single-leg squat, RDL, Z press, weighted pull-up: 1× each a week |
-| Moderate (T2) | Front squat, hip thrust, weighted ring dip, **power clean 3×**, **snatch 1×** |
-| Technique | Clean 1×, snatch 1× (lighter, quality reps) |
-| Jumps | 2×/week, 12–20 contacts, **only on days you turn on Add jumps** (4 contacts last week) |
-| Accessories (T3) | Upper back, arms, core, hips & glutes, hamstrings, **calves 2× (0/2 last week, swapped)** |
-| Conditioning | Assault bike EMOMs / Tabata, up to 3×/week, plus bike supersets in T1/T2 rests |
-| Rules | Explosive work first; power work now stays on low-energy days (short sets); the day after heavy lower work, lower lifts wait |
-| Not there | Isometrics, depth jumps as a goal, sprinting, any jump testing, a block sequence |
+### 1. The week alternates hard and easy days, legs every day
+- **High days** (Mon/Wed/Fri) train speed, strength and coordination at high intensity: cleans, heavy squats, plyos and
+  sprints. **Low or "general" days** (Tue/Thu) cover mobility, tempo work, slow strength circuits (lunges, slow
+  squats, push-ups) and some conditioning. The general days let the nervous system and fast-twitch fibres recover
+  while you keep training. *(What Is The THP Training Split?)*
+- "It's legs seven days a week": isometrics on the off days. Upper body goes on Tue/Thu, or alongside.
+- **One jump (dunk) session a week** is their default. Robust athletes can do two. "Anything past that is a little
+  bit risky." *(How Often Should You Jump?)* The session usually lands at the **end of the week** on a lighter
+  "feel-good" lift day, so you arrive fresh. They call the front-loaded version "the Jonathan special": hard early in
+  the week, back off, then a high-quality jump session. *(How Your Jump Sessions Should Look)*
+- With knee or tendon pain they switch to a "load management" setup: short sessions about twice a week, plus
+  knee-specific lifting, until the athlete is healthy.
 
-## Side by side
+### 2. How a jump session runs
+1. Isometrics, then "jump dynamic flexibility" (about 10 each of hinges, squats, lunges, leg swings), then a long
+   general-to-specific warm-up. Isaiah is "in a full sweat" before he jumps.
+2. **20–30 minutes of build-up jumps**: drops, box jumps, standing jumps, then low-effort jumps. Raise effort by at
+   most **10–20% per jump, and only if it's pain-free**. Pain at 3/10 ends the session.
+3. **A timed max-effort window.** Start at **5 minutes**, then add about 5 minutes a week. Their sweet spot is about
+   **20 minutes off two feet and 15 off one**. A whole session should be about **30–45 minutes** to stay healthy.
+4. **The 72-hour check:** if on Monday morning you feel you could jump again, the length was right.
+- Heavier and more powerful athletes need *shorter* sessions; light ones can go longer. *(How Long Should Sessions
+  Be…)*
+- When they push weight-room intensity they *cut* jump volume (for example 80–120 → 40–50 contacts a week).
 
-| THP principle | You today | Gap |
+### 3. Plyometrics: less is more
+- "The biggest mistake people make is they do too many plyos too frequently." Plyos train the nervous system. They do
+  **not** make tendons stiffer. Heavy slow strength work and isometrics do that. *(Ten Reps Of A Good
+  Plyometric…)*
+- Typical dose in a power phase:
+  - **2–3 contacts**, or up to 6 when they're in succession, × 3–4 sets.
+  - **Supersetted with heavy cleans or squats.** Mon: broad, standing, squat or double-dip jumps. Wed: lunge or split
+    jumps, about 4×4, with a single-leg lift.
+  - Month 2 keeps the volume and makes the same plyos more reactive (shorter contacts).
+- They're used in blocks **about twice a year**, a couple of months each. In those blocks a 3-week cycle replaces the
+  usual 4-week one, because you "feel flatter and flatter" until you unload.
+- Most-cited drills: depth jumps (12 → 18 → 24"), double-dip jumps, standing jumps, three-hop broad jumps, barbell or
+  dumbbell squat jumps ("the first time I ever did barbell squat jumps, my vertical skyrocketed").
+
+### 4. Strength and power
+- **Squat protocol:** pause squats at 70–85% for doubles, then work up to **one heavy single at 88–95%** in a
+  max-strength phase. Build plenty of reps over 70%: one coach logged about 170 working reps a month. Space the very
+  intense loading about **72 hours** apart, because tendon and cartilage recovery takes about that long. *(Our
+  FAVORITE Squat Protocol)*
+- **Power cleans are their strongest marker.** "Every time I have PR'd my vertical, I hit a PR power clean two to
+  four weeks prior." They use cleans from blocks for rate of force development, second-pull speed work at 50–70%, and
+  overloaded clean pulls. *(Can Olympic Lifts Make You Jump Higher?)*
+- **Isometrics:** submaximal holds (about 45 s at roughly 70%, often daily) for tendon health. *Overcoming* isos
+  (pushing an immovable bar, about 3 × 3–5 s pushes) come in a max-strength phase and are progressed carefully,
+  because they can be hard on cartilage.
+- **The force-velocity order of a long plan:** concentric focus → isometric → slow heavy eccentric → fast
+  supramaximal eccentric → "collisions" (high-intensity plyos). It runs general → specific and low force → high force.
+  Each advanced method is a "golden bullet" that works best the first time, so don't fire it early. "Slow-cooked"
+  progress gives a higher ceiling. *(Strength Vs. Power Vs. Speed Cycles)*
+- **Their numbers for reference:**
+  - Isaiah at about 165 lb: power clean 255 lb (≈1.55× bodyweight), deep back squat about 340 lb (≈2.1×), RDL
+    385.
+  - At about 40" vertical: deep squat about 315 (≈1.9×), clean 205–225 (≈1.3×). *(THP Strength Standards)*
+
+### 5. Load, unload, and when to stop a cycle
+- **3 weeks of loading, then a 1-week deload.** In the deload, drop volume or intensity by about 20%. Keep singles at
+  about 90%, but no max attempts or failure: those spoil it.
+- **A 2–4 week unload or taper** after hard training "almost guarantees" a top-1% jumping day, typically +2–3".
+  *(How To Jump 6 Inches Higher In 7 Days; You Need More Rest Than You Think…)*
+- **Stop the cycle** when the power metrics, such as bar speed or jump height, drop about **5%** (*When To Cut A
+  Cycle…*). Sudden heavy fatigue, like needing an afternoon nap, is the other sign.
+- **Don't jump from nothing to everything.** After time off, start low (low rim, short approaches, a few max jumps)
+  and build week by week. *(You're Training Too Hard Too Soon)*
+
+### 6. Sprinting is optional
+- They value sprinting for long-term development and body composition. But Isaiah broke his two-year plateau to
+  50.5" in a year **without** sprinting, and John's vertical dropped during three months of sprinting three times a
+  week (before rising after the deload). *(Should You Sprint To Jump Higher?)*
+
+### 7. Lower leg, testing, technique
+- **Calf/Achilles progression** (the first version of this doc already covered it): isometrics, then volume, then
+  heavy, then supramaximal eccentric, then fast reps.
+- **Test reactive strength:** repeat-hop RSI and max approach flight time. Most importantly, track the jump itself
+  every session.
+- **Technique** (approach, penultimate step, arm swing) is worth inches, and arm swing is about 20% of an approach
+  jump.
+
+### 8. The mistakes they see most
+- Too many plyos and not enough strength work.
+- Intensifying too early, or using complex exercises too soon.
+- Mixing several programs together.
+- Skimping on warm-ups and general days. *(The Biggest Mistakes When Writing Your Own Vertical Jump Program)*
+
+## You, from the app
+
+| | You | THP reference |
 |---|---|---|
-| Reactive strength / RSI as the target | Not measured | **Big.** No feedback on whether the vertical is moving |
-| Volume → strength → speed blocks | Same goals every week | **Medium.** Everything is trained at once, all year |
-| Daily isometrics for tendons | None | **Medium.** Cheap insurance, and part of their base |
-| Heavy strength, cleans | Strong: T1 squats/hinges, cleans 3×, snatches | Mostly covered |
-| Low-volume depth jumps, approach jumps | Jumps only when toggled; 4 contacts last week | **Big.** Too little, and not the right kind |
-| Calf / Achilles progression | Calves goal exists but gets skipped | **Medium** |
-| Sprinting | None | **Medium** |
-| Fresh for jumping | Power work allowed on low-energy days; conditioning up to 3× and in rests | **Conflict.** Fatigue blunts reactive work |
-| Test monthly | The Air Alert page logs a vertical; nothing else | **Medium** |
-| Technique | None | Small, but free inches |
+| Bodyweight | ≈235 lb | Isaiah ≈165 lb |
+| Power clean | 215–225 (≈0.95× bodyweight) | ≈1.3× at a 40", ≈1.55× at 50" |
+| Front squat (e1RM) | ≈365 (≈1.55×) | Deep back squat ≈1.9× at 40" |
+| RDL | 345 (≈1.5×) | Isaiah 385 at 165 lb |
+| Heavy lifts | T1 single-leg squat, RDL, Z press, pull-up, 1× a week each | Heavy every high day |
+| Power | Power clean T2 3×/week, snatch 1×, technique cleans and snatches | Cleans are the main marker |
+| Jumping | A JUMP block (12–20 contacts) only when you turn on Add jumps; 4 contacts last week | One timed, quality jump session a week, plus low-dose plyos paired with lifts |
+| Rhythm | Same goals every week; no deloads; hard and easy days happen by accident | Alternating hard/easy days, 3:1 loading, blocks |
+| Conditioning | Bike up to 3×/week, Tabata, bike in T1/T2 rests | General days only; never before jumping |
+| Tendons | No isometrics | Daily isos; heavy slow work |
+| Low energy | Power work still allowed (new setting) | Cut the cycle when output drops 5% |
+| Air Alert 2 (in the app) | High-volume plyo program | Exactly the "too many plyos" pattern they warn about *(my read)* |
 
-**What you do better than a generic jump plan:** the app adapts every day to time, energy, location and recovery. It
-keeps strength honest (T1 progression, AMRAP) and fits work into a real week. THP's strength base and clean emphasis
-are already there.
+**What stands out *(my read)*:**
+1. **Relative strength and body mass are your main gap.** At 235 lb, your clean is under 1× bodyweight against their
+   1.3–1.5×. The cheapest inches are likely a heavier clean and squat at the same or lower bodyweight. THP also notes
+   heavier athletes need shorter sessions and fewer contacts.
+2. **You don't have a real jump session.** Max-effort jumping is "the single most effective" thing they name, and
+   right now it barely happens.
+3. **Too much conditioning, placed badly**, and nothing hard-easy about the week. The bike in clean rests and the
+   Tabatas on lifting days take from exactly what jumping needs.
+4. **No deloads.** THP's best jumps come after an unload, and you have none planned.
+5. **What's already right:** concurrent training (all qualities every week, like their "concurrent" approach),
+   explosive work first, the clean focus, and the readiness and recovery rules.
 
-## A hybrid (proposal)
+## A hybrid for you (proposal)
 
-Keep the app's engine and GZCL tiers, but aim them at jumping, in **12-week blocks** like THP's.
+Keep the app's engine: weekly goals, GZCL tiers, daily check-in, readiness. Shape it the way THP does.
 
-### Every day (5 minutes, any location)
-- **Isometrics:** Spanish squat or wall sit at about 70%, 3 × 45 s (patellar). Then calf raise iso at mid-range,
-  3 × 45 s (Achilles). No pain, no shaking.
-- In the app: a mobility routine "Tendon isos", or a T3 "anytime" goal.
+### The week (4–5 sessions)
+| Day | Type | Content |
+|---|---|---|
+| Mon | **High** | Isos → warm-up → **power clean (from blocks) 5×2, each set with 3 standing/broad jumps** → T1 squat (pause doubles 70–85% → a single 88–95% in the strength block) → hip thrust → upper |
+| Tue | Low / general | Isos, slow strength circuit (split squats, Nordics, heavy slow calves), mobility, **bike or Tabata here**, upper |
+| Wed | **High** | Isos → snatch or hang clean, or barbell squat jumps → **T1 single-leg squat, each set with 4 lunge jumps** → RDL → calves |
+| Thu | Low / general | Like Tue; tempo or bike EMOM; upper |
+| Fri/Sat | **Jump day** (light "feel-good" lift after, or nothing) | Isos → jump dynamic flexibility → 20–30 min build-up → **max-effort window, start at 5 min, +5 min/week to about 20** → done |
 
-### Twice a week: jump days (fresh, first thing in the session)
-- Warm-up, then **max approach jumps × 5–8** (log the best) and **depth jumps × 3–5 × 3** (start at 12", move to 18",
-  then 24" only while contact stays short). Add **repeat hops × 6 once a week** as the RSI test.
-- Then a strength pair: T1 squat or single-leg squat, then **cleans from blocks** (T2, 5–6 × 2).
-- In the app: make jumps a real goal (2×/week, quality over contacts), turn on Add jumps on these days, and put depth
-  jumps and approach jumps in the jumps family. **No bike in the rests on jump days.**
+Rules: no bike in rests on high days or jump day. Before jump day, the plyo pairings are the only jumping. Pain 3/10
+stops a session. Use the 72-hour check.
 
-### Once a week: sprint plus lower leg
-- 4–6 × 20–30 m accelerations, 2–4 × flying 20 m, full rest.
-- Calf progression: weeks 1–4 volume (3 × 12–15 slow), weeks 5–8 heavy (4–5 × 5, 3 s pause), weeks 9–12 fast or
-  banded calf raises plus pogos.
-- In the app: a "Sprint" family as a JUMP-like tier or T3, and the calves goal at 2× with that progression.
-
-### Strength, the rest of the week
-- Keep T1/T2 as they are, but bias the 12-week block:
-
-| Weeks | Focus | Lean on | Ease off |
+### Blocks (about 16 weeks, each block 3 weeks loading + 1 deload)
+| Block | Focus | Lean on | Keep light |
 |---|---|---|---|
-| 1–4 | Volume | T2 (front squat, hip thrust, RDL 3–4 × 6–8), calves volume | Depth jumps (12" only) |
-| 5–8 | Max strength | T1 heavy singles to triples (squat, single-leg squat, RDL), heavy calves | T3 count |
-| 9–12 | Speed / transfer | Cleans from blocks, barbell squat jumps (light), depth jumps 18–24", sprints | T1 to maintenance (1 heavy set) |
+| 1 | Volume / concentric | T2 volume (front squat, hip thrust, RDL 4×6–8), submax isos, calves volume | Plyos (paired jumps only, 2–3 contacts) |
+| 2 | Max strength / isometric | Pause squats to heavy singles, clean heavy, overcoming isos 3×(3×5 s) | T3 count |
+| 3 | Power / eccentric (3-week mesos) | **Clean from blocks PR**, squat jumps, one supramax-eccentric day a week, more reactive paired plyos | T1 to maintenance |
+| 4 | Elastic / specific, then taper | Depth jumps 12 → 18 → 24", longer jump windows, then a **2-week unload → test** | Weight-room volume |
 
-### Conditioning
-- Bike **on non-jump days, after lifting**, 1–2× a week. Tabata and EMOMs are fine; just keep them away from jump
-  freshness. Bike supersets go in upper-body T1/T2 rests only.
+**Stop any block early** if your clean bar speed or jump height drops about 5%.
 
-### Low-energy days
-- Keep power work (your new setting), but **no depth jumps or max approaches when tired**. Reactive work done tired
-  trains the wrong thing. On those days, do isometrics and technique instead.
+**Track:** power clean (a PR usually comes 2–4 weeks before a vertical PR), max approach touch, standing vertical and
+repeat-hop RSI every 4 weeks.
 
-### Test every 4 weeks
-- Standing vertical, max approach (touch height), repeat-hop RSI. Log them where you can see the trend.
+### Bodyweight and relative strength
+Even holding weight while the clean and squat go up moves you toward their ratios. Losing fat while keeping strength
+moves you faster *(my read; THP doesn't count calories themselves)*.
 
-## What it would take in the app (if you want it)
+### Air Alert
+I'd pause it during this. Its daily high-volume plyos are what THP warns against for adults *(my read)*.
 
-1. **A jump test log.** Standing vertical, approach touch and RSI each week, charted. Small to medium.
-2. **Blocks.** A 12-week block setting that shifts tier quotas (volume, then strength, then speed) automatically. Medium.
-3. **Jump-day rules.** On a day with jumps on, keep the bike out of rests and put reactive work first. When energy is
-   1–2, depth and max jumps become technique or isometrics. Small.
-4. **Daily isometrics** as a routine with a timer (the Timer tab can already do 3 × 45 s). Small.
-5. **Calves progression** as a named T3 plan by block. Small.
+## What the app would need (rough size)
+
+1. **High/low day pattern:** check-in and suggestions alternate high and general days, conditioning and slow
+   circuits go on general days, and no bike on high days. *Medium.*
+2. **3:1 deload weeks and blocks:** a block setting that shifts tier emphasis by block and drops volume about 20% every
+   fourth week. *Medium.*
+3. **Jump session mode in the Timer tab:** a build-up timer, a max-effort window that grows 5 minutes a week, a pain
+   check (stop at 3/10) and logging of best touch. *Small–medium.*
+4. **Jump supersets:** 2–4 contact plyos as the superset idea for cleans and squats on high days, the way the bike
+   works now. *Small.*
+5. **Daily isos routine** (Timer tab, 3 × 45 s). *Small.*
+6. **Jump and strength test log**, with clean bar speed or jump height trend and a "cut the cycle" warning at −5%.
+   *Medium.*
 
 ## Caveats
-
-- THP's real program is individualized and paid. This is their published thinking, not their spreadsheet.
-- Their example numbers (depth jump heights, RSI benchmarks, 4×5 calf iso) come from podcast transcripts, not a
-  written protocol.
-- Knee or Achilles pain changes everything here. Start with the isometrics, and keep depth jumps out until they're
-  pain-free.
+- This is THP's published thinking, assembled from podcast transcripts, not their individualized spreadsheets.
+- Their numbers come from elite, lighter jumpers. Scale volumes down at your bodyweight, and keep anything with knee or
+  Achilles pain on their load-management path: isos, short sessions, no depth jumps.
 
 ## Sources
 
-- THP podcast transcript, calf raise progression (isometrics → heavy slow → speed; volume → max strength → speed):
-  https://thpstrength.transistor.fm/episodes/the-exact-calf-raise-progression-we-use-on-world-class-jumpers-exercises-included/transcript
-- THP podcast transcript, reactive strength / RSI, testing, low-volume depth jumps, long conjugate sequence:
-  https://thpstrength.transistor.fm/episodes/improving-this-could-get-you-jumping-higher-fast/transcript
-- THP podcast episode list (topics: cleans from blocks for RFD, sprinting, tendons, bilateral vs unilateral):
-  https://feeds.transistor.fm/thpstrength
-- THP free group (beginner week, isometric week for patellar tendon): https://www.skool.com/thp/beginner-jump-training
-- Review: A1Athlete, THP Strength review (individualized questionnaire, knee protocols, weekly delivery):
-  https://a1athlete.com/thp-strength-review/
-- Review: Vertical Jump World (plyos first then strength; Olympic lifts and sprints; joint-health check each session):
-  https://verticaljumpworld.com/isaiah-rivera-jump-program-review/
-- Isaiah Rivera background: https://en.wikipedia.org/wiki/Isaiah_Rivera
-- Conjugate-sequence / block background: https://www.just-fly-sports.com/vertical-jump-training-arrangement-101-part-3-of-3/
-  and https://elitefts.com/education/verkhoshanskys-5-rules-from-special-strength-training-manual-for-coaches
+THP Strength podcast, full transcripts (the same people and content as their YouTube channel):
+- What Is The THP Training Split? — https://share.transistor.fm/s/73675e11
+- How Your Jump Sessions Should Look To Jump Higher (And Stay Healthy) — https://share.transistor.fm/s/dad25fc6
+- How Often Should You Jump? — https://share.transistor.fm/s/78736a16
+- How Long Should Sessions Be For Vertical Jump Gains? — https://share.transistor.fm/s/a0a1123b
+- Ten Reps Of A Good Plyometric Is Enough To Jump Higher — https://share.transistor.fm/s/dcafdfb0
+- Our FAVORITE Squat Protocol — https://share.transistor.fm/s/1a50975a
+- Can Olympic Lifts Make You Jump Higher? — https://share.transistor.fm/s/0da321ee
+- Strength Vs. Power Vs. Speed Cycles — https://share.transistor.fm/s/6167fca5
+- When To Cut A Cycle To Jump Higher — https://share.transistor.fm/s/aa2f7dfa
+- You Need More Rest Than You Think To Jump Your Highest — https://share.transistor.fm/s/f864a231
+- How To Jump 6 Inches Higher In 7 Days (deloads/tapers) — https://share.transistor.fm/s/70f0175b
+- You're Training Too Hard Too Soon — https://share.transistor.fm/s/6ebd3475
+- Should You Sprint To Jump Higher? — https://share.transistor.fm/s/309f44b6
+- How To Warm Up To Jump Higher — https://share.transistor.fm/s/946f4500
+- How To Train Your Tendons To Jump Higher (max isometrics) — https://share.transistor.fm/s/c0c27058
+- THP Strength Standards — https://share.transistor.fm/s/ceafb365
+- How Strong Do You Have To Be For A 40in Vertical — https://share.transistor.fm/s/77d78210
+- Max Strength Isn't Your Vertical Jump Deficit — https://share.transistor.fm/s/2fd8c222
+- The Biggest Mistakes When Writing Your Own Vertical Jump Program — https://share.transistor.fm/s/bee0f4f4
+- The Exact Calf Raise Progression We Use On World Class Jumpers — https://share.transistor.fm/s/d66722f8
+- Improving This Could Get You Jumping Higher FAST (reactive strength, testing) — https://share.transistor.fm/s/836182d2
+- Episode list and transcript feed: https://feeds.transistor.fm/thpstrength
+
+Other:
+- THP free group (beginner week, isometric week): https://www.skool.com/thp/beginner-jump-training
+- Reviews: https://a1athlete.com/thp-strength-review/ and https://verticaljumpworld.com/isaiah-rivera-jump-program-review/
+- Isaiah Rivera's channel (videos not transcribed here): https://www.youtube.com/channel/UCw1mvHj6NL86Pj01IeBvjWA
