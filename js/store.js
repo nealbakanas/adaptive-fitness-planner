@@ -317,6 +317,10 @@ export function migrate(s) {
     for (const ss of s.sessions) for (const b of ss.blocks || []) if (cond.has(b.exerciseId) && b.tier !== 'COND') { b.tier = 'COND'; b.slotId = s.slots.find(sl => sl.tier === 'COND' && sl.familyId === 'fam-cond')?.id ?? null; }
     s.version = 24;
   }
+  if (s.version < 25) {
+    // v25: the Timer tab. `intervals` (presets, last used) and `intervalRun` arrive from the defaults above.
+    s.version = 25;
+  }
   return s;
 }
 

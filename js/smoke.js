@@ -1116,6 +1116,43 @@ step('a PR shows a trophy on the set and says what it beat', () => {
   store.save();
 });
 
+step('the Timer tab: Tabata 6 × 2 on the bike, run, logged, counted toward conditioning', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=timer]');
+  check('the Timer tab shows the presets', /Timer/.test(q('#app h1').innerText) && !!q('[data-act=ivPreset]'));
+  click(qa('[data-act=ivPreset]').find(b => /Tabata 6 × 2/.test(b.innerText)));
+  check('the preset fills in: 0:20 on, 0:10 off, 6 rounds, 2 sets, 1:00 between', q('#iv-work').value === '0:20' && q('#iv-rest').value === '0:10' && q('#iv-rounds').value === '6' && q('#iv-sets').value === '2' && q('#iv-setRest').value === '1:00');
+  check('an exercise for each set, the bike to start', qa('[data-ivex]').length === 2 && q('[data-ivex="0"]').value === 'ex-assault-bike');
+  setVal(q('#iv-rounds'), '7'); setVal(q('#iv-rounds'), '6');
+  click('[data-act=ivStart]');
+  check('it runs: Get ready, then work', !!st().intervalRun && /get ready/i.test(q('#iv-run').innerText) && !!q('#nav button.live[data-tab=timer]'));
+  click('[data-act=ivPause]');
+  check('pause', !!st().intervalRun.pausedAt && !!q('[data-act=ivResume]'));
+  click('[data-act=ivResume]');
+  click('[data-act=ivSkip]');
+  check('skip goes to round 1', /work/i.test(q('#iv-run').innerText) && /round 1 of 6/.test(q('#iv-run').innerText), q('#iv-run').innerText);
+  // Fast-forward to the end.
+  st().intervalRun.startedAt -= 10 * 60e3; store.save();
+});
+await new Promise(r => setTimeout(r, 500)); // the timer ticks every quarter second
+step('the Timer tab: the log screen after the run', () => {
+  const st = () => store.state;
+  {
+    check('done: the log screen, 6 rounds per set', /Log it/.test(text()) && qa('[data-ivtotal]').length === 2 && /Log 12 rounds/.test(text()), text().slice(0, 300));
+    const before = L.creditWeek(st()).slots.get('sl-cond-bike')?.filled ?? 0;
+    setVal(q('[data-ivtotal="1"]'), '46'); setVal(q('[data-ivtotal="2"]'), '40');
+    click('[data-act=ivLog]');
+    const sess = st().sessions.find(x => x.source === 'interval' && x.blocks.length === 2);
+    const sets = st().sets.filter(x => x.sessionId === sess?.id);
+    check('logged as a workout: 12 conditioning rounds, the calories spread over them', !!sess && sets.length === 12 && sets.every(x => x.tier === 'COND' && x.done) && sets.reduce((t, x) => t + x.reps, 0) === 86, JSON.stringify(sets.map(x => x.reps)));
+    check('it counts toward the conditioning goal', (L.creditWeek(st()).slots.get('sl-cond-bike')?.filled ?? 0) >= Math.min(before + 1, st().slots.find(x => x.id === 'sl-cond-bike')?.quota ?? 1));
+    check('and shows in History', (click('[data-act=nav][data-tab=week]'), click('[data-act=histOpen]'), /Assault bike/.test(text())));
+    st().sessions = st().sessions.filter(x => x.id !== sess.id); st().sets = st().sets.filter(x => x.sessionId !== sess.id);
+    store.save();
+    click('[data-act=nav][data-tab=today]');
+  }
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');

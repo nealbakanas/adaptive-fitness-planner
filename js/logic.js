@@ -675,6 +675,7 @@ export function pickScheme(state, tier, ex, budget, ci, dose = null) {
   const e = energy(ci);
   let best = null, bestScore = -Infinity;
   for (const sc of schemeOptions(state, tier)) {
+    if (sc.manualOnly) continue; // logged from the Timer tab: a record of what you did, not something to suggest
     if (schemeTime(state, tier, ex.id, sc) > budget || overRepCap(ex, sc)) continue;
     if (tier === 'T2' && powerSets(sc) && !ex.explosive && e > 2.5) continue;
     let s = 0;
@@ -1000,7 +1001,7 @@ export function stretchToFit(state, blocks, minutes, ci = null) {
       if (ci?.intent === 'easy' && b.tier === 'T2') continue; // easy day: T2s stay light
       const dose = slotDose(state, byId(state.slots, b.slotId), b.tier);
       for (const sc of schemeOptions(state, b.tier)) {
-        if (sc.minutes <= cur.minutes || overRepCap(ex, sc) || !doseFit(state, b.tier, sc, dose)) continue;
+        if (sc.manualOnly || sc.minutes <= cur.minutes || overRepCap(ex, sc) || !doseFit(state, b.tier, sc, dose)) continue;
         if (tired ? sc.reps > cur.reps : powerSets(sc)) continue;
         if (b.tier === 'T3' && (sc.reps > 15 || (sc.reps < 8 && !ex.maxReps))) continue; // sets of 8-15, as in pickScheme
         const cost = blockMinutes(state, { ...b, schemeId: sc.id }, { blocks }) - blockMinutes(state, b, { blocks });

@@ -224,7 +224,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 24);
+  eq(m.version, 25);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -243,7 +243,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 24);
+  eq(m.version, 25);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -516,7 +516,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 24);
+  eq(m.version, 25);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -679,7 +679,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 24);
+  eq(m.version, 25);
   eq(m.mobility.routines.length, 4);
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -706,7 +706,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 24);
+  eq(m.version, 25);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1229,7 +1229,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 24);
+  eq(m.version, 25);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1388,7 +1388,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 24);
+  eq(m.version, 25);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1481,10 +1481,10 @@ test('v19: data saved before it opens with savedAt unset, and the summary counts
   s.version = 18;
   delete s.savedAt;
   const m = migrate(s);
-  eq([m.version, m.savedAt], [24, null]);
+  eq([m.version, m.savedAt], [25, null]);
   s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
   s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
-  eq(V.summaryOf(s), { version: 24, workouts: 1, sets: 1 });
+  eq(V.summaryOf(s), { version: 25, workouts: 1, sets: 1 });
 });
 atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
   if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
@@ -1647,7 +1647,7 @@ test('merge: settings merge key by key; whole states keep both devices\' work an
   eq(m.sessions.map(x => x.id), ['ls', 'rs']);
   ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
   ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
-  eq(migrate(m).version, 24);
+  eq(migrate(m).version, 25);
 });
 test('sync plan: what to do for each situation', () => {
   const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
@@ -1883,7 +1883,7 @@ atest('sync: another device saving mid-push is merged and retried; offline and o
     const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
     fake.putRow(EMAIL, future);
     const nv = await Sync.sync();
-    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 24);
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 25);
   });
 });
 atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
@@ -2276,7 +2276,7 @@ test('conditioning: the upgrade adds the bike, its EMOMs and a goal once; scheme
   old.schemes = old.schemes.filter(sc => !sc.tiers.includes('COND')); old.slots = old.slots.filter(sl => sl.tier !== 'COND');
   for (const l of old.locations) l.equipment = l.equipment.filter(q => q !== 'assault-bike');
   const m = migrate(old);
-  eq(m.version, 24);
+  eq(m.version, 25);
   ok(m.tiers.COND.repMin === 90 && m.families.some(f => f.id === 'fam-cond') && L.byId(m.exercises, 'ex-assault-bike').repUnit === 'cal');
   eq(m.schemes.filter(sc => sc.tiers.includes('COND')).length, 6);
   eq(m.slots.filter(sl => sl.tier === 'COND').map(sl => sl.quota), [1]);
@@ -2474,6 +2474,45 @@ test('power work on low-energy days (the default): cleans stay power work at ene
   // Older data without the setting gets the default.
   const old = seed(); delete old.settings.recovery.powerWhenTired;
   ok(L.powerReadiness(old, ci({ fatigue: 5 }), clean).fresh);
+});
+
+// ---------- interval timer (js/interval.js) ----------
+import * as IV from './interval.js';
+test('interval timer: Tabata 6 × 2 with a minute between sets is laid out phase by phase', () => {
+  const cfg = { name: 'Tabata 6 × 2', work: 20, rest: 10, rounds: 6, sets: 2, setRest: 60, prep: 10, exercises: ['ex-assault-bike', 'ex-ski'] };
+  const list = IV.phases(cfg);
+  eq(list.filter(p => p.kind === 'work').length, 12);
+  eq(list.filter(p => p.kind === 'rest').length, 10, 'no rest after a set\'s last round');
+  eq(list.filter(p => p.kind === 'setRest').length, 1);
+  eq(IV.totalSecs(cfg), 10 + 2 * (6 * 20 + 5 * 10) + 60);
+  eq(list.filter(p => p.kind === 'work').map(p => p.exerciseId).slice(5, 7), ['ex-assault-bike', 'ex-ski'], 'an exercise per set');
+  const at = IV.phaseAt(list, 15e3); // 5 s into round 1
+  eq([at.phase.kind, at.phase.round, at.rem], ['work', 1, 15]);
+  eq(IV.phaseAt(list, IV.totalSecs(cfg) * 1000), null, 'over');
+  eq(IV.phaseAt(list, IV.phaseStart(list, 12)).phase.kind, 'setRest', 'after get-ready and set 1 (6 work, 5 rest)');
+  // Stopped 12 s into round 3: rounds 1 and 2 are done, and round 3 counts (more than half of it).
+  const done = IV.roundsDone(list, 10e3 + 2 * 30e3 + 12e3);
+  eq(done.map(d => d.rounds.length), [3]);
+  eq(IV.roundsDone(list, 10e3 + 2 * 30e3 + 5e3)[0].rounds.length, 2, 'less than half: not counted');
+  eq(IV.spread(46, 6), [8, 8, 8, 8, 7, 7]);
+  eq(IV.spread('', 3), [null, null, null]);
+  ok(/20s on \/ 10s off × 6, 2 sets with 1:00 between · 6:50/.test(IV.describe(cfg)), IV.describe(cfg));
+  // EMOM: rest 0, a round every minute.
+  const emom = IV.phases({ work: 60, rest: 0, rounds: 10, sets: 1, prep: 0, exercises: ['x'] });
+  eq([emom.length, emom.every(p => p.kind === 'work')], [10, true]);
+  ok(/every 1:00 × 10/.test(IV.describe({ work: 60, rest: 0, rounds: 10, prep: 0 })));
+  // Pauses don't count.
+  eq(IV.elapsed({ startedAt: 0, pausedMs: 5000, pausedAt: null }, 20000), 15000);
+  eq(IV.elapsed({ startedAt: 0, pausedMs: 0, pausedAt: 8000 }, 20000), 8000);
+});
+
+test('interval timer: its schemes are never suggested; presets arrive with v25', () => {
+  const s = seed();
+  s.schemes.push({ id: 's-i-test', name: 'timer', sets: 6, reps: 8, restSec: 10, minutes: 3, tiers: ['COND'], manualOnly: true });
+  for (let i = 0; i < 3; i++) ok(L.pickScheme(s, 'COND', L.byId(s.exercises, 'ex-assault-bike'), 30, ci(), s.tiers.COND)?.id !== 's-i-test');
+  const old = seed(); delete old.intervals; old.version = 24;
+  const m = migrate(old);
+  ok(m.intervals.presets.some(p => p.name === 'Tabata 6 × 2') && m.intervalRun === null);
 });
 
 await queue;
