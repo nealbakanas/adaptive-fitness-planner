@@ -575,18 +575,20 @@ export function recentHeavyRegions(state, t = Date.now(), excludeBlockId = null)
 // Whole-body work conflicts with any heavy work; lower/upper only conflict with the same region.
 export const regionConflict = (region, heavy) => heavy.size > 0 && (region === 'full' || heavy.has('full') || heavy.has(region));
 
-// Explosive work is power work when you're fresh, and technique work when tired or after heavy work in the same region.
+// Explosive work is power work unless there was heavy work in the same region since yesterday; then it's technique work.
+// A low-energy day (1-2) also makes it technique when Settings → Power work on low-energy days is off.
+const techWhenTired = state => state.settings.recovery?.powerWhenTired === false;
 export function powerReadiness(state, ci, ex, t = Date.now(), excludeBlockId = null) {
   const reasons = [];
-  if (energy(ci) <= 2.5) reasons.push(`tired (energy ${6 - (ci.fatigue || 3)}${ci.sleep ? `, sleep ${ci.sleep}` : ''})`);
+  if (energy(ci) <= 2.5 && techWhenTired(state)) reasons.push(`tired (energy ${6 - (ci.fatigue || 3)}${ci.sleep ? `, sleep ${ci.sleep}` : ''})`);
   const heavy = recentHeavyRegions(state, t, excludeBlockId);
   if (regionConflict(ex.region || 'full', heavy)) reasons.push(`heavy ${[...heavy].join('/')} work since yesterday`);
   return { fresh: reasons.length === 0, reasons };
 }
 
 export function readinessSummary(state, ci, t = Date.now()) {
-  const tired = energy(ci) <= 2.5;
-  return { fresh: !tired, tired, heavy: [...recentHeavyRegions(state, t)] };
+  const low = energy(ci) <= 2.5, tired = low && techWhenTired(state);
+  return { fresh: !tired, tired, low, heavy: [...recentHeavyRegions(state, t)] };
 }
 
 export function scoreSlots(state, ci, t = Date.now()) {
