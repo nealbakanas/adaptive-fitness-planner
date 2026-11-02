@@ -1253,6 +1253,27 @@ step('program blocks: set up THP as a block, run a program day, see it in Week, 
   st().plans = st().plans.filter(p => !p.group); st().blocks = []; store.save();
 });
 
+step('History → Progress: tiles, charts, a readout on tap, and tables', () => {
+  const st = () => store.state;
+  for (let d = 0; d < 3; d++) st().sets.push({ id: `pg${d}`, sessionId: `pgs${d}`, blockId: 'pgb', exerciseId: 'ex-back-squat', tier: 'T1', load: 200 + 10 * d, reps: 3, done: true, loggedAt: Date.now() - (6 - 2 * d) * 864e5 });
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  click('[data-act=histMode][data-v=progress]');
+  check('Progress shows the tiles and every chart', /Workouts \/ week/.test(text()) && /Estimated 1-rep max/.test(text()) && /Volume per workout/.test(text()) && /Reps per workout/.test(text()) && /Energy by day/.test(text()) && /by tier/.test(text()) && /Weekly goals hit/.test(text()), text().slice(0, 400));
+  check('the e1RM chart draws a line for the lift', !!q('svg[data-chart=e1rm] path') && q('[data-proglift]')?.value === 'ex-back-squat');
+  const svg = q('svg[data-chart=e1rm]'), r = svg.getBoundingClientRect();
+  svg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: r.right - 2, clientY: r.top + r.height / 2 }));
+  const tip = svg.parentElement.querySelector('.charttip');
+  check('a tap shows the nearest point', !tip.hidden && /lb/.test(tip.textContent) && /best set 220 × 3/.test(tip.textContent), tip.textContent);
+  click('[data-act=progRange][data-v="4w"]');
+  check('ranges re-scope the page', q('[data-act=progRange][data-v="4w"]').classList.contains('on') && /vs previous 4 wk/.test(text()), text().slice(0, 400));
+  check('each chart has a table view', qa('details.charttable').length >= 4);
+  click('[data-act=histMode][data-v=workouts]');
+  check('and back to the workout list', !!q('#histq'));
+  st().sets = st().sets.filter(x => !x.id.startsWith('pg'));
+  click('[data-act=histClose]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');

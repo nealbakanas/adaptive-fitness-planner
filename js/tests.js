@@ -15,6 +15,8 @@ import { mergeStates, mergeById, mergeObject } from './merge.js';
 import { installFake } from './fake-supabase.js';
 import * as Mo from './morning.js';
 import * as B from './block.js';
+import * as PG from './progress.js';
+import * as CH from './charts.js';
 
 const results = [];
 const pass = name => results.push(['PASS', name]), fail = (name, e) => results.push(['FAIL', `${name} — ${e.message}`]);
@@ -2773,6 +2775,53 @@ test('v29: morning check and program blocks start empty; both merge across devic
   eq(out.morning.log.map(e => e.day).sort(), [L.dayKey(NOON(1)), L.dayKey(NOON(0))].sort(), 'both days kept');
   eq(out.morning.parts, ['Knee']);
   eq(out.block?.id, 'blk');
+});
+
+// ---------- progress charts ----------
+test('progress: volume and reps per workout, best e1RM per day, energy by day, weekly tiers and goals', () => {
+  const s = seed();
+  s.settings.bodyweight = 200;
+  const add = (sessionId, exerciseId, tier, load, reps, d, extra = {}) => s.sets.push({ id: L.uid(), sessionId, blockId: 'b', exerciseId, tier, load, reps, done: true, loggedAt: NOON(d), ...extra });
+  add('w1', 'ex-back-squat', 'T1', 200, 5, 3);
+  add('w1', 'ex-back-squat', 'T1', 220, 3, 3);
+  add('w1', 'ex-back-squat', 'T1', 100, 5, 3, { warmup: true });
+  add('w2', 'ex-back-squat', 'T1', 230, 3, 1);
+  add('w2', 'ex-wpullup', 'T2', 25, 5, 1);
+  add('w2', 'ex-broad-jump', 'JUMP', null, 3, 1);
+  const { from, to } = PG.rangeBounds(s, '4w');
+  const ws = PG.workouts(s, from, to);
+  eq(ws.map(w => [w.id, w.volume, w.reps, w.sets]), [['w1', 200 * 5 + 220 * 3, 8, 2], ['w2', 230 * 3 + (200 + 25) * 5, 11, 3]], 'warm-ups out; bodyweight lifts count bodyweight; jumps reps only');
+  const e = PG.e1rmSeries(s, 'ex-back-squat', from, to);
+  eq(e.length, 2);
+  eq(Math.round(e[0].v), Math.round(Math.max(L.epley(200, 5), L.epley(220, 3))), 'best set of the day');
+  eq(PG.liftChange(e).delta > 0, true);
+  ok(PG.liftOptions(s).some(x => x.id === 'ex-back-squat') && !PG.liftOptions(s).some(x => x.id === 'ex-broad-jump'));
+  // Energy: the morning check wins over a check-in that day; a check-in with nothing done doesn't count.
+  s.sessions.push({ id: 'w1', source: 'suggested', checkinAt: NOON(3), fatigue: 2 }, { id: 'w2', source: 'suggested', checkinAt: NOON(1), fatigue: 4 }, { id: 'none', source: 'suggested', checkinAt: NOON(2), fatigue: 1 });
+  Mo.record(s, { energy: 5 }, NOON(1));
+  eq(PG.energySeries(s, from, to).map(x => [x.day, x.v, x.source]), [[L.dayKey(NOON(3)), 4, 'check-in'], [L.dayKey(NOON(1)), 5, 'morning']]);
+  const wk = PG.weekly(s, from, to);
+  eq(wk.reduce((n, w) => n + w.sets.T1, 0), 3);
+  eq(wk.reduce((n, w) => n + w.sets.Other, 0), 1, 'jumps are Other');
+  ok(wk.every(w => w.quota === s.slots.reduce((n, sl) => n + (sl.quota > 0 ? sl.quota : 0), 0)));
+  const sum = PG.summary(s, from, to);
+  eq(sum.workouts, 0.5, '2 workouts over 4 weeks');
+  eq(sum.energy, 4.5);
+});
+
+test('charts: round ticks, one point per x, empty data draws nothing', () => {
+  eq(CH.niceTicks(0, 372), [0, 100, 200, 300, 400]);
+  eq(CH.niceTicks(0, 7), [0, 2, 4, 6, 8]);
+  eq(CH.niceTicks(0, 0.5), [0, 1], 'counts never get fractional ticks');
+  eq([CH.fmtNum(950), CH.fmtNum(12345), CH.fmtNum(123456)], ['950', '12.3K', '123K']);
+  const line = CH.lineChart('x', 'X', [{ t: 0, v: 100, tip: {} }, { t: 10, v: 120, tip: {} }]);
+  ok(/<path d="M/.test(line.svg) && line.hits.length === 2 && line.hits[0].x < line.hits[1].x);
+  eq(CH.nearest(line.hits, line.hits[1].x - 1), line.hits[1]);
+  const cols = CH.columnChart('c', 'C', [{ t: 0, parts: [{ key: 'T1', v: 3 }, { key: 'T2', v: 2 }], tip: {} }, { t: 1, parts: [{ key: 'T1', v: 1 }], tip: {} }]);
+  ok(cols.svg.includes(CH.COLORS.T1) && cols.svg.includes(CH.COLORS.T2) && cols.hits.length === 2);
+  eq(CH.columnChart('z', 'Z', [{ t: 0, parts: [{ key: 'series', v: 0 }], tip: {} }]).svg, '', 'all zero: nothing to draw');
+  eq(CH.lineChart('e', 'E', []).svg, '');
+  ok(!/<script|<x /i.test(CH.lineChart('<x onload=1>', '<script>', [{ t: 0, v: 1, tip: {} }]).svg), 'escaped');
 });
 
 await queue;

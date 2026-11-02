@@ -9,6 +9,8 @@ import * as I from './interval.js';
 import * as THP from './thp.js';
 import * as B from './block.js';
 import * as Mo from './morning.js';
+import * as PG from './progress.js';
+import * as CH from './charts.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -1872,8 +1874,11 @@ function viewHistoryEdit(hs) {
     <div class="actions"><button class="danger" data-act="histDeleteWorkout">Delete workout</button><button class="primary" data-act="histEditDone">Done</button></div>`;
 }
 
+const histTabs = mode => `<div class="seg histmode"><button class="${mode !== 'progress' ? 'on' : ''}" data-act="histMode" data-v="workouts">Workouts</button><button class="${mode === 'progress' ? 'on' : ''}" data-act="histMode" data-v="progress">Progress</button></div>`;
+
 function viewHistory(hs) {
   if (hs.edit) return viewHistoryEdit(hs);
+  if (hs.mode === 'progress') return viewProgress();
   const q = hs.q.trim().toLowerCase();
   const all = historyEntries(q);
   const shown = all.slice(0, hs.limit);
@@ -1907,11 +1912,136 @@ function viewHistory(hs) {
       ${editable ? `<span class="brow">${s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${s.id}">Continue</button>` : ''}<button class="small" data-act="histEdit" data-id="${s.id}">Edit</button></span>` : ''}</div>${lines}</div>`;
   };
   return `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
+    ${histTabs(hs.mode)}
     <input class="search" id="histq" placeholder="Search an exercise" value="${esc(hs.q)}" data-histq>
     ${q ? `<p class="meta pad">${all.length} session${all.length === 1 ? '' : 's'} with “${esc(hs.q.trim())}”.</p>` : ''}
     ${shown.map(card).join('') || `<p class="muted">${q ? 'No sessions match.' : 'Nothing logged yet. Finished workouts and mobility sessions show up here.'}</p>`}
     ${all.length > shown.length ? `<button class="addblock" data-act="histMore">Show ${Math.min(HISTORY_PAGE, all.length - shown.length)} more (${all.length - shown.length} older)</button>` : ''}`;
 }
+
+// ---------- progress (History → Progress) ----------
+
+// Hover and tap readouts: each chart's hit points, by chart id (filled as the page renders).
+const chartHits = new Map();
+const fmtShortDay = t => new Date(t).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const weekLabel = t => `Week of ${new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+const signedNum = (v, dp = 0) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(dp)}`;
+
+// One chart in a card: title, a one-line takeaway, the chart, and the same numbers as a table.
+function chartCard(id, title, takeaway, chart, table, extra = '') {
+  chartHits.set(id, chart.hits);
+  const body = chart.svg
+    ? `<div class="chartwrap">${chart.svg}<div class="charttip" hidden></div></div>
+       <details class="charttable"><summary>Show as table</summary><table><thead><tr>${table.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+       <tbody>${table.rows.slice().reverse().map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></details>`
+    : '<p class="muted">Nothing logged in this range.</p>';
+  return `<div class="card chartcard"><h3>${esc(title)}</h3>${extra}${takeaway ? `<p class="meta">${takeaway}</p>` : ''}${body}</div>`;
+}
+
+const legend = keys => `<div class="legend">${keys.map(([k, name]) => `<span><i style="background:${CH.COLORS[k]}"></i>${esc(name)}</span>`).join('')}</div>`;
+
+function viewProgress() {
+  const pg = ui.prog ??= { range: '12w', lift: null };
+  const { from, to, days } = PG.rangeBounds(state, pg.range);
+  const prev = { from: from - (to - from), to: from };
+  const u = unit();
+  chartHits.clear();
+  let h = `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
+    ${histTabs('progress')}
+    <div class="seg ranges">${PG.RANGES.map(([k, t]) => `<button class="${pg.range === k ? 'on' : ''}" data-act="progRange" data-v="${k}">${t}</button>`).join('')}</div>`;
+
+  // Tiles: per-week averages in this range, against the same length of time before it.
+  const now = PG.summary(state, from, to), was = pg.range === 'all' ? null : PG.summary(state, prev.from, prev.to);
+  const tile = (label, v, w, fmt, dp = 0) => `<div class="tile"><div class="tlabel">${label}</div><div class="tvalue">${v == null ? '—' : fmt(v)}</div>
+    ${was && v != null && w != null && (w > 0 || v > 0) ? `<div class="tdelta">${w > 0 ? `${signedNum(100 * (v - w) / w)}%` : 'new'} vs previous ${pg.range === '1y' ? 'year' : `${Math.round(days / 7)} wk`}</div>` : ''}</div>`;
+  h += `<div class="tiles">
+    ${tile('Workouts / week', now.workouts, was?.workouts, v => v.toFixed(1))}
+    ${tile(`Volume / week (${u})`, now.volume, was?.volume, CH.fmtNum)}
+    ${tile('Reps / week', now.reps, was?.reps, CH.fmtNum)}
+    ${tile('Average energy', now.energy, was?.energy, v => `${v.toFixed(1)} / 5`)}</div>`;
+
+  // Estimated 1RM for one lift.
+  const lifts = PG.liftOptions(state);
+  if (lifts.length) {
+    if (!lifts.some(x => x.id === pg.lift)) {
+      const goalLift = state.slots.filter(sl => sl.tier === 'T1').map(sl => sl.exerciseId ?? famOf(sl.familyId)?.defaultExerciseId).find(id => lifts.some(x => x.id === id));
+      pg.lift = goalLift ?? lifts[0].id;
+    }
+    const ser = PG.e1rmSeries(state, pg.lift, from, to);
+    const ch = PG.liftChange(ser);
+    const name = exOf(pg.lift)?.name ?? '?';
+    const chart = CH.lineChart('e1rm', `${name} estimated 1-rep max`, ser.map(p => ({ t: p.t, v: p.v, tip: { value: `${Math.round(p.v)} ${u}`, title: fmtShortDay(p.t), sub: `best set ${p.load} × ${p.reps}` } })), { unit: '' });
+    const take = ch ? `<b>${signedNum(ch.delta)} ${u}</b> in this range (${Math.round(ch.first)} → ${Math.round(ch.last)}; best ${Math.round(ch.best)}).` : ser.length ? 'One day logged in this range: more days draw the trend.' : '';
+    h += chartCard('e1rm', 'Estimated 1-rep max', take, chart,
+      { head: ['Day', `e1RM (${u})`, 'Best set'], rows: ser.map(p => [fmtShortDay(p.t), Math.round(p.v), `${p.load} × ${p.reps}`]) },
+      `<select class="liftpick" data-proglift aria-label="Lift">${opts(lifts.map(x => [x.id, `${x.name} (${x.count} sets)`]), pg.lift)}</select>`);
+  }
+
+  // Volume and reps per workout.
+  const ws = PG.workouts(state, from, to);
+  const avg = k => ws.length ? ws.reduce((x, w) => x + w[k], 0) / ws.length : 0;
+  const half = k => { const n = Math.floor(ws.length / 2); if (n < 2) return ''; const a = ws.slice(0, n), b = ws.slice(-n); const m = xs => xs.reduce((x, w) => x + w[k], 0) / xs.length; const d = m(a) ? 100 * (m(b) - m(a)) / m(a) : 0; return ` Your last ${n} workouts average ${signedNum(d)}% against your first ${n}.`; };
+  h += chartCard('volume', 'Volume per workout', ws.length ? `Load × reps on loaded lifts. Average <b>${CH.fmtNum(avg('volume'))} ${u}</b>.${half('volume')}` : '',
+    CH.columnChart('volume', 'Volume per workout', ws.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.volume }], tip: { value: `${CH.fmtNum(w.volume)} ${u}`, title: fmtShortDay(w.t), sub: `${w.sets} sets` } }))),
+    { head: ['Workout', `Volume (${u})`, 'Sets'], rows: ws.map(w => [fmtShortDay(w.t), Math.round(w.volume).toLocaleString('en-US'), w.sets]) });
+  h += chartCard('reps', 'Reps per workout', ws.length ? `Average <b>${Math.round(avg('reps'))}</b> reps.${half('reps')}` : '',
+    CH.columnChart('reps', 'Reps per workout', ws.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.reps }], tip: { value: `${w.reps} reps`, title: fmtShortDay(w.t), sub: `${w.sets} sets` } }))),
+    { head: ['Workout', 'Reps', 'Sets'], rows: ws.map(w => [fmtShortDay(w.t), w.reps, w.sets]) });
+
+  // Energy by day.
+  const en = PG.energySeries(state, from, to);
+  const low = en.filter(e => e.v <= 2).length;
+  h += chartCard('energy', 'Energy by day', en.length ? `Average <b>${(en.reduce((x, e) => x + e.v, 0) / en.length).toFixed(1)}</b> over ${en.length} day${en.length === 1 ? '' : 's'}; ${low} low day${low === 1 ? '' : 's'} (1–2). From the morning check, else that day's check-in.` : '',
+    CH.lineChart('energy', 'Energy by day', en.map(e => ({ t: e.t, v: e.v, tip: { value: `${e.v} / 5`, title: fmtShortDay(e.t), sub: e.source === 'morning' ? 'morning check' : 'check-in' } })), { domain: [1, 5], fmt: v => String(v) }),
+    { head: ['Day', 'Energy', 'From'], rows: en.map(e => [fmtShortDay(e.t), e.v, e.source]) });
+
+  // Week by week: sets by tier, and how much of your goals you hit.
+  const wk = PG.weekly(state, from, to);
+  const keys = [['T1', 'T1 heavy'], ['T2', 'T2 moderate'], ['T3', 'T3 accessory'], ['Other', 'Other']];
+  const tot = w => w.sets.T1 + w.sets.T2 + w.sets.T3 + w.sets.Other;
+  const share = k => { const all = wk.reduce((x, w) => x + tot(w), 0); return all ? Math.round(100 * wk.reduce((x, w) => x + w.sets[k], 0) / all) : 0; };
+  h += chartCard('tiers', 'Working sets per week, by tier', wk.some(w => tot(w)) ? `T1 ${share('T1')}% · T2 ${share('T2')}% · T3 ${share('T3')}% of your sets. GZCL's rough guide is a little T1, more T2, most T3.` : '',
+    CH.columnChart('tiers', 'Working sets per week by tier', wk.some(w => tot(w)) ? wk.map(w => ({ t: w.start, parts: keys.map(([k]) => ({ key: k, v: w.sets[k] })), tip: { value: `${tot(w)} sets`, title: weekLabel(w.start), sub: keys.map(([k]) => `${k} ${w.sets[k]}`).join(' · ') } })) : []),
+    { head: ['Week', 'T1', 'T2', 'T3', 'Other'], rows: wk.map(w => [weekLabel(w.start), w.sets.T1, w.sets.T2, w.sets.T3, w.sets.Other]) }, legend(keys));
+  const hit = wk.filter(w => w.quota > 0);
+  const avgHit = hit.length ? Math.round(100 * hit.reduce((x, w) => x + w.filled / w.quota, 0) / hit.length) : null;
+  h += chartCard('goals', 'Weekly goals hit', avgHit != null ? `Average <b>${avgHit}%</b> of goal sessions a week (this week counts so far).` : '',
+    CH.columnChart('goals', 'Share of weekly goal sessions hit', hit.map(w => ({ t: w.start, parts: [{ key: 'series', v: Math.round(100 * w.filled / w.quota) }], tip: { value: `${Math.round(100 * w.filled / w.quota)}%`, title: weekLabel(w.start), sub: `${w.filled} of ${w.quota} goal sessions` } })), { max: 100, fmt: v => `${v}%` }),
+    { head: ['Week', 'Hit', 'Goal sessions'], rows: hit.map(w => [weekLabel(w.start), `${Math.round(100 * w.filled / w.quota)}%`, `${w.filled} of ${w.quota}`]) });
+  h += `<p class="meta pad">Volume counts loaded lifts only (bodyweight included for weighted bodyweight lifts). Tap a chart to read a point.</p>`;
+  return h;
+}
+
+// Crosshair, highlight and readout for whichever point is nearest the pointer.
+function chartPoint(e) {
+  const svg = e.target.closest?.('svg.chartsvg');
+  for (const tip of document.querySelectorAll('.charttip:not([hidden])')) if (!svg || tip.parentElement !== svg.parentElement) hideChartTip(tip.parentElement);
+  if (!svg) return;
+  const hits = chartHits.get(svg.dataset.chart);
+  if (!hits?.length) return;
+  const r = svg.getBoundingClientRect();
+  const x = ((e.clientX - r.left) / r.width) * CH.W;
+  const hit = CH.nearest(hits, x);
+  const xh = svg.querySelector('.xhair'), dot = svg.querySelector('.hdot'), band = svg.querySelector('.hband');
+  if (xh) { xh.setAttribute('x1', hit.x); xh.setAttribute('x2', hit.x); xh.setAttribute('visibility', 'visible'); }
+  if (dot) { dot.setAttribute('cx', hit.x); dot.setAttribute('cy', hit.y); dot.setAttribute('visibility', 'visible'); }
+  if (band) { band.setAttribute('x', hit.x - hit.w / 2); band.setAttribute('width', hit.w); band.setAttribute('visibility', 'visible'); }
+  const tip = svg.parentElement.querySelector('.charttip');
+  tip.replaceChildren();
+  const v = document.createElement('b'); v.textContent = hit.tip.value;
+  const t = document.createElement('span'); t.textContent = hit.tip.title;
+  tip.append(v, t);
+  if (hit.tip.sub) { const s2 = document.createElement('span'); s2.className = 'meta'; s2.textContent = hit.tip.sub; tip.append(s2); }
+  tip.hidden = false;
+  const px = (hit.x / CH.W) * r.width;
+  tip.style.left = `${Math.max(0, Math.min(r.width - tip.offsetWidth, px - tip.offsetWidth / 2))}px`;
+}
+function hideChartTip(wrap) {
+  wrap.querySelector('.charttip').hidden = true;
+  for (const sel of ['.xhair', '.hdot', '.hband']) wrap.querySelector(sel)?.setAttribute('visibility', 'hidden');
+}
+document.addEventListener('pointermove', chartPoint);
+document.addEventListener('pointerdown', chartPoint);
 
 function viewLibrary() {
   if (ui.libMode === 'mobility') return viewMobLibrary();
@@ -3040,6 +3170,8 @@ const actions = {
   exHist: d => openSheet({ type: 'exHist', id: d.id, limit: 20 }),
   exHistMore: () => { ui.sheet.limit += 20; renderSheet(); },
   histClose: () => { ui.history = null; render(); window.scrollTo(0, 0); },
+  histMode: d => { ui.history.mode = d.v; render(); window.scrollTo(0, 0); },
+  progRange: d => { ui.prog.range = d.v; render(); },
   histMore: () => { ui.history.limit += HISTORY_PAGE; render(); },
 
   gsOpen: () => {
@@ -4527,6 +4659,9 @@ document.addEventListener('change', e => {
     render();
   } else if (d.bdeload !== undefined && ui.blockSetup) {
     ui.blockSetup.deloadEvery = el.checked ? 4 : 0;
+  } else if (d.proglift !== undefined && ui.prog) {
+    ui.prog.lift = el.value;
+    render();
   } else if (d.hdate !== undefined) {
     moveWorkout(el.value);
   } else if (d.hloc !== undefined) {
