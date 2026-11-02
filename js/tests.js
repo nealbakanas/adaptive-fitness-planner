@@ -13,6 +13,8 @@ import * as Cloud from './cloud.js';
 import * as Sync from './sync.js';
 import { mergeStates, mergeById, mergeObject } from './merge.js';
 import { installFake } from './fake-supabase.js';
+import * as Mo from './morning.js';
+import * as B from './block.js';
 
 const results = [];
 const pass = name => results.push(['PASS', name]), fail = (name, e) => results.push(['FAIL', `${name} — ${e.message}`]);
@@ -224,7 +226,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 28);
+  eq(m.version, 29);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -243,7 +245,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 28);
+  eq(m.version, 29);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -516,7 +518,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 28);
+  eq(m.version, 29);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -680,7 +682,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 28);
+  eq(m.version, 29);
   eq(m.mobility.routines.length, 6, 'the four routines, McGill Big 3, plus THP daily isos (v27)');
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -694,7 +696,7 @@ test('v28: the McGill Big 3 joins existing mobility, reusing one you already hav
   s.mobility.routines = s.mobility.routines.filter(r => r.id !== 'mobr-mcgill-big3');
   s.mobility.exercises.push({ ...s.mobility.exercises[0], id: 'mine', name: 'McGill Bird-Dog' });
   const m = migrate(s);
-  eq(m.version, 28);
+  eq(m.version, 29);
   eq(m.mobility.routines.find(r => r.id === 'mobr-mcgill-big3').items, ['mob-mcgill-curl-up', 'mob-mcgill-side-plank', 'mine']);
   eq(m.mobility.exercises.filter(e => /mcgill/i.test(e.name)).length, 3);
   const again = migrate(structuredClone(m));
@@ -721,7 +723,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 28);
+  eq(m.version, 29);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1244,7 +1246,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 28);
+  eq(m.version, 29);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1403,7 +1405,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 28);
+  eq(m.version, 29);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1496,10 +1498,10 @@ test('v19: data saved before it opens with savedAt unset, and the summary counts
   s.version = 18;
   delete s.savedAt;
   const m = migrate(s);
-  eq([m.version, m.savedAt], [28, null]);
+  eq([m.version, m.savedAt], [29, null]);
   s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
   s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
-  eq(V.summaryOf(s), { version: 28, workouts: 1, sets: 1 });
+  eq(V.summaryOf(s), { version: 29, workouts: 1, sets: 1 });
 });
 atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
   if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
@@ -1662,7 +1664,7 @@ test('merge: settings merge key by key; whole states keep both devices\' work an
   eq(m.sessions.map(x => x.id), ['ls', 'rs']);
   ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
   ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
-  eq(migrate(m).version, 28);
+  eq(migrate(m).version, 29);
 });
 test('sync plan: what to do for each situation', () => {
   const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
@@ -1898,7 +1900,7 @@ atest('sync: another device saving mid-push is merged and retried; offline and o
     const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
     fake.putRow(EMAIL, future);
     const nv = await Sync.sync();
-    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 28);
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 29);
   });
 });
 atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
@@ -2291,7 +2293,7 @@ test('conditioning: the upgrade adds the bike, its EMOMs and a goal once; scheme
   old.schemes = old.schemes.filter(sc => !sc.tiers.includes('COND')); old.slots = old.slots.filter(sl => sl.tier !== 'COND');
   for (const l of old.locations) l.equipment = l.equipment.filter(q => q !== 'assault-bike');
   const m = migrate(old);
-  eq(m.version, 28);
+  eq(m.version, 29);
   ok(m.tiers.COND.repMin === 90 && m.families.some(f => f.id === 'fam-cond') && L.byId(m.exercises, 'ex-assault-bike').repUnit === 'cal');
   eq(m.schemes.filter(sc => sc.tiers.includes('COND')).length, 6);
   eq(m.slots.filter(sl => sl.tier === 'COND').map(sl => sl.quota), [1]);
@@ -2563,6 +2565,214 @@ test('THP plan: v27 adds four plans, the isos routine and a plan-only approach j
   ok(!L.pickExercise(again, 'fam-jumps', L.byId(again.locations, 'loc-basement'), 'JUMP', null) || L.pickExercise(again, 'fam-jumps', L.byId(again.locations, 'loc-basement'), 'JUMP', null).id !== 'ex-approach-jump');
   // A fresh install doesn't get it: it's an add-on for data that's already there.
   ok(!seed().plans.length && !seed().exercises.some(e => e.id === 'ex-approach-jump'));
+});
+
+// ---------- morning check ----------
+test('morning check: energy and pain per tracked part, today only, kept a day at a time', () => {
+  const s = seed();
+  Mo.setParts(s, ['Knee', ' Knee ', 'Low back', '']);
+  eq(s.morning.parts, ['Knee', 'Low back']);
+  const t = NOON(0);
+  Mo.record(s, { energy: 4, pain: { Knee: 2, 'Low back': 12, Elbow: 5 } }, t);
+  eq(Mo.entryFor(s, t).pain, { Knee: 2, 'Low back': 10 }, 'clamped, untracked parts dropped');
+  Mo.record(s, { energy: 3, pain: { Knee: 5 } }, t + 60e3);
+  eq(s.morning.log.length, 1, 'the same day replaces');
+  eq(Mo.entryFor(s, t).energy, 3);
+  eq(Mo.overLimit(s, t).map(x => x.part), ['Knee']);
+  eq(Mo.jumpPain(s, t).map(x => x.part), ['Knee']);
+  eq(Mo.entryFor(s, t + DAY), null, 'tomorrow starts blank');
+  eq(Mo.entryText(Mo.entryFor(s, t)), 'Energy 3 · Knee 5');
+});
+
+test('morning check: pain flags are over 3/10, or sore three mornings running; energy averages', () => {
+  const s = seed();
+  Mo.setParts(s, ['Knee', 'Shoulder']);
+  Mo.record(s, { energy: 2, pain: { Knee: 1 } }, NOON(4));
+  Mo.record(s, { energy: 4, pain: { Knee: 2 } }, NOON(3));
+  Mo.record(s, { energy: 3, pain: { Knee: 1, Shoulder: 6 } }, NOON(2));
+  Mo.record(s, { energy: 5, pain: { Knee: 0 } }, NOON(1));
+  const f = Mo.painFlags(s, NOON(10), NOON(0));
+  eq(f.map(x => [x.day, x.parts]), [[L.dayKey(NOON(2)), ['Knee', 'Shoulder']]], 'Knee: 3rd sore morning; Shoulder over 3');
+  eq(Mo.averageEnergy(s, NOON(10), NOON(0)), 3.5);
+  eq(Mo.averageEnergy(s, NOON(30), NOON(20)), null);
+  eq(Mo.jumpPain(s, NOON(2)).length, 0, 'a shoulder does not stop jumps');
+});
+
+test('a knee over 3/10: no jumps in any builder, isometric holds instead; under it, jumps as usual', () => {
+  const old = seed(); old.version = 26; old.settings.onboarded = true;
+  const s = migrate(old);
+  const c = ci({ minutes: 60, fatigue: 1, jumps: true });
+  const base = L.buildSuggestion(s, c);
+  Mo.setParts(s, ['Knee']);
+  Mo.record(s, { energy: 4, pain: { Knee: 2 } });
+  eq(L.buildSuggestion(s, c).blocks.map(b => b.exerciseId), base.blocks.map(b => b.exerciseId), '2/10 changes nothing');
+  Mo.record(s, { energy: 4, pain: { Knee: 6 } });
+  const r = L.buildSuggestion(s, c);
+  ok(!r.blocks.some(b => b.tier === 'JUMP'), 'no jumps');
+  eq(r.pain, ['Knee']);
+  ok(r.notes.some(n => /No jumps today: Knee 6\/10/.test(n)) || r.scored.some(x => x.hold === 'pain'), 'says why');
+  for (const k of [L.buildFocus(s, c, { region: 'lower', explosive: true }), L.buildMix(s, c, { T1: 1, T2: 1, T3: 3 })]) ok(!k.blocks.some(b => b.tier === 'JUMP'));
+  eq(Mo.reliefHolds(s), ['mob-spanish-squat-hold']);
+  ok(!L.buildSuggestion(s, ci({ minutes: 60 })).pain, 'no jumps wanted: nothing to swap');
+});
+
+test('a measured jump is a record like a 1RM', () => {
+  const s = seed();
+  const set = (id, jump, d) => ({ id, exerciseId: 'ex-broad-jump', tier: 'JUMP', reps: 3, jump, done: true, loggedAt: NOON(d) });
+  s.sets.push(set('a', 90, 3), set('b', null, 2));
+  const first = set('x', 88, 3.5);
+  eq(L.setPR(s, first), null, 'the first measurement is not a record');
+  const pr = L.setPR(s, set('c', 94, 1));
+  eq(pr?.kind, 'jump');
+  ok(/Jump PR: 94 in \(best was 90 in\)/.test(pr.text), pr?.text);
+  eq(L.setPR(s, set('d', 89, 1)), null);
+});
+
+// ---------- program blocks ----------
+const thpState = () => { const o = seed(); o.version = 26; o.settings.onboarded = true; return migrate(o); };
+const week0 = s => L.weekBounds(s, Date.now()).start;
+const logSession = (s, b, planId, at, sets = [['ex-back-squat', 'T1', 3, 200]]) => {
+  const id = L.uid();
+  s.sessions.push({ id, day: L.dayKey(at), status: 'done', source: 'custom', checkinAt: at, firstSetAt: at, blockRun: b?.id, planId, blocks: [], planItems: [] });
+  for (const [exerciseId, tier, reps, load] of sets) s.sets.push({ id: L.uid(), sessionId: id, blockId: 'x', exerciseId, tier, reps, load, done: true, loggedAt: at });
+  return id;
+};
+
+test('program blocks: weekdays from plan names, and a first draft from the THP plans', () => {
+  eq(B.planDays('THP · High day A (Mon)'), [1]);
+  eq(B.planDays('THP · General day (Tue/Thu)'), [2, 4]);
+  eq(B.planDays('THP · Jump day (Fri/Sat)'), [5, 6]);
+  eq(B.planDays('No days'), []);
+  const s = thpState();
+  const d = B.draftFor(s, 'THP-style jump plan');
+  eq(d.schedule.map(x => [x.weekday, x.planId]), [[1, 'plan-thp-high-a'], [2, 'plan-thp-general'], [3, 'plan-thp-high-b'], [4, 'plan-thp-general'], [5, 'plan-thp-jump']]);
+  eq(d.owns, { half: 'lower', tiers: ['JUMP'] });
+  eq([d.weeks, d.deloadEvery, d.start], [4, 4, 'next']);
+});
+
+test('program blocks: the slice pauses its goals and keeps it out of suggestions; the rest runs as before', () => {
+  const s = thpState();
+  const d = B.draftFor(s, 'THP-style jump plan');
+  const before = L.scoreSlots(s, ci({ minutes: 60 })).map(c => c.slot.id);
+  B.startBlock(s, { ...d, start: 'next' });
+  ok(Date.now() < s.block.startedAt, 'next week');
+  eq(B.ownedSlotIds(s).size, 0, 'not started yet: nothing owned');
+  B.startBlock(s, { ...d, start: 'today' });
+  const owned = B.ownedSlotIds(s);
+  ok(owned.size > 0, 'some goals owned');
+  for (const sl of s.slots) {
+    const expect = sl.tier === 'JUMP' || (L.isStrength(sl.tier) && B.slotHalf(s, sl) === 'lower');
+    eq(owned.has(sl.id), expect, R.slotLabel(s, sl));
+  }
+  const after = L.scoreSlots(s, ci({ minutes: 60 })).map(c => c.slot.id);
+  eq(after, before.filter(id => !owned.has(id)), 'owned goals out, the rest in the same order');
+  for (const minutes of [30, 60, 90]) for (const lean of [null, 'lower']) {
+    const r = L.buildSuggestion(s, ci({ minutes, lean }));
+    const lowerStrength = r.blocks.filter(b => L.isStrength(b.tier) && L.bodyRegion(s, L.byId(s.exercises, b.exerciseId)) === 'lower' && !L.byId(s.exercises, b.exerciseId).explosive);
+    eq(lowerStrength.map(b => b.exerciseId), [], `${minutes} ${lean}`);
+  }
+  B.pauseBlock(s);
+  eq(B.ownedSlotIds(s).size, 0, 'paused: your goals again');
+  B.resumeBlock(s);
+  ok(B.ownedSlotIds(s).size > 0);
+});
+
+test('program blocks: what is due follows what you did this week, not the calendar', () => {
+  const s = thpState();
+  s.settings.weekStartDay = 1;
+  const d = B.draftFor(s, 'THP-style jump plan');
+  const ws = week0(s);
+  const b = B.startBlock(s, { ...d, start: 'today' }, ws + 3600e3);
+  const at = days => ws + days * DAY + 10 * 3600e3;
+  let t = B.today(s, at(0));
+  eq([t.week, t.due?.planId, t.due?.behind], [1, 'plan-thp-high-a', false], 'Monday');
+  t = B.today(s, at(1));
+  eq([t.due?.planId, t.due?.behind], ['plan-thp-high-a', true], 'missed Monday: Tuesday offers it');
+  logSession(s, b, 'plan-thp-high-a', at(1));
+  t = B.today(s, at(1));
+  eq([t.due, t.doneToday, t.next.planId, t.done], [null, true, 'plan-thp-general', 1]);
+  t = B.today(s, at(2));
+  eq(t.due?.planId, 'plan-thp-general', 'Wednesday: the next in order');
+  t = B.today(s, at(7));
+  eq([t.week, t.due?.planId, t.done], [2, 'plan-thp-high-a', 0], 'a new week starts over');
+  eq([B.isDeload(b, 3), B.isDeload(b, 4), B.isDeload(b, 8)], [false, true, true]);
+  eq([B.deloadSets(5), B.deloadSets(6), B.deloadSets(1)], [3, 4, 1]);
+  eq(B.today(s, at(28)), null, 'after 4 weeks: over');
+});
+
+test('program blocks: as written means every plan item at its scheme, every set done', () => {
+  const s = thpState();
+  const p = L.byId(s.plans, 'plan-thp-high-a');
+  const blocks = p.items.map(i => ({ id: L.uid(), tier: i.tier, exerciseId: i.exerciseId, schemeId: i.schemeId, swaps: [] }));
+  const sess = { id: 'ps', blocks, planItems: p.items.map(i => ({ ...i })) };
+  for (const b of blocks) s.sets.push({ id: L.uid(), blockId: b.id, sessionId: 'ps', exerciseId: b.exerciseId, tier: b.tier, done: true, reps: 2 });
+  ok(B.asWritten(s, sess));
+  s.sets.push({ id: 'undone', blockId: blocks[0].id, sessionId: 'ps', exerciseId: blocks[0].exerciseId, tier: 'T1', done: false });
+  ok(!B.asWritten(s, sess), 'a set left');
+  s.sets = s.sets.filter(x => x.id !== 'undone');
+  blocks[1].swaps = [{ type: 'exercise' }];
+  ok(!B.asWritten(s, sess), 'swapped');
+});
+
+test('program blocks: the end report compares the block with the weeks before it', () => {
+  const s = thpState();
+  s.settings.weekStartDay = 1;
+  const d = B.draftFor(s, 'THP-style jump plan');
+  const ws = week0(s) - 4 * 7 * DAY; // the block ran the last 4 weeks
+  const at = (w, day) => ws + w * 7 * DAY + day * DAY + 10 * 3600e3;
+  // 4 weeks before: 2 workouts a week, squat at 200 × 3.
+  for (let w = -4; w < 0; w++) { logSession(s, null, null, at(w, 0)); logSession(s, null, null, at(w, 2), [['ex-bench', 'T1', 5, 150]]); }
+  const b = B.startBlock(s, { ...d, start: 'today' }, ws + 3600e3);
+  for (let w = 0; w < 4; w++) for (const day of [0, 2, 4]) logSession(s, b, 'plan-thp-high-a', at(w, day), [['ex-back-squat', 'T1', 3, 210 + 5 * w], ['ex-broad-jump', 'JUMP', 3, null]]);
+  s.sets.find(x => x.exerciseId === 'ex-broad-jump').jump = 96;
+  Mo.setParts(s, ['Knee']);
+  Mo.record(s, { energy: 4, pain: { Knee: 5 } }, at(1, 1));
+  const done = B.endBlock(s, week0(s) + 3600e3);
+  eq(s.block, null);
+  eq(s.blocks[0].id, b.id);
+  ok(!done.early, 'ended on time');
+  const r = done.report;
+  eq([r.weeks, r.before?.weeks, r.sessions], [4, 4, 12]);
+  eq(Math.round(r.block.sessionsPerWeek), 3);
+  eq(Math.round(r.before.sessionsPerWeek), 2);
+  ok(r.block.e1rm['ex-back-squat'] > r.before.e1rm['ex-back-squat'], 'squat up');
+  eq(r.block.jumps['ex-broad-jump'], 96);
+  eq([r.block.painFlags, r.before.painFlags, r.block.energy], [1, 0, 4]);
+  ok(/Back squat e1RM \+\d+ lb/.test(r.verdict), r.verdict);
+  ok(/Pain flags: 0 → 1/.test(B.reportText(s, done)), B.reportText(s, done));
+  eq(B.unseenReport(s)?.id, b.id);
+  // Too little before it: the block alone.
+  const t = thpState();
+  const b2 = B.startBlock(t, { ...B.draftFor(t, 'THP-style jump plan'), start: 'today' });
+  eq(B.endBlock(t).report.before, null);
+  ok(B.endBlock(t) === null && b2, 'nothing running');
+});
+
+test('program blocks: the weekly review lists the program and leaves its goals alone', () => {
+  const s = thpState();
+  const b = B.startBlock(s, { ...B.draftFor(s, 'THP-style jump plan'), start: 'today' }, week0(s) + 3600e3);
+  logSession(s, b, 'plan-thp-high-a', week0(s) + 10 * 3600e3);
+  const r = R.weekReview(s, week0(s));
+  const owned = B.ownedSlotIds(s, week0(s) + 3.5 * DAY);
+  ok(!r.goals.some(g => owned.has(g.slotId)), 'not reviewed');
+  eq(r.program.map(g => g.slotId).sort(), [...owned].sort());
+  ok(!r.proposals.some(p => owned.has(p.slotId)));
+  ok(/THP-style jump plan: 1 of 5 sessions/.test(r.block.text), r.block.text);
+  ok(/Program: THP-style jump plan/.test(R.reviewText(s, r)));
+});
+
+test('v29: morning check and program blocks start empty; both merge across devices', () => {
+  const o = seed(); o.version = 28; delete o.morning; delete o.block; delete o.blocks;
+  const m = migrate(o);
+  eq([m.version, m.morning, m.block, m.blocks], [29, { parts: [], log: [] }, null, []]);
+  const base = structuredClone(m);
+  const a = structuredClone(m), b = structuredClone(m);
+  Mo.setParts(a, ['Knee']); Mo.record(a, { energy: 3, pain: { Knee: 1 } }, NOON(1)); a.savedAt = 1;
+  Mo.record(b, { energy: 5 }, NOON(0)); b.block = { id: 'blk', group: 'g', schedule: [], owns: { half: null, tiers: [] }, weeks: 4, startedAt: 0 }; b.savedAt = 2;
+  const out = mergeStates(base, a, b);
+  eq(out.morning.log.map(e => e.day).sort(), [L.dayKey(NOON(1)), L.dayKey(NOON(0))].sort(), 'both days kept');
+  eq(out.morning.parts, ['Knee']);
+  eq(out.block?.id, 'blk');
 });
 
 await queue;

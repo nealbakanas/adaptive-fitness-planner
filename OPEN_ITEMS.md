@@ -23,6 +23,10 @@ Done items move to the changelog in the PRs, not here.
   few weeks; if most workouts are still logged in bursts, consider a harder nudge.
 - **Conditioning thresholds** are guesses: a day counts at 90 calories or 8 rounds; bike supersets are 8 cal in a
   T1 rest and 6 in a T2. Tune from experience (Settings → Tiers → COND, Settings → Schemes).
+- **Morning check thresholds:** over 3/10 on a knee, ankle, back or hip stops jumps that day; sore 3 mornings
+  running counts as a pain flag (THP's "settles within 48 hours"). Tune once there's a few weeks of entries.
+- **Program blocks:** deload is a flat 40% cut of sets (per-plan deload overrides not built). Extras on a program day
+  are T3s only, sized to the time the plan leaves. Jump heights are stored in inches (cm with kg).
 - **Recovery weights** (lower T1 ×0.35 the day after heavy lower work, the other half ×1.2) are first guesses.
 
 ## Asked for, not built yet

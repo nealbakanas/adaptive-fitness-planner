@@ -3,6 +3,8 @@
 
 import { taste, tasteOf, isExcluded, usualReplacement } from './taste.js';
 import { pace, pacedKey } from './pace.js';
+import { ownedSlotIds, blockAt } from './block.js';
+import { jumpPain } from './morning.js';
 
 // The taste and pace pictures for the build in progress (computed once per build; the pickers run thousands of times),
 // and where the workout is (changeover is learned per location). Outside a build taste is worked out fresh, which keeps
@@ -277,9 +279,16 @@ export const setE1rm = (state, s) => epley(setTotalLoad(state, s), Number(s.reps
 // don't have them.
 export function setPR(state, s) {
   const ex = byId(state.exercises, s.exerciseId);
-  if (!ex || !s.done || s.warmup || tierOf(s.tier).records === false) return null;
+  if (!ex || !s.done || s.warmup) return null;
   const at = s.loggedAt ?? Infinity;
   const prev = state.sets.filter(x => x.done && !x.warmup && x.id !== s.id && x.exerciseId === s.exerciseId && (x.loggedAt ?? 0) < at);
+  // A measured jump (the optional height or distance on a jump set) is a record like a 1RM: the best one so far.
+  if (Number(s.jump) > 0) {
+    const ju = state.settings?.unit === 'kg' ? 'cm' : 'in';
+    const before = prev.map(x => Number(x.jump)).filter(x => x > 0);
+    if (before.length && Number(s.jump) > Math.max(...before)) return { kind: 'jump', text: `Jump PR: ${Number(s.jump)} ${ju} (best was ${Math.max(...before)} ${ju})` };
+  }
+  if (tierOf(s.tier).records === false) return null;
   if (!prev.length) return null;
   const u = state.settings?.unit ?? 'lb';
   const num = v => (v === '' || v == null ? null : Number(v));
@@ -596,11 +605,12 @@ export function scoreSlots(state, ci, t = Date.now()) {
   const credit = creditWeek(state, t);
   const daysLeft = daysLeftInWeek(state, t);
   const loaded = state.settings.recovery?.t1AfterT1 !== false ? recentLoadedRegions(state, t) : new Map();
+  const owned = ownedSlotIds(state, t); // a program block has these (js/block.js): paused while it runs
   const out = [];
   for (const sl of state.slots) {
     const r = credit.slots.get(sl.id);
     const remaining = sl.quota - r.filled;
-    if (remaining <= 0 || r.todayMet || ci.skip?.includes(sl.familyId)) continue;
+    if (remaining <= 0 || r.todayMet || ci.skip?.includes(sl.familyId) || owned.has(sl.id)) continue;
     const picked = pickExerciseWhy(state, sl.familyId, loc, sl.tier, sl.exerciseId);
     if (!picked) continue;
     const exercise = picked.exercise;
@@ -740,6 +750,7 @@ const skipping = (ci, opts) => (ci?.skip?.length ? { ...opts, excludeFamilies: [
 export const buildSuggestion = (state, ci, t = Date.now(), opts = {}) => withTaste(state, t, ci, () => buildSuggestionIn(state, ci, t, skipping(ci, opts)));
 function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, sessionBlocks = [] } = {}) {
   const scored = scoreSlots(state, ci, t);
+  const sore = jumpPain(state, t);
   // Jumps are only in when you ask for them, and then whatever the scores say: they don't set the bar for other goals.
   const top = Math.max(0, ...scored.filter(c => !requestOf(c.slot.tier)).map(c => c.score));
   let budget = ci.minutes;
@@ -771,6 +782,7 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
     for (const c of cands) {
       // Jumps only come in when you turn them on at check-in; then the goal's jumps go in whatever the scores say.
       if (requestOf(tier) && !ci[requestOf(tier)]) { hold(c, requestOf(tier), TIER[tier].off); continue; }
+      if (tier === 'JUMP' && sore.length) { hold(c, 'pain', painNote(sore)); continue; }
       // Leaning one way: the other half's strength goals (T1/T2) wait, unless the week runs out before they could be done.
       const lean = leanOf(ci), half = lean && isStrength(tier) && bodyRegion(state, c.exercise);
       if (half && half !== lean && c.remaining < c.daysLeft) { hold(c, 'lean', `leaning ${lean}: ${half}-body strength work waits (${c.daysLeft} days left)`); continue; }
@@ -809,7 +821,17 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
     // A T3 left without a partner (several locations: no partner in the same place) costs its full time.
     if (blocksMinutes(state, blocks) > ci.minutes + 1e-9) trimToFit(state, blocks, ci.minutes, [...f.blocks]);
   }
-  return { blocks, scored, notes, goalMinutes, minutesUsed: Math.round(blocksMinutes(state, blocks)), ready: readinessSummary(state, ci, t) };
+  const pain = painHeld(state, ci, t, scored);
+  return { blocks, scored, notes, goalMinutes, minutesUsed: Math.round(blocksMinutes(state, blocks)), ready: readinessSummary(state, ci, t), ...(pain ? { pain } : {}) };
+}
+
+// The morning check (js/morning.js): a jumping part over 3/10 this morning means no jumps today, isometrics instead.
+const painNote = sore => `no jumps today: ${sore.map(x => `${x.part} ${x.score}/10`).join(', ')} this morning (isometrics instead)`;
+// The parts that kept jumps out, when jumps were wanted (asked for, or an open jumps goal): the app adds their holds.
+function painHeld(state, ci, t, scored = []) {
+  const sore = jumpPain(state, t);
+  if (!sore.length || !(ci?.jumps || scored.some(c => c.hold === 'pain'))) return null;
+  return sore.map(x => x.part);
 }
 
 // ---------- supersets ----------
@@ -1094,7 +1116,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
   const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId) && !takenIds.has(e.id)
     && !famPatterns.get(e.familyId).has(pattern(e)) && !k.blocks.some(b => b.exerciseId === e.id);
   const k = {
-    blocks: [], notes: [], budget: minutes, lately, isDefault, turn: 0,
+    blocks: [], notes: [], budget: minutes, lately, isDefault, turn: 0, t,
     // Patterns that already have a strength lift (T1/T2, not jumps or cleans), so the next lift goes somewhere else.
     present: new Set(present.map(id => pattern(byId(state.exercises, id)))),
     count: tier => k.blocks.filter(b => b.tier === tier).length,
@@ -1221,6 +1243,8 @@ const REQUESTED = {
 const wantedExtras = (ci, blocks) => Object.keys(REQUESTED).filter(t => ci[requestOf(t)] && !blocks.some(b => b.tier === t));
 function addRequested(state, ci, k, existing = []) {
   for (const tier of wantedExtras(ci, [...existing, ...k.blocks])) {
+    const sore = tier === 'JUMP' ? jumpPain(state, k.t) : [];
+    if (sore.length) { if (!k.notes.some(n => n.startsWith('No jumps today'))) k.notes.push(`No jumps today: ${painNote(sore).slice('no jumps today: '.length)}.`); continue; }
     const e = REQUESTED[tier].pick(state, ci, k);
     if (e) k.add(e, tier, REQUESTED[tier].why(ci));
     else k.notes.push(REQUESTED[tier].missing);
@@ -1321,7 +1345,7 @@ function buildMixIn(state, ci, asked, t, { excludeFamilies = [], sessionBlocks =
   const k = libraryKit(state, ci, t, ci.minutes - blocksMinutes(state, blocks), [...famUsed], all.filter(strengthBlock).map(b => b.exerciseId), all.map(b => b.exerciseId));
   const have = tier => blocks.filter(b => b.tier === tier).length;
   addRequested(state, ci, k, sessionBlocks);
-  const halves = lean ? [FOCUS_MAIN[lean]] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]];
+  const halves = ownHalves(state, t, lean ? [FOCUS_MAIN[lean]] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]]);
   for (const tier of ['T1', 'T2']) {
     while (have(tier) + k.count(tier) < (mix[tier] || 0) && k.budget >= 10
       && halves.some(ps => k.strength(ps, `your ${tier} pick for this mix`, tier, { needMax: tier === 'T1' })));
@@ -1367,6 +1391,12 @@ function settle(state, k, ci, rotation, stretch = true) {
   if (stretch) stretchToFit(state, k.blocks, minutes, ci);
 }
 
+// A program block that owns a half of the body (js/block.js): library strength work leaves that half's patterns out.
+function ownHalves(state, t, halves) {
+  const half = blockAt(state, t)?.owns.half;
+  return half ? halves.map(ps => ps.filter(p => PATTERN_REGION[p] !== half)) : halves;
+}
+
 // Tops up a goal-driven suggestion from the library so the whole time block is used: on a heavy day with no heavy
 // lift yet, a T1 lift; then T2 lifts up to two (not on an easy day); then T3s, leaning toward the day's region if one was picked.
 function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
@@ -1376,7 +1406,7 @@ function fillTime(state, ci, t, blocks, budget, famUsed, sessionBlocks = []) {
     [...sessionBlocks, ...blocks].map(b => b.exerciseId));
   const intro = `Your open goals fill ${ci.minutes - budget} of your ${ci.minutes} minutes, so the rest is from your library${lean ? `, leaning ${lean}-body` : ''}:`;
   // The half you lean toward first; the other half only once that one has a strength lift in each pattern.
-  const halves = lean ? [FOCUS_MAIN[lean], FOCUS_MAIN[lean === 'upper' ? 'lower' : 'upper']] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]];
+  const halves = ownHalves(state, t, lean ? [FOCUS_MAIN[lean], FOCUS_MAIN[lean === 'upper' ? 'lower' : 'upper']] : [[...FOCUS_MAIN.upper, ...FOCUS_MAIN.lower]]);
   const pick = (tier, why, opts = {}, ok = () => true) => halves.some(ps => k.strength(ps.filter(ok), why, tier, opts));
   const strengthIn = tier => [...sessionBlocks, ...blocks, ...k.blocks].filter(b => b.tier === tier && strengthBlock(b)).length;
   addRequested(state, ci, k, [...sessionBlocks, ...blocks]);

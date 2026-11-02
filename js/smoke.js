@@ -1170,6 +1170,89 @@ step('the THP-style jump plan in Plans: start a day, see its notes, sets count a
   click('[data-act=nav][data-tab=today]');
 });
 
+step('the morning check: energy and pain, then no jumps on a sore morning', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  check('the morning check shows on Today', /Morning check/.test(text()) && !!q('[data-act=mornSave]'), text().slice(0, 300));
+  click('[data-act=mornPart][data-p="Knee"]');
+  check('tracking a part adds its 0-10 row', st().morning.parts.includes('Knee') && qa('[data-act=mornSet][data-m=pain]').length === 11);
+  click('[data-act=mornSet][data-m=energy][data-v="4"]');
+  click('[data-act=mornSet][data-m=pain][data-v="6"]');
+  click('[data-act=mornSave]');
+  const e = st().morning.log[0];
+  check('saved for today', e?.energy === 4 && e.pain.Knee === 6 && e.day === L.dayKey());
+  check('one line, with what it changes', /Morning: Energy 4 · Knee 6/.test(text()) && /no jumps today/.test(text()), text().slice(0, 300));
+  check('and the check-in energy follows it', q('[data-act=ci][data-k=energy][data-v="4"]')?.classList.contains('on'));
+  onlyAt('loc-basement');
+  const jumps = q('[data-ci-jumps]'); if (!jumps.checked) { jumps.checked = true; fire(jumps, 'change'); }
+  click('[data-act=suggest]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  check('a suggestion with jumps on has none', !sess.blocks.some(b => b.tier === 'JUMP'));
+  check('says why, with the holds in the workout', /No jumps today \(Knee/.test(text()) && (sess.mobility || []).some(it => it.exerciseId === 'mob-spanish-squat-hold'), text().slice(0, 500));
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  const j2 = q('[data-ci-jumps]'); if (j2?.checked) { j2.checked = false; fire(j2, 'change'); }
+  click('[data-act=mornEdit]');
+  click('[data-act=mornSet][data-m=pain][data-v="1"]');
+  click('[data-act=mornSave]');
+  check('editing it clears the warning', st().morning.log[0].pain.Knee === 1 && !/no jumps today/.test(text()));
+});
+
+step('jumps: an optional height, and a record for the best', () => {
+  const st = () => store.state;
+  onlyAt('loc-basement');
+  const jumps = q('[data-ci-jumps]'); if (!jumps.checked) { jumps.checked = true; fire(jumps, 'change'); }
+  click('[data-act=suggest]');
+  const b = st().sessions.filter(x => x.status === 'open').at(-1)?.blocks.find(x => x.tier === 'JUMP');
+  check('a jump block has a height or distance field', !!b && !!q('[data-f=jump]'), text().slice(0, 300));
+  if (b) {
+    st().sets.push({ id: 'old-jump', sessionId: 'old', blockId: 'old', exerciseId: b.exerciseId, tier: b.tier, reps: 3, jump: 90, done: true, loggedAt: Date.now() - 864e5 * 3 });
+    const field = q('[data-f=jump]');
+    setVal(field, '95');
+    click(`[data-act=check][data-id="${field.dataset.set}"]`);
+    check('a new best jump gets a trophy', L.byId(st().sets, field.dataset.set)?.pr === 'jump' && !!q('.prtag'));
+    st().sets = st().sets.filter(x => x.id !== 'old-jump');
+  }
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  const j2 = q('[data-ci-jumps]'); if (j2?.checked) { j2.checked = false; fire(j2, 'change'); }
+});
+
+step('program blocks: set up THP as a block, run a program day, see it in Week, end it with a report', () => {
+  const st = () => store.state;
+  THP.addThpPlan(st()); store.save();
+  click('[data-act=nav][data-tab=plans]');
+  click('[data-act=blockSetup]');
+  check('setup prefilled from the plans', /Run THP-style jump plan/.test(text()) && q('[data-bsched="1"]').value === 'plan-thp-high-a' && q('[data-bsched="2"]').value === 'plan-thp-general' && q('[data-act=bOwnHalf][data-v=lower]').classList.contains('on') && q('[data-act=bOwnTier][data-v=JUMP]').classList.contains('on'), text().slice(0, 400));
+  check('it lists the goals that will pause', /These goals pause until it ends/.test(text()));
+  // Today gets a session, whatever day the test runs.
+  const wd = new Date().getDay();
+  setVal(q(`[data-bsched="${wd}"]`), 'plan-thp-high-a');
+  click('[data-act=bStart][data-v=today]');
+  click('[data-act=blockGo]');
+  check('the block runs', !!st().block && /Running as a block: week 1 of 4/.test(text()), text().slice(0, 300));
+  click('[data-act=nav][data-tab=today]');
+  check('Today offers the program session', /THP-style jump plan · Week 1 of 4/.test(text()) && !!q('[data-act=blockStart]'), text().slice(0, 400));
+  click('[data-act=blockStart]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  check('it opens with its banner, the plan, and T3s for the time left', sess?.blockRun === st().block.id && /Week 1 of 4/.test(q('.banner.program')?.innerText ?? '') && sess.planItems.length > 0
+    && sess.blocks.slice(0, sess.planItems.length).every((b, i) => b.exerciseId === sess.planItems[i].exerciseId || sess.blocks.some(x => x.exerciseId === sess.planItems[i].exerciseId)), text().slice(0, 300));
+  check('extras are T3s only', sess.blocks.filter(b => !sess.planItems.some(i => i.exerciseId === b.exerciseId)).every(b => b.tier === 'T3'));
+  for (const x of st().sets.filter(y => y.sessionId === sess.id)) { x.done = true; x.loggedAt = Date.now(); }
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  check('after it, a day off the program', /Program session done today/.test(text()), text().slice(0, 300));
+  click('[data-act=nav][data-tab=week]');
+  check('Week shows the block and its paused goals', /Week 1 of 4 · 1 of \d sessions/.test(text()) && /Paused while THP-style jump plan runs/.test(text()), text().slice(0, 500));
+  click('[data-act=nav][data-tab=plans]');
+  click('[data-act=blockEnd]');
+  click('#sheet [data-act=confirmYes]');
+  check('ending it shows the report on Today', !st().block && /THP-style jump plan: done \(ended early\)/.test(text()) && /As written/.test(text()), text().slice(0, 400));
+  click('[data-act=blockSeen]');
+  check('Back to my goals puts it away', !/: done \(ended early\)/.test(text()) && st().blocks[0].reportSeen === true);
+  st().plans = st().plans.filter(p => !p.group); st().blocks = []; store.save();
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
