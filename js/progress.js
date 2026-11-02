@@ -114,3 +114,20 @@ export function liftChange(series) {
   const first = series[0].v, last = series[series.length - 1].v;
   return { first, last, best: Math.max(...series.map(x => x.v)), delta: last - first };
 }
+
+// One exercise, session by session in the window: { t, volume, reps, sets, hold (longest, s), jump (best) }.
+export function exerciseSessions(state, exerciseId, from, to) {
+  const by = new Map();
+  for (const s of working(state, from, to)) {
+    if (s.exerciseId !== exerciseId) continue;
+    const w = by.get(s.sessionId) ?? { t: s.loggedAt, volume: 0, reps: 0, sets: 0, hold: 0, jump: 0 };
+    w.t = Math.min(w.t, s.loggedAt);
+    w.volume += setVolume(state, s);
+    if (num(s.reps) > 0) w.reps += num(s.reps);
+    w.hold = Math.max(w.hold, num(s.time) || 0);
+    w.jump = Math.max(w.jump, num(s.jump) || 0);
+    w.sets++;
+    by.set(s.sessionId, w);
+  }
+  return [...by.values()].sort((a, b) => a.t - b.t);
+}
