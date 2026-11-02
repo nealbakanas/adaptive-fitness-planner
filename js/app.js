@@ -7,6 +7,8 @@ import { MIN_CHANGEOVERS } from './pace.js';
 import * as R from './review.js';
 import * as I from './interval.js';
 import * as THP from './thp.js';
+import * as B from './block.js';
+import * as Mo from './morning.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -46,7 +48,7 @@ function defaultCheckin() {
     locationId: last?.locationId ?? state.locations[0]?.id,
     locationIds: (last?.locationIds ?? [last?.locationId ?? state.locations[0]?.id]).filter(id => L.byId(state.locations, id)),
     minutes: last?.minutes ?? 45,
-    fatigue: 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false, cond: false, condPair: false,
+    fatigue: Mo.entryFor(state)?.energy ? 6 - Mo.entryFor(state).energy : 2, sleep: null, intent: 'auto', lean: 'either', split: false, jumps: false, cond: false, condPair: false,
   };
 }
 
@@ -728,6 +730,7 @@ function banners() {
 }
 
 function viewToday() {
+  if (B.settle(state)) save(); // a block past its end finishes now; its report waits below
   const s = currentSession(), m = currentMobility();
   if (m && !(s && ui.showWorkout)) return banners() + viewMobSession(m, !!s);
   const back = m ? `<div class="banner">Your mobility session is still open. <button class="link" data-act="showMobility">Switch to it</button></div>` : '';
@@ -976,6 +979,7 @@ function viewCheckin() {
   const doneToday = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'done');
   const paused = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'paused');
   let h = `<header class="top"><h1>Check in</h1></header>`;
+  h += blockReportCard() + morningCard() + programDayCard();
   for (const p of paused) {
     const left = state.sets.filter(x => x.sessionId === p.id && !x.done && !x.warmup).length;
     const blocksLeft = p.blocks.filter(b => blockSets(b).some(x => !x.done)).length;
@@ -1017,6 +1021,182 @@ function viewCheckin() {
   return h;
 }
 
+// ---------- morning check ----------
+
+const jumpWord = ex => (/broad|long jump|bound|standing long|triple/i.test(ex?.name ?? '') ? 'Distance' : 'Height');
+const numSeg = (k, vals, cur, extra = '') => `<div class="seg tight">${vals.map(n => `<button data-act="mornSet" data-m="${k}" ${extra} data-v="${n}" class="${cur === n ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+
+// Energy and pain each morning, before anything else (js/morning.js). Logged: one line, with what it changes today.
+function morningCard() {
+  const e = Mo.entryFor(state), parts = Mo.morningOf(state).parts;
+  const sore = Mo.jumpPain(state);
+  if (e && !ui.morning) {
+    const holds = Mo.reliefHolds(state);
+    return `<div class="card muted morning"><span>Morning: ${esc(Mo.entryText(e)) || 'logged'}</span> <button class="link" data-act="mornEdit">Edit</button>
+      ${sore.length ? `<p>${esc(sore.map(x => `${x.part} ${x.score}/10`).join(', '))}: no jumps today.${holds.length ? ` <button class="link" data-act="mornIsos">Do the isometric holds</button>` : ''}</p>` : ''}</div>`;
+  }
+  if (!e && !ui.morning && ui.morningSkip === L.dayKey()) return '';
+  const d = ui.morning ?? (ui.morning = { energy: null, pain: {} });
+  const ideas = [...new Set([...parts, ...Mo.PART_IDEAS])];
+  return `<div class="card morning"><h3>Morning check <span class="hint">about 10 seconds</span></h3>
+    <div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${numSeg('energy', [1, 2, 3, 4, 5], d.energy)}</div>
+    ${parts.map(p => `<div class="field"><label>${esc(p)} <span class="hint">0 none · 10 worst · same test each morning</span></label>${numSeg('pain', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], d.pain[p] ?? null, `data-p="${esc(p)}"`)}</div>`).join('')}
+    <details class="parts" ${parts.length ? '' : 'open'}><summary>Body parts you track <span class="hint">any you've hurt before</span></summary>
+      <div class="chips">${ideas.map(p => `<button class="chip ${parts.includes(p) ? 'on' : ''}" data-act="mornPart" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+      <div class="row2"><input id="morn-part" placeholder="Another part, e.g. Left wrist"><button class="small" data-act="mornPartAdd">Add</button></div></details>
+    <div class="brow"><button class="primary small" data-act="mornSave">Save</button>${e ? '<button class="small" data-act="mornCancel">Cancel</button>' : '<button class="small" data-act="mornSkip">Not today</button>'}</div>
+    <p class="meta">Over 3/10 on a knee, ankle, back or hip means no jumps that day: isometric holds instead.</p></div>`;
+}
+
+// The holds that stand in for jumps on a sore morning, added to the workout's mobility (once).
+function addReliefHolds(s, parts) {
+  const ids = Mo.reliefHolds(state).filter(id => !(s.mobility || []).some(it => it.exerciseId === id));
+  s.mobility = [...(s.mobility || []), ...ids.map(mobEx).filter(Boolean).map(e => M.newItem(state, e))];
+  s.painSwap = parts;
+}
+
+// ---------- program blocks ----------
+
+const planName = id => L.byId(state.plans, id)?.name ?? '?';
+const shortPlan = id => planName(id).replace(/^.*?·\s*/, '').replace(/\s*\([^)]*\)\s*$/, '');
+
+// Check-in: the program session due today (or one you're behind on), or what's next on a day off.
+function programDayCard() {
+  const t = B.today(state);
+  if (!t) {
+    const b = state.block;
+    if (b?.pausedAt) return `<div class="card muted">${esc(b.group)} is paused: your goals run as usual. <button class="link" data-act="blockResume">Resume it</button></div>`;
+    if (b && Date.now() < b.startedAt) return `<div class="card muted">${esc(b.group)} starts ${esc(shortDate(b.startedAt))}.</div>`;
+    return '';
+  }
+  const head = `${esc(t.block.group)} · Week ${t.week} of ${t.block.weeks}${t.deload ? ' · deload' : ''}`;
+  if (t.due) {
+    const p = L.byId(state.plans, t.due.planId);
+    const low = 6 - ui.ci.fatigue <= 2;
+    return `<div class="card program due"><div class="meta">${head}${t.due.behind ? ` · from ${B.WEEKDAY_NAMES[t.due.weekday]}` : ''}</div><h3>${esc(shortPlan(p.id))}</h3>
+      ${p.note ? `<p class="meta">${esc(p.note)}</p>` : ''}
+      ${low ? '<p class="meta">Low energy: run it as written, at deload volume, or leave it for tomorrow (it waits; nothing is skipped).</p>' : ''}
+      <div class="brow"><button class="primary" data-act="blockStart">Start${t.deload ? ' (deload)' : ''}</button>${t.deload ? '' : '<button class="small" data-act="blockStart" data-deload="1">Deload volume</button>'}</div>
+      <p class="meta">Your T3s and superset ideas fill the time left. Or check in below for your own goals; ${esc(B.ownsText(t.block))} stay with the program.</p></div>`;
+  }
+  const next = t.next ? `Next: ${esc(shortPlan(t.next.planId))} on ${B.WEEKDAY_NAMES[t.next.weekday]}. <button class="link" data-act="blockStart">Do it today</button>` : 'All this week\'s sessions done.';
+  return `<div class="card muted program"><div class="meta">${head} · ${t.done} of ${t.scheduled} done</div>
+    <p>${t.doneToday ? 'Program session done today. ' : 'A day off the program: your own goals, without ' + esc(B.ownsText(t.block)) + '. '}${next}</p></div>`;
+}
+
+// Week tab: the block at a glance, each scheduled day ticked or open.
+function weekBlockCard() {
+  const t = B.today(state);
+  if (!t) return '';
+  const done = t.sessions.map(s => s.planId);
+  const left = [...done];
+  const days = B.sequence(state, t.block).map(x => {
+    const i = left.indexOf(x.planId);
+    const ok = i >= 0;
+    if (ok) left.splice(i, 1);
+    return `<span class="chip ${ok ? 'on' : ''}">${B.WEEKDAY_NAMES[x.weekday]} ${esc(shortPlan(x.planId))}${ok ? ' ✓' : ''}</span>`;
+  }).join('');
+  return `<div class="card program"><h3>${esc(t.block.group)}</h3><div class="meta">Week ${t.week} of ${t.block.weeks}${t.deload ? ' · deload' : ''} · ${t.done} of ${t.scheduled} sessions · owns ${esc(B.ownsText(t.block))}</div>
+    <div class="chips">${days}</div></div>`;
+}
+
+// Plans tab, under a plan group: run it as a block, or the running block's controls.
+function groupBlockRow(g) {
+  const b = state.block;
+  if (b?.group === g) {
+    const wk = Math.max(1, Math.min(b.weeks, B.weekNo(state, b)));
+    const when = Date.now() < b.startedAt ? `starts ${shortDate(b.startedAt)}` : b.pausedAt ? 'paused' : `week ${wk} of ${b.weeks}`;
+    return `<div class="card program"><b>Running as a block: ${esc(when)}</b><div class="meta">Owns ${esc(B.ownsText(b))} · ${esc(B.sequence(state, b).map(x => `${B.WEEKDAY_NAMES[x.weekday]} ${shortPlan(x.planId)}`).join(' · '))}</div>
+      <div class="brow">${b.pausedAt ? '<button class="small" data-act="blockResume">Resume</button>' : '<button class="small" data-act="blockPause">Pause</button>'}<button class="small danger" data-act="blockEnd">End block</button></div></div>`;
+  }
+  if (b) return '';
+  return `<div class="brow pad"><button class="small primary" data-act="blockSetup" data-g="${esc(g)}">Run as a block</button><span class="meta">a set number of weeks; it owns its part of your training</span></div>`;
+}
+
+function viewBlockSetup(d) {
+  const plans = state.plans.filter(p => p.group === d.group);
+  const days = [...Array(7).keys()].map(i => (state.settings.weekStartDay + i) % 7);
+  const at = wd => d.schedule.find(x => x.weekday === wd)?.planId ?? '';
+  const draftBlock = { owns: d.owns };
+  const paused = state.slots.filter(sl => sl.quota > 0 && B.ownsSlot(state, draftBlock, sl));
+  return `<header class="top sub"><button class="back" data-act="blockSetupClose">‹ Plans</button></header>
+    <h1 class="pagetitle">Run ${esc(d.group)}</h1>
+    <h3>Schedule</h3><div class="card flush">${days.map(wd => `<div class="frow"><span class="grow"><span class="name">${WEEKDAYS[wd]}</span></span>
+      <select data-bsched="${wd}">${opts([['', 'Your own day'], ...plans.map(p => [p.id, shortPlan(p.id)])], at(wd))}</select></div>`).join('')}</div>
+    <h3>What the program owns</h3><div class="card">
+      <div class="field"><label>Body half <span class="hint">its T1/T2 goals pause; no T1/T2 from it on your own days</span></label><div class="seg">${[['', 'Neither'], ['lower', 'Lower body'], ['upper', 'Upper body']].map(([v, t]) =>
+        `<button data-act="bOwnHalf" data-v="${v}" class="${(d.owns.half ?? '') === v ? 'on' : ''}">${t}</button>`).join('')}</div></div>
+      <div class="field"><label>Whole tiers</label><div class="chips">${['JUMP', 'COND'].map(t => `<button class="chip ${d.owns.tiers.includes(t) ? 'on' : ''}" data-act="bOwnTier" data-v="${t}">${t === 'JUMP' ? 'Jumps' : 'Conditioning'}</button>`).join('')}</div></div></div>
+    <h3>Length</h3><div class="card">
+      <div class="frow"><span class="grow"><span class="name">Weeks</span></span><div class="stepper small"><button data-act="bWeeks" data-d="-1" aria-label="Fewer weeks">−</button><span>${d.weeks}</span><button data-act="bWeeks" data-d="1" aria-label="More weeks">+</button></div></div>
+      <label class="toggle"><input type="checkbox" data-bdeload ${d.deloadEvery ? 'checked' : ''}> Deload every 4th week <span class="hint">same plans, 40% fewer sets</span></label>
+      <div class="field"><label>Start</label><div class="seg">${[['next', 'Next week'], ['today', 'Today']].map(([v, t]) => `<button data-act="bStart" data-v="${v}" class="${d.start === v ? 'on' : ''}">${t}</button>`).join('')}</div></div></div>
+    <div class="card muted">${paused.length ? `These goals pause until it ends: ${esc(paused.map(slotLabel).join(', '))}. Sets still count toward them.` : 'None of your goals pause.'}</div>
+    <div class="actions"><button data-act="blockSetupClose">Cancel</button><button class="primary" data-act="blockGo">Start the block</button></div>`;
+}
+
+// The end-of-block report, on Today until you choose what's next.
+function blockReportCard() {
+  const b = B.unseenReport(state);
+  if (!b) return '';
+  const r = b.report;
+  const name = id => exOf(id)?.name ?? '?';
+  const u = unit(), ju = B.jumpUnit(state);
+  const num = (v, un = '', dp = 0) => (v == null ? '—' : `${dp ? v.toFixed(dp) : round(v)}${un}`);
+  const row = (label, f, un = '', dp = 0) => `<div class="kv"><span>${esc(label)}</span><b>${r.before ? `${num(f(r.before), un, dp)} → ` : ''}${num(f(r.block), un, dp)}</b></div>`;
+  return `<div class="card report"><h3>${esc(b.group)}: done${r.early ? ' (ended early)' : ''}</h3>
+    <p class="meta">${r.weeks} week${r.weeks === 1 ? '' : 's'} · ${r.before ? `against the ${r.before.weeks} weeks before it` : 'fewer than 2 usable weeks before it, so the block alone'}</p>
+    ${row('Sessions per week', x => x.sessionsPerWeek, '', 1)}
+    <div class="kv"><span>As written</span><b>${r.asWritten} of ${r.sessions}${r.edited ? ' (plans edited)' : ''}</b></div>
+    ${Object.keys(r.block.e1rm).map(id => row(`${name(id)} e1RM`, x => x.e1rm[id], ` ${u}`)).join('')}
+    ${Object.keys(r.block.jumps).map(id => row(`${name(id)} best`, x => x.jumps[id], ` ${ju}`)).join('')}
+    ${row('Sets/week in its slice', x => x.ownedSetsPerWeek, '', 1)}
+    ${row('Your other goals hit', x => (x.goalsHit == null ? null : 100 * x.goalsHit), '%')}
+    ${row('Pain flags', x => x.painFlags)}
+    ${row('Morning energy', x => x.energy, '', 1)}
+    <p><b>${esc(r.verdict)}</b></p>
+    <div class="brow"><button class="primary small" data-act="blockAgain" data-id="${b.id}">Run it again</button><button class="small" data-act="blockSeen" data-id="${b.id}">Back to my goals</button><button class="small" data-act="blockCopy" data-id="${b.id}">Copy report</button></div></div>`;
+}
+
+// Starts today's program session: the plan as written (40% fewer sets on a deload), jumps swapped for holds on a sore
+// morning, then T3s from your goals in the time left.
+function startBlockSession(deload) {
+  const t = B.today(state);
+  const step = t?.due ?? t?.next;
+  if (!step) return;
+  const p = L.byId(state.plans, step.planId);
+  const cur = currentSession();
+  if (cur) { cur.status = 'paused'; cur.pausedAt = Date.now(); toast('Paused your open workout. Resume it from Today later.'); }
+  const sore = Mo.jumpPain(state);
+  let blocks = planBlocks(p);
+  if (sore.length) blocks = blocks.filter(b => b.tier !== 'JUMP');
+  const deloading = t.deload || !!deload;
+  const s = createSession(blocks, 'custom', {
+    planId: p.id, ...(p.note ? { planNote: p.note } : {}), blockRun: t.block.id, planItems: p.items.map(i => ({ ...i })),
+    programLabel: `${t.block.group} · Week ${t.week} of ${t.block.weeks} · ${shortPlan(p.id)}`, ...(deloading ? { deload: true } : {}),
+  });
+  if (deloading) {
+    for (const b of s.blocks) {
+      const sets = blockSets(b), keep = B.deloadSets(sets.length);
+      const drop = new Set(sets.slice(keep).map(x => x.id));
+      state.sets = state.sets.filter(x => !drop.has(x.id));
+    }
+  }
+  if (sore.length) addReliefHolds(s, sore.map(x => x.part));
+  // T3s from your goals (and superset ideas, shown on each lift) in whatever time the plan leaves.
+  const left = sessionBudget(s);
+  if (left >= 8) {
+    const res = L.buildMix(state, { ...s, minutes: left }, { T1: 0, T2: 0, T3: 4 }, Date.now(), { excludeFamilies: s.blocks.map(b => exOf(b.exerciseId)?.familyId) });
+    const extra = res.blocks.filter(b => b.tier === 'T3');
+    s.blocks.push(...extra);
+    L.pairT3s(state, s.blocks, L.placeOf(state, s));
+    for (const b of extra) genSets(s, b);
+  }
+  save();
+  ui.tab = 'today';
+  render(); window.scrollTo(0, 0);
+}
+
 function laterBanner(s) {
   const later = laterSets(s);
   if (!later.length) return '';
@@ -1038,6 +1218,8 @@ function viewSession(s) {
     ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
     <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   h += laterBanner(s);
+  if (s.blockRun) h += `<div class="banner program">${esc(s.programLabel ?? 'Program')}${s.deload ? ' · deload volume' : ''}</div>`;
+  if (s.painSwap?.length) h += `<div class="card muted">No jumps today (${esc(s.painSwap.join(', '))} over 3/10 this morning): the isometric holds below stand in for them.</div>`;
   if (s.planNote) h += `<div class="card muted plannote">${esc(s.planNote)}</div>`;
   if (!s.blocks.length) {
     h += `<div class="card muted">Nothing from your weekly goals fits this location and time. Add an exercise below, use a plan, or check in with more time.</div>`;
@@ -1169,6 +1351,8 @@ function viewBlock(s, b, credit, idea = null) {
     } else if (sx.metric === 'distance') {
       inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
     }
+    // Jumps: an optional height or distance, when you measure. The best is a record, like a 1RM.
+    if (b.tier === 'JUMP' || L.isJump(sx)) inputs += `<input class="num jumpin" inputmode="decimal" data-set="${st.id}" data-f="jump" value="${esc(st.jump)}" placeholder="—" aria-label="${jumpWord(sx)} (optional)"><span class="u">${B.jumpUnit(state)} ${jumpWord(sx) === 'Distance' ? '→' : '↑'}</span>`;
     return `<div class="set ${st.done ? 'done' : ''} ${st.amrap ? 'amrap' : ''}"><span class="n">${i + 1}</span>${inputs}${st.amrap ? '<span class="amraptag">AMRAP</span>' : ''}${st.done && st.pr ? `<span class="prtag" title="${esc(st.prText ?? 'Personal record')}" aria-label="${esc(st.prText ?? 'Personal record')}">🏆</span>` : ''}${other}
       <button class="check" data-act="check" data-id="${st.id}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
   }).join('');
@@ -1394,7 +1578,11 @@ function viewWeek() {
   if (ui.reviewUndo) h += `<div class="banner">Goals changed from your review. <button class="link" data-act="reviewUndo">Undo</button></div>`;
   h += lastWeekCard();
 
-  const slots = [...c.slots.values()].sort((a, b) => a.slot.tier.localeCompare(b.slot.tier) || (b.slot.priority - a.slot.priority));
+  h += weekBlockCard();
+  const owned = B.ownedSlotIds(state);
+  const allSlots = [...c.slots.values()].sort((a, b) => a.slot.tier.localeCompare(b.slot.tier) || (b.slot.priority - a.slot.priority));
+  const slots = allSlots.filter(r => !owned.has(r.slot.id));
+  const ownedRows = allSlots.filter(r => owned.has(r.slot.id));
   h += `<div class="sectionhead"><h3>Weekly goals</h3><div class="brow"><button class="small" data-act="gsOpen">Suggest from history</button><button class="small" data-act="goalNew">+ Add goal</button></div></div>
     <div class="card flush">${slots.map(r => {
     const pips = Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
@@ -1407,6 +1595,11 @@ function viewWeek() {
       <span class="grow"><span class="name">${esc(name)}</span><span class="meta">${esc(sub)}</span></span>
       <span class="pips">${pips}</span></button>`;
   }).join('') || '<p class="muted pad">No weekly goals yet. Add one to get suggestions.</p>'}</div>`;
+  if (ownedRows.length) {
+    h += `<details class="owned"><summary>Paused while ${esc(state.block?.group ?? 'the program')} runs: ${ownedRows.length} goal${ownedRows.length === 1 ? '' : 's'}</summary><div class="card flush">${ownedRows.map(r =>
+      `<button class="slotrow" data-act="goalEdit" data-id="${r.slot.id}"><span class="tier ${r.slot.tier}">${r.slot.tier}</span><span class="grow"><span class="name">${esc(exOf(r.slot.exerciseId)?.name ?? famOf(r.slot.familyId)?.name)}</span>
+        <span class="meta">${r.days.size ? `${r.exposures} day${r.exposures === 1 ? '' : 's'} this week via the program` : 'the program has it'}</span></span></button>`).join('')}</div></details>`;
+  }
   h += `<div class="brow pad"><button class="small" data-act="reviewOpen" data-w="${c.start}">Review this week</button></div>`;
   h += weekBudgetCard();
 
@@ -1752,6 +1945,7 @@ function exerciseOptions(sel) {
 }
 
 function viewPlans() {
+  if (ui.blockSetup) return viewBlockSetup(ui.blockSetup);
   if (ui.program) return viewProgram(ui.program);
   if (ui.mobRoutine) return viewMobRoutine(ui.mobRoutine);
   const p = ui.plan;
@@ -1784,7 +1978,7 @@ function viewPlans() {
   // Plan groups (the THP-style jump plan): a heading, what it's about, and each day with Start and Edit.
   for (const g of [...new Set(state.plans.filter(p => p.group).map(p => p.group))]) {
     const about = g === THP.THP_GROUP ? THP.THP_ABOUT : '';
-    h += `<div class="sectionhead"><h3>${esc(g)}</h3></div>${about ? `<p class="meta pad">${esc(about)}</p>` : ''}`;
+    h += `<div class="sectionhead"><h3>${esc(g)}</h3></div>${about ? `<p class="meta pad">${esc(about)}</p>` : ''}${groupBlockRow(g)}`;
     h += state.plans.filter(p => p.group === g).map(p => `<div class="card plangroup"><b>${esc(p.name)}</b>
       <div class="meta">${planItems(p)}</div>${p.note ? `<p class="meta">${esc(p.note)}</p>` : ''}
       <div class="brow"><button class="small primary" data-act="startPlan" data-id="${p.id}">Start</button><button class="small" data-act="planEdit" data-id="${p.id}">Edit</button></div></div>`).join('');
@@ -2240,6 +2434,9 @@ function viewReview(rv) {
       <span class="grow"><span class="name">${esc(g.label.slice(g.tier.length + 1))}</span>
       <span class="meta">${g.met ? 'met' : esc(R.REASONS[g.reason])}${g.missed >= 2 ? ` · missed ${g.missed} weeks running` : ''} · last done ${esc(ago(g.lastDone))}</span></span>
       <b class="${g.met ? 'good' : ''}">${g.filled}/${g.quota}</b></div>`).join('') || '<p class="muted pad">No weekly goals.</p>'}</div>`;
+  if (r.block) {
+    h += `<h3>Program</h3><div class="card"><p>${esc(r.block.text)}.</p>${r.program.length ? `<p class="meta">Its goals (not reviewed while it runs): ${esc(r.program.map(g => `${g.label} ${g.filled}/${g.quota}`).join(' · '))}</p>` : ''}</div>`;
+  }
   if (r.lifts.length) {
     const word = { up: 'up', held: 'held', down: 'down', stalled: 'stalled', new: 'first time' };
     h += `<h3>Lifts</h3><div class="card flush">${r.lifts.map(l => `<div class="slotrow"><span class="tier ${l.tier}">${l.tier}</span>
@@ -2941,7 +3138,8 @@ const actions = {
 
   suggest: () => {
     const res = L.buildSuggestion(state, ui.ci);
-    createSession(res.blocks, 'suggested', { why: whyRows(res), ready: res.ready, goalMinutes: res.goalMinutes, focusNotes: res.notes });
+    const s = createSession(res.blocks, 'suggested', { why: whyRows(res), ready: res.ready, goalMinutes: res.goalMinutes, focusNotes: res.notes });
+    if (res.pain) { addReliefHolds(s, res.pain); save(); }
     render(); window.scrollTo(0, 0);
   },
 
@@ -3207,6 +3405,86 @@ const actions = {
     if (s.day === L.dayKey()) return go();
     askConfirm('Continue this workout today?', 'It opens again with its unlogged sets. It stays under its own date in History; the sets you log now count for today.', 'Continue', go);
   },
+  // Morning check
+  mornSet: d => {
+    const m = ui.morning ?? (ui.morning = { energy: null, pain: {} });
+    if (d.m === 'energy') m.energy = m.energy === Number(d.v) ? null : Number(d.v);
+    else m.pain[d.p] = m.pain[d.p] === Number(d.v) ? null : Number(d.v);
+    render();
+  },
+  mornPart: d => {
+    const parts = Mo.morningOf(state).parts;
+    Mo.setParts(state, parts.includes(d.p) ? parts.filter(x => x !== d.p) : [...parts, d.p]);
+    save(); render();
+  },
+  mornPartAdd: () => {
+    const v = document.getElementById('morn-part')?.value.trim();
+    if (!v) return toast('Type a body part first');
+    Mo.setParts(state, [...Mo.morningOf(state).parts, v]);
+    save(); render();
+  },
+  mornSave: () => {
+    const m = ui.morning ?? { energy: null, pain: {} };
+    if (m.energy == null && !Object.values(m.pain).some(v => v != null)) return toast('Tap your energy, or a score for a part');
+    const e = Mo.record(state, m);
+    if (e.energy != null) ui.ci.fatigue = 6 - e.energy;
+    ui.morning = null;
+    save(); render();
+    const sore = Mo.jumpPain(state);
+    toast(sore.length ? `${sore.map(x => x.part).join(', ')} over 3/10: no jumps today, isometrics instead` : 'Morning check saved');
+  },
+  mornEdit: () => { const e = Mo.entryFor(state); ui.morning = { energy: e?.energy ?? null, pain: { ...(e?.pain || {}) } }; render(); },
+  mornCancel: () => { ui.morning = null; render(); },
+  mornSkip: () => { ui.morning = null; ui.morningSkip = L.dayKey(); render(); },
+  mornIsos: () => {
+    if (currentMobility()) { ui.showWorkout = false; render(); return toast('A mobility session is already open'); }
+    const items = Mo.reliefHolds(state).map(mobEx).filter(Boolean).map(e => M.newItem(state, e));
+    if (!items.length) return toast('No holds for these parts in your mobility library');
+    startMobility(items, { relief: true });
+    ui.tab = 'today';
+    save(); render(); window.scrollTo(0, 0);
+  },
+
+  // Program blocks
+  blockSetup: d => { ui.blockSetup = B.draftFor(state, d.g); render(); window.scrollTo(0, 0); },
+  blockSetupClose: () => { ui.blockSetup = null; render(); window.scrollTo(0, 0); },
+  bOwnHalf: d => { ui.blockSetup.owns.half = d.v || null; render(); },
+  bOwnTier: d => { const t = ui.blockSetup.owns.tiers; ui.blockSetup.owns.tiers = t.includes(d.v) ? t.filter(x => x !== d.v) : [...t, d.v]; render(); },
+  bWeeks: d => { ui.blockSetup.weeks = Math.max(2, Math.min(16, ui.blockSetup.weeks + Number(d.d))); render(); },
+  bStart: d => { ui.blockSetup.start = d.v; render(); },
+  blockGo: () => {
+    const d = ui.blockSetup;
+    if (!d.schedule.length) return toast('Give at least one day a session');
+    const b = B.startBlock(state, d);
+    ui.blockSetup = null;
+    save(); render(); window.scrollTo(0, 0);
+    toast(Date.now() < b.startedAt ? `Starts ${shortDate(b.startedAt)}` : 'Block started');
+  },
+  blockStart: d => startBlockSession(!!d.deload),
+  blockPause: () => { B.pauseBlock(state); save(); render(); toast('Paused: your goals run as usual until you resume'); },
+  blockResume: () => { B.resumeBlock(state); save(); render(); toast('Resumed'); },
+  blockEnd: () => askConfirm(`End ${state.block.group}?`, 'Its report covers the weeks done so far, and your goals run as usual again.', 'End block', () => {
+    B.endBlock(state);
+    ui.tab = 'today';
+    save(); render(); window.scrollTo(0, 0);
+  }),
+  blockSeen: d => { const b = L.byId(state.blocks, d.id); if (b) b.reportSeen = true; save(); render(); },
+  blockAgain: d => {
+    const b = L.byId(state.blocks, d.id);
+    if (!b) return;
+    b.reportSeen = true;
+    B.startBlock(state, { group: b.group, schedule: b.schedule, owns: b.owns, weeks: b.weeks, deloadEvery: b.deloadEvery, start: 'next' });
+    save(); render(); toast(`Starts ${shortDate(state.block.startedAt)}`);
+  },
+  blockCopy: d => {
+    const b = L.byId(state.blocks, d.id);
+    if (!b) return;
+    const text = B.reportText(state, b);
+    const fallback = () => openSheet({ type: 'reviewText', text });
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => toast('Report copied'), fallback);
+    else fallback();
+  },
+
   laterDone: () => { const s = currentSession(); if (!s) return; resolveLater(s, true); save(); render(); toast('Kept as done'); },
   laterPlanned: () => { const s = currentSession(); if (!s) return; resolveLater(s, false); save(); render(); toast('Unticked: they count once you log them'); },
   ivPreset: d => {
@@ -3866,7 +4144,7 @@ const actions = {
     const p = ui.plan;
     if (!p.name.trim()) return toast('Give the plan a name');
     if (!p.items.length) return toast('Add at least one exercise');
-    if (p.id) state.plans[state.plans.findIndex(x => x.id === p.id)] = p;
+    if (p.id) state.plans[state.plans.findIndex(x => x.id === p.id)] = { ...p, editedAt: Date.now() };
     else state.plans.push({ ...p, id: L.uid() });
     ui.plan = null;
     save(); render(); toast('Plan saved');
@@ -4243,6 +4521,12 @@ document.addEventListener('change', e => {
   } else if (d.hgtier !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit), g = s && histGroups(s).find(x => x.key === d.hgtier);
     if (g) { for (const st of g.sets) st.tier = el.value; tidyBlocks(s); save(); render(); }
+  } else if (d.bsched !== undefined && ui.blockSetup) {
+    const wd = Number(d.bsched);
+    ui.blockSetup.schedule = [...ui.blockSetup.schedule.filter(x => x.weekday !== wd), ...(el.value ? [{ weekday: wd, planId: el.value }] : [])].sort((a, b) => a.weekday - b.weekday);
+    render();
+  } else if (d.bdeload !== undefined && ui.blockSetup) {
+    ui.blockSetup.deloadEvery = el.checked ? 4 : 0;
   } else if (d.hdate !== undefined) {
     moveWorkout(el.value);
   } else if (d.hloc !== undefined) {

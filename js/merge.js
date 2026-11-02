@@ -40,7 +40,7 @@ export function mergeById(base, local, remote, newer) {
   return out;
 }
 
-const ARRAYS = ['sessions', 'sets', 'exercises', 'families', 'slots', 'schemes', 'plans', 'locations', 'reviews'];
+const ARRAYS = ['sessions', 'sets', 'exercises', 'families', 'slots', 'schemes', 'plans', 'locations', 'reviews', 'blocks'];
 const OBJECTS = ['settings', 'tiers', 'programs', 'imports', 'intervals'];
 const MOBILITY_ARRAYS = ['exercises', 'routines', 'sessions'];
 
@@ -52,6 +52,8 @@ export function mergeStates(base, local, remote) {
   for (const k of OBJECTS) out[k] = mergeObject(base?.[k], local[k], remote[k], newer);
   out.mobility = { ...mergeObject(base?.mobility, local.mobility, remote.mobility, newer) };
   for (const k of MOBILITY_ARRAYS) out.mobility[k] = mergeById(base?.mobility?.[k], local.mobility?.[k], remote.mobility?.[k], newer);
+  out.block = pick(base?.block ?? null, local.block ?? null, remote.block ?? null, newer); // the running program block, whole
+  out.morning = { ...mergeObject(base?.morning, local.morning, remote.morning, newer), log: mergeById(base?.morning?.log, local.morning?.log, remote.morning?.log, newer) };
   out.equipment = [...new Set([...(local.equipment ?? []), ...(remote.equipment ?? [])])];
   out.version = Math.max(local.version ?? 0, remote.version ?? 0);
   out.savedAt = Math.max(local.savedAt ?? 0, remote.savedAt ?? 0) || null;

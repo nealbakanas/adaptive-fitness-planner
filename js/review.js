@@ -3,6 +3,7 @@
 // and removals, and lift outcomes; `applyProposal` makes one accepted change to `state.slots`.
 import * as L from './logic.js';
 import { weekBudget, tierCost } from './goals.js';
+import { ownedSlotIds, weekLine } from './block.js';
 
 const DAY = 864e5;
 export const KEEP_WEEKS = 26;
@@ -23,6 +24,8 @@ export const REASONS = {
   lean: 'You leaned the other way',
   jumps: 'Jumps were off at check-in',
   cond: 'Conditioning was off at check-in',
+  pain: 'No jumps: pain over 3/10 in the morning check',
+  program: 'The program block has it',
   workouts: 'Not enough workouts',
   short: 'Done, but short of the reps',
   fewer: 'Picked fewer times than its quota',
@@ -38,7 +41,7 @@ const doableAnywhere = (state, sl, tier = sl.tier, exerciseId = sl.exerciseId) =
 
 // The builder's reasons for holding a goal back (logic.js hold codes), in the order a slipped goal is explained by them.
 // `family` (the same family was already in the workout) doesn't explain a slip on its own.
-const HOLD_ORDER = ['fresh', 'time', 'others', 'lean', 'jumps', 'cond'];
+const HOLD_ORDER = ['pain', 'fresh', 'time', 'others', 'lean', 'jumps', 'cond'];
 // Workouts saved before hold codes: read the note.
 function legacyHold(note = '') {
   return /waits for a fresh day/.test(note) ? 'fresh' : /no scheme fits/.test(note) ? 'time'
@@ -141,8 +144,16 @@ export function weekReview(state, weekStart, { now = Date.now() } = {}) {
     earlier.push({ ...b, credit: L.creditWeek(state, b.start + 3600e3) });
   }
   const goals = [];
+  // Goals a program block had that week: listed apart, never eased or stepped up (the program sets their dose).
+  const owned = ownedSlotIds(state, start + 3.5 * DAY);
+  const program = [];
   for (const sl of state.slots) {
     if (!(sl.quota > 0)) continue; // paused
+    if (owned.has(sl.id)) {
+      const r = credit.slots.get(sl.id);
+      program.push({ slotId: sl.id, label: slotLabel(state, sl), tier: sl.tier, quota: sl.quota, filled: r.filled, met: r.filled >= sl.quota, reason: 'program' });
+      continue;
+    }
     const r = credit.slots.get(sl.id);
     const met = r.filled >= sl.quota;
     let missed = met ? 0 : 1;
@@ -164,7 +175,7 @@ export function weekReview(state, weekStart, { now = Date.now() } = {}) {
   const counts = new Map();
   for (const g of goals) if (g.reason) counts.set(g.reason, (counts.get(g.reason) ?? 0) + 1);
   const topReason = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  const review = { weekStart: start, weekEnd: end, finished, totals, goals, lifts, topReason };
+  const review = { weekStart: start, weekEnd: end, finished, totals, goals, lifts, topReason, program, block: weekLine(state, start, end) };
   review.proposals = proposals(state, review);
   return review;
 }
@@ -295,6 +306,7 @@ export function reviewText(state, review) {
     'Goals:',
     ...review.goals.map(g => `- ${g.label}: ${g.filled}/${g.quota}${g.met ? ' ✓' : ` — ${REASONS[g.reason]}${g.missed >= 2 ? ` (missed ${g.missed} weeks running)` : ''}`}`),
   ];
+  if (review.block) lines.push('', `Program: ${review.block.text}`, ...review.program.map(g => `- ${g.label}: ${g.filled}/${g.quota} via the program`));
   if (review.lifts.length) lines.push('', 'Lifts:', ...review.lifts.map(l => `- ${l.tier} ${l.name}: ${l.load}${l.prev != null ? ` (was ${l.prev})` : ''} — ${l.trend}${l.complete ? '' : ', reps missed'}`));
   if (review.proposals.length) lines.push('', 'Proposed:', ...review.proposals.map(p => `- ${p.text}`));
   return lines.join('\n');

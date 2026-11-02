@@ -487,3 +487,18 @@ select.tierpick { width: auto; flex: none; }
 .ivsub { font-size: 17px; color: var(--text); margin-top: 6px; }
 .ivnext { font-size: 14px; color: var(--muted); margin-top: 10px; }
 .ivbtns { justify-content: center; }
+
+/* Morning check and program blocks */
+.seg.tight { gap: 3px; }
+.seg.tight button { padding: 9px 0; font-size: 14px; }
+.card.morning h3 { margin-top: 0; }
+.card.morning .row2 { display: flex; gap: 6px; margin-top: 8px; }
+.card.morning .row2 input { flex: 1; min-width: 0; }
+.card.program { border-left: 3px solid var(--accent); }
+.card.program h3 { margin: 4px 0; }
+.card.program .chips { margin-top: 8px; }
+.banner.program { font-weight: 600; }
+.set .num.jumpin { width: 52px; }
+details.owned { margin: 6px 0 12px; }
+details.owned summary { color: var(--muted); padding: 4px 2px; }
+.card.report .kv b { white-space: nowrap; }

@@ -227,7 +227,7 @@ export function seed() {
   ];
 
   return {
-    version: 28,
+    version: 29,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -272,6 +272,9 @@ export function seed() {
     timer: null, // running rest timer: { endsAt, total, blockId, setId, next, warned, alerted }
     intervals: { presets: DEFAULT_PRESETS.map(p => ({ ...p })), last: null }, // the Timer tab (js/interval.js): saved timers and the last one used
     intervalRun: null, // a running interval timer: { cfg, startedAt, pausedAt, pausedMs }
+    morning: { parts: [], log: [] }, // the morning check (js/morning.js): tracked body parts, and energy and pain each day
+    block: null, // the running program block (js/block.js)
+    blocks: [], // finished program blocks with their reports, newest first
     reviews: [], // weekly reviews (js/review.js): { id, weekStart, summary, proposals: [{ id, kind, text, status }], status }, newest 26
     imports: {}, // history brought in from other apps, e.g. fitnotes: { at, cutoff, map: { fitnotesExerciseId: exerciseId } }
   };

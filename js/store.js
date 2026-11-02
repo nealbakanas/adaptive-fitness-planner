@@ -342,6 +342,13 @@ export function migrate(s) {
     addMcgill(s);
     s.version = 28;
   }
+  if (s.version < 29) {
+    // v29: the morning check (js/morning.js) and program blocks (js/block.js). Nothing is tracked or running yet.
+    s.morning ??= { parts: [], log: [] };
+    s.block ??= null;
+    s.blocks ??= [];
+    s.version = 29;
+  }
   return s;
 }
 
