@@ -172,7 +172,34 @@ export function mobilitySeed() {
     { id: 'mobr-day3', name: 'Day 3: Bend Don\'t Break', items: ['mob-cobra', 'mob-bridge-pushup', 'mob-prayer-stretch', 'mob-reverse-hyper-hold'] },
     { id: 'mobr-day4', name: 'Day 4: Primal Roots', items: ['mob-bar-hang', 'mob-db-pullover', 'mob-seiza', 'mob-atg-stepup'] },
   ];
-  return { exercises: [...exercises, ...gsMobilityExercises()], routines, sessions: [] };
+  return { exercises: [...exercises, ...gsMobilityExercises(), ...mcgillExercises()], routines: [...routines, { ...MCGILL_ROUTINE, items: [...MCGILL_ROUTINE.items] }], sessions: [] };
+}
+
+// Stuart McGill's Big 3 for the low back: 10-second holds, fewer reps each set (5, 3, 1 on his reverse pyramid).
+export const mcgillExercises = () => [
+  mx('mob-mcgill-curl-up', 'McGill curl-up', ['Spine'], { reps: 5, tempo: '10s hold each' }, 30,
+    { reps: true }, 'One knee bent, one leg straight, hands under the low back. Lift head and shoulders just off the floor as one piece, neck still. Switch legs each set.',
+    'https://www.youtube.com/results?search_query=stuart+mcgill+curl+up', 'Big 3. Reverse pyramid: 5, 3, 1 reps.'),
+  mx('mob-mcgill-side-plank', 'McGill side plank', ['Spine', 'Glutes'], { reps: 5, perSide: true, tempo: '10s hold each' }, 30,
+    { reps: true }, 'On the elbow, knees bent to start (feet stacked when it gets easy). Hips forward, straight line from head to knees. Brace, breathe.',
+    'https://www.youtube.com/results?search_query=stuart+mcgill+side+bridge', 'Big 3. Reverse pyramid: 5, 3, 1 reps per side.'),
+  mx('mob-mcgill-bird-dog', 'McGill bird dog', ['Spine', 'Glutes', 'Shoulders'], { reps: 5, perSide: true, tempo: '10s hold each' }, 30,
+    { reps: true }, 'Reach the opposite arm and leg long, no higher than level; back stays still. Make a fist and squeeze. Sweep the floor between reps.',
+    'https://www.youtube.com/results?search_query=stuart+mcgill+bird+dog', 'Big 3. Reverse pyramid: 5, 3, 1 reps per side.'),
+];
+export const MCGILL_ROUTINE = { id: 'mobr-mcgill-big3', name: 'McGill Big 3', items: ['mob-mcgill-curl-up', 'mob-mcgill-side-plank', 'mob-mcgill-bird-dog'] };
+
+// Adds the Big 3 and its routine to existing data (an exercise you already have by the same name is reused).
+export function addMcgill(s) {
+  const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  s.mobility ??= { exercises: [], routines: [], sessions: [] };
+  const ids = [];
+  for (const m of mcgillExercises()) {
+    const have = s.mobility.exercises.find(e => e.id === m.id || norm(e.name) === norm(m.name));
+    if (!have) s.mobility.exercises.push(m);
+    ids.push(have?.id ?? m.id);
+  }
+  if (!s.mobility.routines.some(r => r.id === MCGILL_ROUTINE.id)) s.mobility.routines.push({ ...MCGILL_ROUTINE, items: ids });
 }
 
 // Mobility drills from the Garage Strength Movement Library, at 2 × 10 to start.
