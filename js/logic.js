@@ -200,7 +200,7 @@ export const pickExercise = (state, familyId, loc, tier, preferredId = null) => 
 // Same, with a note when what you do (swaps, favorites, never-suggest) changed the pick: { exercise, note } or null.
 export function pickExerciseWhy(state, familyId, loc, tier, preferredId = null) {
   const fam = byId(state.families, familyId);
-  let members = familyMembers(state, familyId).filter(e => !e.archived && isAvailable(e, loc));
+  let members = familyMembers(state, familyId).filter(e => !e.archived && !e.planOnly && isAvailable(e, loc)); // planOnly: only in saved plans
   // Heavy and moderate work needs a load to measure, unless it's explosive (jumps count by reps).
   if (isStrength(tier)) {
     members = members.filter(e => e.metric === 'load_reps' || e.explosive);
@@ -911,7 +911,7 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
   const heavyLately = new Set(lately.filter(x => isStrength(x.tier)).map(x => x.exerciseId));
   let best = null;
   for (const e of state.exercises) {
-    if (e.archived || skip.has(e.familyId) || mainLifts.has(e.id) || e.explosive || !isAvailable(e, loc) || isExcluded(tr, e.id)) continue;
+    if (e.archived || e.planOnly || skip.has(e.familyId) || mainLifts.has(e.id) || e.explosive || !isAvailable(e, loc) || isExcluded(tr, e.id)) continue;
     if ((e.equipment || []).some(x => x === 'barbell' || x === 'rack')) continue;
     const fit = pairScore(state, mainEx, e);
     if (!fit) continue;
@@ -1088,7 +1088,7 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
   const famPatterns = new Map();
   // Last resort while time is left: any exercise not in the workout yet, from any family (a second core or upper-back move).
   const skipped = new Set(ci.skip || []); // categories skipped today: never, not even as a second pick from a family
-  const blocked = e => skipped.has(e.familyId) || (!named.has(e.id) && !t1Core.has(e.id) && isExcluded(tr, e.id));
+  const blocked = e => e.planOnly || skipped.has(e.familyId) || (!named.has(e.id) && !t1Core.has(e.id) && isExcluded(tr, e.id));
   const takenIds = new Set(taken);
   const spare = e => !e.archived && isAvailable(e, loc) && !takenIds.has(e.id) && !k.blocks.some(b => b.exerciseId === e.id);
   const reusable = e => !e.archived && isAvailable(e, loc) && famPatterns.has(e.familyId) && !takenIds.has(e.id)
