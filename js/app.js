@@ -2925,10 +2925,51 @@ function sheetExHist(sh) {
   return `<h3>${esc(ex.name)}</h3>
     ${maxLine(ex) ? `<div class="meta">${esc(maxLine(ex))}</div>` : ''}
     ${next ? `<div class="label">Next time</div><div class="menu">${next}</div>` : ''}
+    ${groups.length ? exerciseCharts(ex, sh) : ''}
     <div class="label">${groups.length} session${groups.length === 1 ? '' : 's'}</div>
     ${shown.map(line).join('') || '<p class="muted">Nothing logged yet.</p>'}
     ${groups.length > shown.length ? `<button class="addblock" data-act="exHistMore">Show more (${groups.length - shown.length} older)</button>` : ''}
     <div class="actions"><button data-act="histOpen" data-q="${esc(ex.name)}">Full workouts</button></div>`;
+}
+
+// The exercise's own progress: estimated max, then what fits how it's logged (volume, reps, longest hold, best jump).
+function exerciseCharts(ex, sh) {
+  const range = sh.range ?? '12w';
+  const { from, to } = PG.rangeBounds(state, range);
+  const u = unit(), ju = B.jumpUnit(state);
+  const ss = PG.exerciseSessions(state, ex.id, from, to);
+  let h = `<div class="seg ranges">${PG.RANGES.map(([k, t]) => `<button class="${range === k ? 'on' : ''}" data-act="exHistRange" data-v="${k}">${t}</button>`).join('')}</div>`;
+  if (!ss.length) return `${h}<p class="muted">Nothing logged in this range.</p>`;
+  const tipDay = (w, value, sub) => ({ value, title: fmtShortDay(w.t), sub });
+  const table = (head, f) => ({ head: ['Day', ...head], rows: ss.map(w => [fmtShortDay(w.t), ...f(w)]) });
+  if (ex.metric === 'load_reps') {
+    const ser = PG.e1rmSeries(state, ex.id, from, to);
+    const ch = PG.liftChange(ser);
+    if (ser.length) {
+      h += chartCard('ex-e1rm', 'Estimated 1-rep max', ch ? `<b>${signedNum(ch.delta)} ${u}</b> in this range (${round(ch.first)} → ${round(ch.last)}; best ${round(ch.best)}).` : '',
+        CH.lineChart('ex-e1rm', `${ex.name} estimated 1-rep max`, ser.map(p => ({ t: p.t, v: p.v, tip: { value: `${round(p.v)} ${u}`, title: fmtShortDay(p.t), sub: `best set ${p.load} × ${p.reps}` } }))),
+        { head: ['Day', `e1RM (${u})`, 'Best set'], rows: ser.map(p => [fmtShortDay(p.t), round(p.v), `${p.load} × ${p.reps}`]) });
+    }
+    h += chartCard('ex-volume', 'Volume per session', `Load × reps. Average <b>${CH.fmtNum(ss.reduce((x, w) => x + w.volume, 0) / ss.length)} ${u}</b>.`,
+      CH.columnChart('ex-volume', `${ex.name} volume per session`, ss.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.volume }], tip: tipDay(w, `${CH.fmtNum(w.volume)} ${u}`, `${w.sets} sets, ${w.reps} reps`) }))),
+      table([`Volume (${u})`, 'Sets', 'Reps'], w => [round(w.volume).toLocaleString('en-US'), w.sets, w.reps]));
+  } else if (ex.metric === 'time') {
+    h += chartCard('ex-hold', 'Longest hold per session', '',
+      CH.columnChart('ex-hold', `${ex.name} longest hold`, ss.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.hold }], tip: tipDay(w, `${w.hold} s`, `${w.sets} sets`) })), { fmt: v => `${v}s` }),
+      table(['Longest (s)', 'Sets'], w => [w.hold, w.sets]));
+  }
+  if (ex.metric === 'reps' || (ex.metric === 'load_reps' && !ss.some(w => w.volume))) {
+    h += chartCard('ex-reps', 'Reps per session', `Average <b>${round(ss.reduce((x, w) => x + w.reps, 0) / ss.length)}</b>.`,
+      CH.columnChart('ex-reps', `${ex.name} reps per session`, ss.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.reps }], tip: tipDay(w, `${w.reps} reps`, `${w.sets} sets`) }))),
+      table(['Reps', 'Sets'], w => [w.reps, w.sets]));
+  }
+  const jumps = ss.filter(w => w.jump > 0);
+  if (jumps.length) {
+    h += chartCard('ex-jump', 'Best jump', jumps.length > 1 ? `<b>${signedNum(jumps.at(-1).jump - jumps[0].jump, 1)} ${ju}</b> in this range (best ${Math.max(...jumps.map(w => w.jump))}).` : '',
+      CH.lineChart('ex-jump', `${ex.name} best jump`, jumps.map(w => ({ t: w.t, v: w.jump, tip: tipDay(w, `${w.jump} ${ju}`, `${w.sets} sets`) }))),
+      { head: ['Day', `Best (${ju})`], rows: jumps.map(w => [fmtShortDay(w.t), w.jump]) });
+  }
+  return h;
 }
 
 function sheetFinishAsk(sh) {
@@ -3170,6 +3211,7 @@ const actions = {
   exHist: d => openSheet({ type: 'exHist', id: d.id, limit: 20 }),
   exHistMore: () => { ui.sheet.limit += 20; renderSheet(); },
   histClose: () => { ui.history = null; render(); window.scrollTo(0, 0); },
+  exHistRange: d => { ui.sheet.range = d.v; renderSheet(); },
   histMode: d => { ui.history.mode = d.v; render(); window.scrollTo(0, 0); },
   progRange: d => { ui.prog.range = d.v; render(); },
   histMore: () => { ui.history.limit += HISTORY_PAGE; render(); },

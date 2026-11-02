@@ -1270,6 +1270,11 @@ step('History → Progress: tiles, charts, a readout on tap, and tables', () => 
   check('each chart has a table view', qa('details.charttable').length >= 4);
   click('[data-act=histMode][data-v=workouts]');
   check('and back to the workout list', !!q('#histq'));
+  const hb = document.createElement('button'); hb.dataset.act = 'exHist'; hb.dataset.id = 'ex-back-squat'; q('#app').append(hb); hb.click();
+  check('the exercise history sheet has its own charts', !!q('#sheet svg[data-chart=ex-e1rm] path') && !!q('#sheet svg[data-chart=ex-volume]') && /Estimated 1-rep max/.test(sheet()), sheet().slice(0, 300));
+  click('#sheet [data-act=exHistRange][data-v="4w"]');
+  check('with its own range', q('#sheet [data-act=exHistRange][data-v="4w"]').classList.contains('on') && !!q('#sheet svg[data-chart=ex-e1rm]'));
+  click('[data-act=sheetClose]');
   st().sets = st().sets.filter(x => !x.id.startsWith('pg'));
   click('[data-act=histClose]');
 });
