@@ -539,3 +539,8 @@ details.setsweek .dayhead { margin-top: 10px; }
 .chips.partchips { margin: 8px 0 4px; }
 .maxrow { display: flex; align-items: center; gap: 10px; }
 .maxrow .num { flex: 0 0 96px; }
+
+/* Library categories: the ✎ sits on the heading */
+h3.cathead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+h3.cathead .icon { min-height: 32px; padding: 4px 10px; }
+.hbtns.inline { flex-direction: row; align-items: center; gap: 8px; }
