@@ -147,8 +147,11 @@ export function weekReview(state, weekStart, { now = Date.now() } = {}) {
   // Goals a program block had that week: listed apart, never eased or stepped up (the program sets their dose).
   const owned = ownedSlotIds(state, start + 3.5 * DAY);
   const program = [];
+  const areas = [];
   for (const sl of state.slots) {
     if (!(sl.quota > 0)) continue; // paused
+    // T3 areas have no weekly count: how often you worked each is listed, nothing is missed or proposed.
+    if (L.isArea(state, sl)) { areas.push({ slotId: sl.id, label: slotName(state, sl), days: credit.slots.get(sl.id).exposures }); continue; }
     if (owned.has(sl.id)) {
       const r = credit.slots.get(sl.id);
       program.push({ slotId: sl.id, label: slotLabel(state, sl), tier: sl.tier, quota: sl.quota, filled: r.filled, met: r.filled >= sl.quota, reason: 'program' });
@@ -175,7 +178,7 @@ export function weekReview(state, weekStart, { now = Date.now() } = {}) {
   const counts = new Map();
   for (const g of goals) if (g.reason) counts.set(g.reason, (counts.get(g.reason) ?? 0) + 1);
   const topReason = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  const review = { weekStart: start, weekEnd: end, finished, totals, goals, lifts, topReason, program, block: weekLine(state, start, end) };
+  const review = { weekStart: start, weekEnd: end, finished, totals, goals, lifts, topReason, program, areas, block: weekLine(state, start, end) };
   review.proposals = proposals(state, review);
   return review;
 }
@@ -226,7 +229,7 @@ function proposals(state, review) {
   }
   // More goal time than training time, even after easing off: T3 quotas come down first, largest first, until it fits.
   if (room < 0) {
-    const q = new Map(state.slots.filter(sl => sl.tier === 'T3' && after.get(sl.id) > 1).map(sl => [sl.id, after.get(sl.id)]));
+    const q = new Map(state.slots.filter(sl => sl.tier === 'T3' && L.counted(state, sl) && after.get(sl.id) > 1).map(sl => [sl.id, after.get(sl.id)]));
     let r = room;
     const cost = tierCost(state, 'T3');
     while (r < 0) {
@@ -306,6 +309,7 @@ export function reviewText(state, review) {
     'Goals:',
     ...review.goals.map(g => `- ${g.label}: ${g.filled}/${g.quota}${g.met ? ' ✓' : ` — ${REASONS[g.reason]}${g.missed >= 2 ? ` (missed ${g.missed} weeks running)` : ''}`}`),
   ];
+  if (review.areas?.length) lines.push('', `T3 areas: ${review.areas.map(a => `${a.label} ${a.days}×`).join(', ')}`);
   if (review.block) lines.push('', `Program: ${review.block.text}`, ...review.program.map(g => `- ${g.label}: ${g.filled}/${g.quota} via the program`));
   if (review.lifts.length) lines.push('', 'Lifts:', ...review.lifts.map(l => `- ${l.tier} ${l.name}: ${l.load}${l.prev != null ? ` (was ${l.prev})` : ''} — ${l.trend}${l.complete ? '' : ', reps missed'}`));
   if (review.proposals.length) lines.push('', 'Proposed:', ...review.proposals.map(p => `- ${p.text}`));

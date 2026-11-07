@@ -228,7 +228,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 29);
+  eq(m.version, 30);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -247,7 +247,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 29);
+  eq(m.version, 30);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -520,7 +520,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 29);
+  eq(m.version, 30);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -684,7 +684,7 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 29);
+  eq(m.version, 30);
   eq(m.mobility.routines.length, 6, 'the four routines, McGill Big 3, plus THP daily isos (v27)');
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
@@ -698,7 +698,7 @@ test('v28: the McGill Big 3 joins existing mobility, reusing one you already hav
   s.mobility.routines = s.mobility.routines.filter(r => r.id !== 'mobr-mcgill-big3');
   s.mobility.exercises.push({ ...s.mobility.exercises[0], id: 'mine', name: 'McGill Bird-Dog' });
   const m = migrate(s);
-  eq(m.version, 29);
+  eq(m.version, 30);
   eq(m.mobility.routines.find(r => r.id === 'mobr-mcgill-big3').items, ['mob-mcgill-curl-up', 'mob-mcgill-side-plank', 'mine']);
   eq(m.mobility.exercises.filter(e => /mcgill/i.test(e.name)).length, 3);
   const again = migrate(structuredClone(m));
@@ -725,7 +725,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 29);
+  eq(m.version, 30);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1248,7 +1248,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 29);
+  eq(m.version, 30);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1407,7 +1407,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 29);
+  eq(m.version, 30);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1500,10 +1500,10 @@ test('v19: data saved before it opens with savedAt unset, and the summary counts
   s.version = 18;
   delete s.savedAt;
   const m = migrate(s);
-  eq([m.version, m.savedAt], [29, null]);
+  eq([m.version, m.savedAt], [30, null]);
   s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
   s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
-  eq(V.summaryOf(s), { version: 29, workouts: 1, sets: 1 });
+  eq(V.summaryOf(s), { version: 30, workouts: 1, sets: 1 });
 });
 atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
   if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
@@ -1666,7 +1666,7 @@ test('merge: settings merge key by key; whole states keep both devices\' work an
   eq(m.sessions.map(x => x.id), ['ls', 'rs']);
   ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
   ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
-  eq(migrate(m).version, 29);
+  eq(migrate(m).version, 30);
 });
 test('sync plan: what to do for each situation', () => {
   const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
@@ -1902,7 +1902,7 @@ atest('sync: another device saving mid-push is merged and retried; offline and o
     const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
     fake.putRow(EMAIL, future);
     const nv = await Sync.sync();
-    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 29);
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 30);
   });
 });
 atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
@@ -2295,7 +2295,7 @@ test('conditioning: the upgrade adds the bike, its EMOMs and a goal once; scheme
   old.schemes = old.schemes.filter(sc => !sc.tiers.includes('COND')); old.slots = old.slots.filter(sl => sl.tier !== 'COND');
   for (const l of old.locations) l.equipment = l.equipment.filter(q => q !== 'assault-bike');
   const m = migrate(old);
-  eq(m.version, 29);
+  eq(m.version, 30);
   ok(m.tiers.COND.repMin === 90 && m.families.some(f => f.id === 'fam-cond') && L.byId(m.exercises, 'ex-assault-bike').repUnit === 'cal');
   eq(m.schemes.filter(sc => sc.tiers.includes('COND')).length, 6);
   eq(m.slots.filter(sl => sl.tier === 'COND').map(sl => sl.quota), [1]);
@@ -2766,7 +2766,7 @@ test('program blocks: the weekly review lists the program and leaves its goals a
 test('v29: morning check and program blocks start empty; both merge across devices', () => {
   const o = seed(); o.version = 28; delete o.morning; delete o.block; delete o.blocks;
   const m = migrate(o);
-  eq([m.version, m.morning, m.block, m.blocks], [29, { parts: [], log: [] }, null, []]);
+  eq([m.version, m.morning, m.block, m.blocks], [30, { parts: [], log: [] }, null, []]);
   const base = structuredClone(m);
   const a = structuredClone(m), b = structuredClone(m);
   Mo.setParts(a, ['Knee']); Mo.record(a, { energy: 3, pain: { Knee: 1 } }, NOON(1)); a.savedAt = 1;
@@ -2841,6 +2841,85 @@ test('body parts: every library exercise gets one, from its family, else its mov
   // Set by hand where the rules get it wrong.
   L.byId(s.exercises, 'm3').part = 'Shoulders';
   eq(part('m3'), 'Shoulders');
+});
+
+// ---------- T3 as areas ----------
+// Two days of band pull-aparts earlier this week: the upper-back goal's count (2) is met.
+const areaWeek = () => {
+  const s = seed();
+  s.settings.bodyweight = 200;
+  const ws = L.weekBounds(s, Date.now()).start;
+  const t = ws + 4 * DAY + 12 * 3600e3; // Friday noon
+  for (const d of [0, 2]) for (let i = 0; i < 3; i++) s.sets.push({ id: L.uid(), sessionId: `pa${d}`, blockId: `pa${d}`, exerciseId: 'ex-band-pullapart', tier: 'T3', reps: 12, done: true, loggedAt: ws + d * DAY + 10 * 3600e3 + i });
+  return { s, t };
+};
+
+test('T3 as areas: an area done twice this week still comes up on an upper day; a counted goal does not', () => {
+  const { s, t } = areaWeek();
+  const c = ci({ minutes: 60, fatigue: 2, lean: 'upper' });
+  ok(L.creditWeek(s, t).slots.get('sl-t3-upperback').filled >= 2, 'count met');
+  ok(!L.scoreSlots(s, c, t).some(x => x.slot.id === 'sl-t3-upperback'), 'counts: out for the week');
+  s.settings.t3Areas = true;
+  const sc = L.scoreSlots(s, c, t).find(x => x.slot.id === 'sl-t3-upperback');
+  ok(sc?.area, 'areas: still open');
+  const r = L.buildSuggestion(s, c, t);
+  ok(r.blocks.some(b => b.slotId === 'sl-t3-upperback'), r.blocks.map(b => `${b.tier} ${b.exerciseId}`).join());
+  // Done today: not again today.
+  s.sets.push(...[0, 1, 2].map(i => ({ id: L.uid(), sessionId: 'today', blockId: 'today', exerciseId: 'ex-band-pullapart', tier: 'T3', reps: 12, done: true, loggedAt: t - 3600e3 + i })));
+  ok(!L.scoreSlots(s, c, t).some(x => x.slot.id === 'sl-t3-upperback'), 'not twice in a day');
+});
+
+test('T3 as areas: the longer since an area was worked, the sooner it comes up; areas that suit the day move up', () => {
+  const { s, t } = areaWeek();
+  s.settings.t3Areas = true;
+  const c = ci({ minutes: 60, fatigue: 2 });
+  const score = id => L.scoreSlots(s, c, t).find(x => x.slot.id === id)?.score;
+  // Upper back was worked 2 days ago (Wednesday), core never: core comes first, all else equal.
+  ok(score('sl-t3-core') > score('sl-t3-upperback'), `${score('sl-t3-core')} vs ${score('sl-t3-upperback')}`);
+  // With a pressing lift in the workout, the pulling area gets a bonus for going with it.
+  const r = L.buildSuggestion(s, c, t);
+  const why = r.scored.find(x => x.slot.id === 'sl-t3-upperback')?.why.join(' ');
+  const press = r.blocks.some(b => L.isStrength(b.tier) && L.movementPattern(s, L.byId(s.exercises, b.exerciseId)) === 'push');
+  ok(!press || /goes with/.test(why), why);
+});
+
+test('T3 as areas: weekly counts, reviews, the budget and goals hit leave areas out', () => {
+  const { s, t } = areaWeek();
+  const t3 = s.slots.filter(sl => sl.tier === 'T3');
+  ok(t3.every(sl => L.counted(s, sl)) && !t3.some(sl => L.isArea(s, sl)), 'off: counted');
+  const before = G.weekBudget(s, t);
+  s.settings.t3Areas = true;
+  ok(t3.every(sl => L.isArea(s, sl) && !L.counted(s, sl)), 'on: areas');
+  const b = G.weekBudget(s, t);
+  eq([b.count.T3, b.areas], [0, t3.length]);
+  ok(b.used < before.used, 'areas take none of the goal time');
+  const r = R.weekReview(s, L.weekBounds(s, t).start, { now: t });
+  ok(!r.goals.some(g => g.tier === 'T3'), 'not reviewed as goals');
+  eq(r.areas.find(a => a.slotId === 'sl-t3-upperback')?.days, 2);
+  ok(!r.proposals.some(p => t3.some(sl => sl.id === p.slotId)), 'nothing proposed for them');
+  ok(/T3 areas: .*Upper back/.test(R.reviewText(s, r)));
+  const wk = PG.weekly(s, L.weekBounds(s, t).start, L.weekBounds(s, t).end);
+  eq(wk[0].quota, s.slots.filter(sl => sl.tier !== 'T3' && sl.quota > 0).reduce((n, sl) => n + sl.quota, 0));
+});
+
+test('T3 as areas: an area is worked with an accessory, not the family\'s main lift', () => {
+  const s = seed();
+  s.settings.t3Areas = true;
+  s.slots.push({ id: 'sl-t3-hams', familyId: 'fam-hams', tier: 'T3', quota: 1, priority: 3 });
+  L.byId(s.families, 'fam-hams').defaultExerciseId = 'ex-deficit-rdl'; // as in your data: the family's usual lift is a main lift
+  const c = ci({ minutes: 90, fatigue: 1 });
+  const hams = L.scoreSlots(s, c).find(x => x.slot.id === 'sl-t3-hams');
+  ok(hams && hams.exercise.id !== 'ex-deficit-rdl' && (hams.exercise.role ?? L.guessRole(hams.exercise.name, hams.exercise.metric, hams.exercise.explosive)) === 'accessory', hams?.exercise.name);
+  s.settings.t3Areas = false;
+  eq(L.scoreSlots(s, c).find(x => x.slot.id === 'sl-t3-hams')?.exercise.id, 'ex-deficit-rdl', 'counts mode unchanged');
+});
+
+test('v30: T3 as areas turns on for data from before it, stays as set otherwise', () => {
+  const o = seed(); o.version = 29; delete o.settings.t3Areas;
+  eq(migrate(o).settings.t3Areas, true);
+  const o2 = seed(); o2.version = 29;
+  eq(migrate(o2).settings.t3Areas, false, 'already set: kept');
+  eq(seed().settings.t3Areas, false, 'new installs count');
 });
 
 await queue;

@@ -187,7 +187,7 @@ function windowStats(state, b, from, to, weeks) {
   let filled = 0, quota = 0;
   for (const w of weeks) {
     const c = L.creditWeek(state, w.start + 3600e3);
-    for (const sl of state.slots) if (sl.quota > 0 && !ownsSlot(state, b, sl)) { filled += Math.min(c.slots.get(sl.id)?.filled ?? 0, sl.quota); quota += sl.quota; }
+    for (const sl of state.slots) if (L.counted(state, sl) && !ownsSlot(state, b, sl)) { filled += Math.min(c.slots.get(sl.id)?.filled ?? 0, sl.quota); quota += sl.quota; }
   }
   return {
     weeks: weeks.length, sessionsPerWeek: weeks.reduce((x, w) => x + w.sessions, 0) / n,

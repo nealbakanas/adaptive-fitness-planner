@@ -89,7 +89,7 @@ export function weekly(state, from, to) {
     for (const s of working(state, Math.max(start, from), Math.min(end, to))) sets[tierGroup(s.tier)]++;
     const c = L.creditWeek(state, start + 3600e3);
     let filled = 0, quota = 0;
-    for (const sl of state.slots) if (sl.quota > 0) { filled += Math.min(c.slots.get(sl.id)?.filled ?? 0, sl.quota); quota += sl.quota; }
+    for (const sl of state.slots) if (L.counted(state, sl)) { filled += Math.min(c.slots.get(sl.id)?.filled ?? 0, sl.quota); quota += sl.quota; }
     out.push({ start, end, sets, filled, quota });
   }
   return out;

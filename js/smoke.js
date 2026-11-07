@@ -1343,6 +1343,36 @@ step('picking an exercise: recent first, body-part chips, search looks everywher
   click('[data-act=nav][data-tab=today]');
 });
 
+step('T3 as areas: a switch in Settings; areas have no weekly count on the Week tab', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=more]');
+  click('[data-act=setPage][data-p=you]');
+  const sw = q('[data-bind="settings.t3Areas"]');
+  check('the switch is there, off for a new install', !!sw && !sw.checked && st().settings.t3Areas === false);
+  sw.checked = true; fire(sw, 'change');
+  check('turning it on saves it', st().settings.t3Areas === true);
+  click('[data-act=nav][data-tab=week]');
+  const row = q('[data-act=goalEdit][data-id=sl-t3-core]');
+  check('T3 rows lose their pips', !!row && !row.querySelector('.pip'), row?.innerHTML.slice(0, 200));
+  check('other tiers keep theirs', !!q('[data-act=goalEdit][data-id=sl-t1-squat] .pip'));
+  click('[data-act=goalEdit][data-id=sl-t3-core]');
+  check('the goal sheet calls it an area: Active or Paused, no times a week', /no weekly count/.test(q('#sheet').textContent) && !!q('#sheet [data-act=goalActive][data-v="0"]') && !q('#sheet [data-act=goalStep]'));
+  const quota = L.byId(st().slots, 'sl-t3-core').quota;
+  click('#sheet [data-act=goalActive][data-v="0"]');
+  click('#sheet [data-act=goalSave]');
+  check('pausing an area saves it as paused', L.byId(st().slots, 'sl-t3-core').quota === 0);
+  click('[data-act=goalEdit][data-id=sl-t3-core]');
+  click('#sheet [data-act=goalActive][data-v="1"]');
+  click('#sheet [data-act=goalSave]');
+  check('and on again', L.byId(st().slots, 'sl-t3-core').quota >= 1);
+  L.byId(st().slots, 'sl-t3-core').quota = quota;
+  click('[data-act=nav][data-tab=more]');
+  click('[data-act=setPage][data-p=you]');
+  const sw2 = q('[data-bind="settings.t3Areas"]'); sw2.checked = false; fire(sw2, 'change');
+  check('and off again: counts are back', st().settings.t3Areas === false);
+  click('[data-act=nav][data-tab=today]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');

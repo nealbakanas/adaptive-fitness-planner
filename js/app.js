@@ -1473,7 +1473,7 @@ const OB_TITLES = { welcome: 'Welcome', you: 'About you', where: 'Where you trai
 const obStepper = (kind, id, n) => `<div class="stepper small"><button data-act="obQuota" data-k="${kind}" data-id="${id}" data-d="-1" aria-label="Fewer">−</button><span>${n}</span><button data-act="obQuota" data-k="${kind}" data-id="${id}" data-d="1" aria-label="More">+</button></div>`;
 const obChip = (kind, id, label, on) => `<button class="chip ${on ? 'on' : ''}" data-act="obToggle" data-k="${kind}" data-id="${id}">${esc(label)}</button>`;
 // The picks of one kind with times a week for each.
-const obPicked = (kind, picks, nameOf) => Object.keys(picks).length
+const obPicked = (kind, picks, nameOf) => kind === 'pump' && L.t3AsAreas(state) ? '' : Object.keys(picks).length
   ? `<div class="card flush">${Object.entries(picks).map(([id, n]) => `<div class="frow"><span class="grow"><span class="name">${esc(nameOf(id))}</span><span class="meta">times a week</span></span>${obStepper(kind, id, n)}</div>`).join('')}</div>`
   : '';
 
@@ -1546,9 +1546,12 @@ function weekBudgetCard() {
   const b = G.weekBudget(state);
   const src = k => b.fromHistory[k] ? 'last 4 weeks' : state.settings.week?.[k] ? '' : 'a guess';
   const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
+  const areas = L.t3AsAreas(state);
   const rows = L.TIERS.filter(t => L.TIER[t].core || b.count[t]).map(t => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${L.TIER[t].label}</span>
-      <span class="meta">${L.takesTime(t) ? `~${round(b.cost[t])} min each` : 'in the warm-up'}${b.guide[t] ? ` · guide ${range(b.guide[t])}` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
-  const verdict = b.room >= 0 ? `Room for ${b.addT2} more T2 or ${b.addT3} more T3 a week.` : `${round(-b.room)} min over: lower a quota or two, accessories first.`;
+      <span class="meta">${t === 'T3' && areas ? 'areas · fill spare time' : `${L.takesTime(t) ? `~${round(b.cost[t])} min each` : 'in the warm-up'}${b.guide[t] ? ` · guide ${range(b.guide[t])}` : ''}`}</span></span>
+      <b>${t === 'T3' && areas ? `${b.areas} area${b.areas === 1 ? '' : 's'}` : `${b.count[t]}/wk`}</b></div>`).join('');
+  const verdict = b.room >= 0 ? (areas ? `${round(b.room)} min a week left for T3 areas and extras.` : `Room for ${b.addT2} more T2 or ${b.addT3} more T3 a week.`)
+    : `${round(-b.room)} min over: lower a quota or two${areas ? '' : ', accessories first'}.`;
   const hint = k => (src(k) ? `<span class="meta">${src(k)}</span>` : '');
   return `<details class="card budget"><summary><b>Week budget</b> <span class="meta">${round(b.used)} of ${round(b.total)} min</span></summary>
     <div class="frow"><span class="grow"><span class="name">Workouts a week</span>${hint('workouts')}</span>${numIn('settings.week.workouts', state.settings.week?.workouts ?? '', `placeholder="${b.workouts}" data-rerender`)}</div>
@@ -1576,7 +1579,9 @@ function viewWeek() {
   const slots = allSlots.filter(r => !owned.has(r.slot.id));
   const ownedRows = allSlots.filter(r => owned.has(r.slot.id));
   const goalRow = r => {
-    const pips = Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
+    const area = L.isArea(state, r.slot);
+    const pips = area ? (r.exposures ? `<span class="meta">${r.exposures}×</span>` : '')
+      : Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
     const unitOf = [L.repUnit(r.slot.tier), L.setUnit(r.slot.tier)];
     const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? `${a.reps} ${unitOf[0]}` : `${a.sets} ${unitOf[1]}`}${a.met ? ' ✓' : ''}`).join(' · ');
     const ex = exOf(r.slot.exerciseId);
@@ -2163,6 +2168,7 @@ function settingsYou() {
     <div class="label">Suggestions</div>
     <div class="menu">${frow('Power work on low-energy days', switchIn('settings.recovery.powerWhenTired', st.recovery?.powerWhenTired !== false), 'off: technique work instead')}
       ${frow('Rest what you trained yesterday', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1), 'alternate upper and lower days')}
+      ${frow('T3 as areas', `<input type="checkbox" class="switch" data-bind="settings.t3Areas" data-type="bool" data-rerender ${st.t3Areas ? 'checked' : ''}>`, 'no weekly counts: picked to suit the day')}
       ${frow('Learn from my swaps', switchIn('settings.learnTaste', st.learnTaste !== false))}
       <button class="menurow" data-act="tasteForget"><span class="grow"><span class="name">Forget what it learned</span>
         ${st.tasteSince ? `<span class="meta">since ${esc(new Date(st.tasteSince).toLocaleDateString())}</span>` : ''}</span></button></div>
@@ -2522,6 +2528,9 @@ function viewReview(rv) {
       <span class="grow"><span class="name">${esc(g.label.slice(g.tier.length + 1))}</span>
       <span class="meta">${g.met ? 'met' : esc(R.REASONS[g.reason])}${g.missed >= 2 ? ` · ${g.missed} weeks running` : ''}${g.lastDone != null ? ` · last ${esc(ago(g.lastDone))}` : ''}</span></span>
       <b class="${g.met ? 'good' : ''}">${g.filled}/${g.quota}</b></div>`).join('') || '<p class="muted pad">No weekly goals.</p>'}</div>`;
+  if (r.areas?.length) {
+    h += `<h3>T3 areas</h3><div class="card"><p class="meta">${esc(r.areas.map(a => `${a.label} ${a.days}×`).join(' · '))}</p></div>`;
+  }
   if (r.block) {
     h += `<h3>Program</h3><div class="card"><p>${esc(r.block.text)}</p>${r.program.length ? `<p class="meta">${esc(r.program.map(g => `${g.label} ${g.filled}/${g.quota}`).join(' · '))}</p>` : ''}</div>`;
   }
@@ -2548,7 +2557,7 @@ function viewGoalSuggest(g) {
   if (!g.rows.length) {
     return `${head}<p class="meta pad">Not enough history yet (${g.workouts} workouts in ${g.weeks} weeks).</p>`;
   }
-  const total = g.rows.filter(r => r.include).reduce((t, r) => t + r.quota, 0);
+  const total = g.rows.filter(r => r.include && !(r.tier === 'T3' && L.t3AsAreas(state))).reduce((t, r) => t + r.quota, 0);
   return `${head}
     <p class="meta pad">From ${g.workouts} workouts in ${g.weeks} weeks. Tap one to change it.</p>
     <div class="card"><div class="kv ${total > g.capacity ? 'over' : ''}"><span>Goal sessions a week</span><b>${total} of ~${g.capacity} that fit</b></div></div>
@@ -2560,7 +2569,7 @@ function viewGoalSuggest(g) {
 function gsRow(r, g) {
   const open = g.open.has(r.key);
   const name = famOf(r.familyId)?.name ?? '?';
-  const bits = [`${r.quota}× a week`, `${PRIORITY_LABEL[r.priority]} priority`, r.repMin ? `${r.repMin}+ reps` : ''].filter(Boolean).join(' · ');
+  const bits = [r.tier === 'T3' && L.t3AsAreas(state) ? 'area' : `${r.quota}× a week`, `${PRIORITY_LABEL[r.priority]} priority`, r.repMin ? `${r.repMin}+ reps` : ''].filter(Boolean).join(' · ');
   return `<div class="fnrow ${open ? 'open' : ''} ${r.include ? '' : 'off'}">
     <div class="gsline"><input type="checkbox" class="gsinc" data-gs="${r.key}" data-k="include" ${r.include ? 'checked' : ''} aria-label="Include ${esc(name)}">
       <button class="menurow" data-act="gsToggle" data-key="${r.key}"><span class="tier ${r.tier}">${r.tier}</span>
@@ -2724,8 +2733,10 @@ function sheetGoal(sh) {
     <div class="field"><label>Family</label><select data-gdraft="familyId">${opts(famOpts, g.familyId)}</select></div>
     <div class="field"><label>Exercise</label><select data-gdraft="exerciseId">${opts([['', `Any${usual ? ` (usually ${usual})` : ''}`], ...members.map(e => [e.id, e.name])], g.exerciseId ?? '')}</select></div>
     ${goalMaxField(g)}
-    <div class="field"><label>Times per week</label><div class="stepper">
-      <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota || 'Paused'}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div></div>
+    ${g.tier === 'T3' && L.t3AsAreas(state)
+      ? `<div class="field"><label>Area <span class="hint">no weekly count</span></label><div class="seg">${[[1, 'Active'], [0, 'Paused']].map(([v, t]) => `<button class="${(g.quota > 0 ? 1 : 0) === v ? 'on' : ''}" data-act="goalActive" data-v="${v}">${t}</button>`).join('')}</div></div>`
+      : `<div class="field"><label>Times per week</label><div class="stepper">
+      <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota || 'Paused'}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div></div>`}
     <div class="field"><label>Reps per session <span class="hint">optional</span></label>
       <input id="g-reps" inputmode="numeric" value="${esc(g.repMin ?? '')}" placeholder="${L.slotDose(state, null, g.tier).repMin}"></div>
     <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${g.priority === v ? 'on' : ''}" data-act="goalSet" data-k="priority" data-v="${v}">${t}</button>`).join('')}</div></div>
@@ -4400,6 +4411,8 @@ const actions = {
     openSheet({ type: 'goal', id: sl.id, draft: { familyId: sl.familyId, exerciseId: sl.exerciseId ?? null, tier: sl.tier, quota: sl.quota, priority: sl.priority ?? 1, repMin: sl.repMin ?? null } });
   },
   goalSet: d => { readGoalReps(); ui.sheet.draft[d.k] = d.k === 'priority' ? Number(d.v) : d.v; renderSheet(); },
+  // An area on or paused: an active one keeps any count it had, so switching T3 as areas off brings it back.
+  goalActive: d => { readGoalReps(); const g = ui.sheet.draft; g.quota = d.v === '1' ? Math.max(1, g.quota || 0) : 0; renderSheet(); },
   goalStep: d => { readGoalReps(); const g = ui.sheet.draft; g.quota = Math.min(7, Math.max(ui.sheet.isNew ? 1 : 0, g.quota + Number(d.d))); renderSheet(); },
   goalSave: () => {
     readGoalReps();
