@@ -2884,6 +2884,22 @@ test('T3 as areas: the longer since an area was worked, the sooner it comes up; 
   ok(!press || /goes with/.test(why), why);
 });
 
+test('T3 as areas: high priority comes up most, but an area left alone for a few days overtakes it', () => {
+  const s = seed();
+  s.settings.t3Areas = true;
+  const t = L.weekBounds(s, Date.now()).start + 4 * DAY + 12 * 3600e3;
+  const did = (exerciseId, daysAgo) => { for (let i = 0; i < 3; i++) s.sets.push({ id: L.uid(), sessionId: `d${exerciseId}${daysAgo}`, blockId: 'x', exerciseId, tier: 'T3', reps: 12, done: true, loggedAt: t - daysAgo * DAY + i }); };
+  L.byId(s.slots, 'sl-t3-upperback').priority = 3;
+  did('ex-band-pullapart', 1); // high, done yesterday
+  did('ex-db-curl', 2); // low, two days ago
+  did('ex-hanging-knee', 5); // low, five days ago
+  const c = ci({ minutes: 60, fatigue: 2 });
+  const score = id => L.scoreSlots(s, c, t).find(x => x.slot.id === id)?.score;
+  ok(score('sl-t3-upperback') > score('sl-t3-arms'), 'high beats a low one done two days ago');
+  ok(score('sl-t3-core') > score('sl-t3-upperback'), 'a low one left five days overtakes it');
+  ok(score('sl-t3-arms-triceps') > score('sl-t3-upperback'), 'and one never done');
+});
+
 test('T3 as areas: weekly counts, reviews, the budget and goals hit leave areas out', () => {
   const { s, t } = areaWeek();
   const t3 = s.slots.filter(sl => sl.tier === 'T3');

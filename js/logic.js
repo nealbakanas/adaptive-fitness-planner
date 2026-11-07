@@ -509,6 +509,8 @@ export function slotForSet(state, s) {
 export const t3AsAreas = state => state.settings?.t3Areas === true;
 export const isArea = (state, sl) => sl?.tier === 'T3' && t3AsAreas(state);
 export const counted = (state, sl) => sl.quota > 0 && !isArea(state, sl);
+// What an area's priority (1 low, 2 medium, 3 high) multiplies its pull by.
+export const AREA_WEIGHT = { 1: 1, 2: 1.25, 3: 1.5 };
 
 // When each family and exercise was last trained (a working set done), before `t`.
 function lastTrained(state, t) {
@@ -641,10 +643,13 @@ export function scoreSlots(state, ci, t = Date.now()) {
     if (picked.note) why.push(picked.note);
     let score;
     if (area) {
-      // Areas: the longer since you worked it, the sooner it comes up (a week or more counts the same).
+      // Areas: the longer since you worked it, the sooner it comes up (a week or more counts the same). Priority weighs
+      // less than for counted goals, so a high-priority area comes up most often without crowding out the rest: an area
+      // left alone for a few days overtakes a high one you did yesterday.
       const at = sl.exerciseId ? last.ex.get(sl.exerciseId) : last.fam.get(sl.familyId);
       const days = at == null ? 7 : Math.min(7, Math.max(0, Math.round((startOfDay(t) - startOfDay(at)) / DAY)));
-      score = (sl.priority || 1) * (0.5 + days / 7);
+      score = AREA_WEIGHT[sl.priority] ?? 1;
+      score *= 0.5 + days / 7;
       why.push(`area, ${at == null ? 'not done yet' : `${days}d since`}`);
     } else {
       score = (sl.priority || 1) * remaining / daysLeft;

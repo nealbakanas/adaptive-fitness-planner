@@ -27,7 +27,8 @@ Done items move to the changelog in the PRs, not here.
   running counts as a pain flag (THP's "settles within 48 hours"). Tune once there's a few weeks of entries.
 - **Program blocks:** deload is a flat 40% cut of sets (per-plan deload overrides not built). Extras on a program day
   are T3s only, sized to the time the plan leaves. Jump heights are stored in inches (cm with kg).
-- **T3 as areas:** an area's pull is priority × (0.5 + days since you worked it ÷ 7, up to a week), times 1.25 per point
+- **T3 as areas:** an area's pull is its priority weight (low 1, medium 1.25, high 1.5) × (0.5 + days since you worked it
+  ÷ 7, up to a week), times 1.25 per point
   of fit with the day's T1/T2 lifts (the superset rules). Still at most 3 T3s from goals per workout; leftover time fills
   from the library as before. Tune if areas crowd out a third T2 on fresh days.
 - **Recovery weights** (lower T1 ×0.35 the day after heavy lower work, the other half ×1.2) are first guesses.
