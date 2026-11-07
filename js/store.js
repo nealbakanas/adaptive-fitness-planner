@@ -1,6 +1,7 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
 import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES, COND_TIER, COND_SCHEMES, COND_FAMILY, condExercise, DEFAULT_PRESETS } from './seed.js';
 import { addThpPlan } from './thp.js';
+import { splitCategories } from './categories.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises, addMcgill } from './mobility.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
@@ -356,6 +357,11 @@ export function migrate(s) {
     // (it was asked for); new installs start with weekly counts. Settings → You and training switches it.
     if (!had.has('t3Areas')) s.settings.t3Areas = true;
     s.version = 30;
+  }
+  if (s.version < 31) {
+    // v31: Arms split into Biceps and Triceps (each Arms goal gets a Triceps twin), and Shoulders for raises (js/categories.js).
+    splitCategories(s);
+    s.version = 31;
   }
   return s;
 }

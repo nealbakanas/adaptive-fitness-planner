@@ -253,10 +253,10 @@ function schemeForBlock(s, ex, tier, exceptBlock) {
     || L.schemeOptions(state, tier)[0];
 }
 
-function newExercise({ name, familyName, metric = 'load_reps', bodyweight = false, equipment = [], rank = null, anytime = false, region = 'full', explosive = false }) {
-  // No family given: the exercise starts its own, so it can still be swapped and ranked later.
+function newExercise({ name, familyId = null, familyName, metric = 'load_reps', bodyweight = false, equipment = [], rank = null, anytime = false, region = 'full', explosive = false }) {
+  // No category given: the exercise starts its own, so it can still be swapped and ranked later.
   const fname = (familyName || name).trim();
-  let fam = state.families.find(f => f.name.toLowerCase() === fname.toLowerCase());
+  let fam = famOf(familyId) ?? state.families.find(f => f.name.toLowerCase() === fname.toLowerCase());
   if (!fam) {
     fam = { id: L.uid(), name: fname, defaultExerciseId: null };
     state.families.push(fam);
@@ -2027,8 +2027,8 @@ function viewLibrary() {
   if (ui.libMode === 'mobility') return viewMobLibrary();
   const q = ui.libQuery.trim().toLowerCase();
   const archivedCount = state.exercises.filter(e => e.archived).length;
-  let h = `<header class="top"><h1>Library</h1><button class="primary" data-act="quickAdd">+ Exercise</button></header>${libModeSeg()}
-    <input class="search" id="libq" placeholder="Search exercises or families" value="${esc(ui.libQuery)}" data-libq>
+  let h = `<header class="top"><h1>Library</h1><div class="hbtns inline"><button class="small" data-act="catNew">+ Category</button><button class="primary" data-act="quickAdd">+ Exercise</button></div></header>${libModeSeg()}
+    <input class="search" id="libq" placeholder="Search exercises or categories" value="${esc(ui.libQuery)}" data-libq>
     ${partChips(state.exercises.filter(e => ui.showArchived || !e.archived), ui.libPart, 'libPart')}
     ${archivedCount ? `<button class="small quiet libarch" data-act="libArchived">${ui.showArchived ? 'Hide' : 'Show'} archived (${archivedCount})</button>` : ''}`;
   const fams = [...state.families].sort((a, b) => a.name.localeCompare(b.name));
@@ -2038,13 +2038,13 @@ function viewLibrary() {
     const members = all.filter(e => (ui.showArchived || !e.archived) && (!q || famMatch || e.name.toLowerCase().includes(q))
       && (!ui.libPart || L.bodyPart(state, e) === ui.libPart));
     if (!members.length && (q || ui.libPart || all.length)) continue; // nothing to show; truly empty families stay so you can add to them
-    h += `<div class="card"><h3>${esc(f.name)}</h3>${members.map(e => {
+    h += `<div class="card"><h3 class="cathead">${esc(f.name)}<button class="icon" data-act="catEdit" data-id="${f.id}" aria-label="Edit ${esc(f.name)}">✎</button></h3>${members.map(e => {
       const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
       const meta = [max ? `e1RM ${round(max)}` : '', e.equipment.join(', '), e.archived ? 'archived' : ''].filter(Boolean).join(' · ');
       return `<div class="exrow"><button class="name" data-act="libEdit" data-id="${e.id}">${f.defaultExerciseId === e.id ? '★ ' : ''}${esc(e.name)}${meta ? `<span class="meta">${esc(meta)}</span>` : ''}</button>
         <button class="icon" data-act="libMove" data-id="${e.id}" data-dir="-1" aria-label="Move up">↑</button>
         <button class="icon" data-act="libMove" data-id="${e.id}" data-dir="1" aria-label="Move down">↓</button></div>`;
-    }).join('') || '<p class="muted">Empty family.</p>'}
+    }).join('') || '<p class="muted">Empty category.</p>'}
     <button class="small" data-act="quickAdd" data-fam="${f.id}">+ Add</button></div>`;
   }
   return h;
@@ -2444,7 +2444,7 @@ function fnEditor(r) {
   let h = `<div class="fnedit"><div class="field"><label>Bring in as</label><select data-fn="${id}" data-k="target">${opts(choices, r.target)}</select></div>`;
   if (r.target === 'new') {
     h += `<div class="field"><label>Name</label><input data-fn="${id}" data-k="name" value="${esc(r.name)}"></div>
-      <div class="field"><label>Family</label><input data-fn="${id}" data-k="family" list="fn-fams" value="${esc(r.family)}"></div>
+      <div class="field"><label>Category</label><input data-fn="${id}" data-k="family" list="fn-fams" value="${esc(r.family)}"></div>
       <div class="field"><label>How it was logged</label><select data-fn="${id}" data-k="mode">${opts(FN.MODES, r.mode)}</select></div>
       <div class="field"><label>Body region</label><select data-fn="${id}" data-k="region">${opts(Object.entries(REGION_LABEL), r.region)}</select></div>
       <label class="toggle"><input type="checkbox" data-fn="${id}" data-k="explosive" ${r.explosive ? 'checked' : ''}> Explosive</label>
@@ -2480,7 +2480,7 @@ function fnDone(f) {
       <div class="kv"><span>Matched to ones you had</span><b>${s.matched}</b></div>
       ${s.skipped ? `<div class="kv"><span>Already imported before</span><b>${s.skipped} sets</b></div>` : ''}
       ${s.adopted.length ? `<p class="meta">Switched to match your history: ${esc(s.adopted.join(', '))}.</p>` : ''}
-      ${s.defaults.length ? `<p class="meta">Each family's usual choice is now what you do most: ${esc(s.defaults.join(' · '))}. Change it in Library.</p>` : ''}
+      ${s.defaults.length ? `<p class="meta">Each category's usual choice is now what you do most: ${esc(s.defaults.join(' · '))}. Change it in Library.</p>` : ''}
     </div>
     <div class="card"><h3>Estimated maxes from your history</h3>
       ${s.maxes.map(m => `<div class="kv"><span>${esc(m.name)}<span class="meta">last ${fmtDay(m.last)}${m.stale ? ' · rough, over 12 weeks ago' : ''}</span></span>
@@ -2626,7 +2626,7 @@ function renderSheet() {
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, reviewText: sheetReviewText, pasteImport: sheetPasteImport,
-    addEx: sheetAddEx, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist, cloudAsk: sheetCloudAsk }[s.type](s);
+    addEx: sheetAddEx, category: sheetCategory, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist, cloudAsk: sheetCloudAsk }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
   sheetEl.hidden = false;
   if (ui.sheetFocus) {
@@ -2730,7 +2730,7 @@ function sheetGoal(sh) {
   return `<h3>${sh.isNew ? 'New weekly goal' : 'Edit weekly goal'}</h3>
     <div class="field"><label>Tier</label><div class="seg">${L.TIERS.map(t => `<button class="${g.tier === t ? 'on' : ''}" data-act="goalSet" data-k="tier" data-v="${t}">${t}</button>`).join('')}</div>
       <p class="meta">${TIER_DESC[g.tier]}</p></div>
-    <div class="field"><label>Family</label><select data-gdraft="familyId">${opts(famOpts, g.familyId)}</select></div>
+    <div class="field"><label>Category</label><select data-gdraft="familyId">${opts(famOpts, g.familyId)}</select></div>
     <div class="field"><label>Exercise</label><select data-gdraft="exerciseId">${opts([['', `Any${usual ? ` (usually ${usual})` : ''}`], ...members.map(e => [e.id, e.name])], g.exerciseId ?? '')}</select></div>
     ${goalMaxField(g)}
     ${g.tier === 'T3' && L.t3AsAreas(state)
@@ -2800,7 +2800,7 @@ function sheetSwapEx(sh) {
     <div class="label">Why? <span class="hint">optional</span></div>${reasonChips(sh.reason)}
     <div class="list">${alts.map(a => `<button class="row" data-act="pickEx" data-id="${a.id}"><span>${a.pref === 'fav' ? '★ ' : ''}${esc(a.name)}</span>
       <span class="meta">${usual.has(a.id) ? 'your usual · ' : ''}${a.rank < cur.rank ? 'harder' : 'easier'}${a.metric !== 'load_reps' && !a.explosive && (b.tier === 'T1' || b.tier === 'T2') ? ' · won’t count' : ''}</span></button>`).join('')
-      || '<p class="muted">Nothing else in this family here.</p>'}
+      || '<p class="muted">Nothing else in this category here.</p>'}
     <button class="row add" data-act="qaVariation" data-id="${cur.id}" data-from="swap">+ New variation</button>
     <button class="row add" data-act="swapAny">All exercises ›</button>
     <button class="row add" data-act="tastePref" data-id="${cur.id}" data-v="never">${cur.pref === 'never' ? `Suggest ${esc(cur.name)} again` : `Never suggest ${esc(cur.name)}`}</button></div>`;
@@ -3052,8 +3052,8 @@ const LOG_TYPES = [['load_reps', 'Weight × reps'], ['reps', 'Reps'], ['time', '
 function qaDefaults(sh, base) {
   const name = sh.name ?? '';
   const d = base
-    ? { famName: famOf(base.familyId)?.name ?? '', metric: base.metric, bodyweight: base.bodyweight, equipment: [...base.equipment] }
-    : { famName: famOf(sh.familyId)?.name ?? '', metric: 'load_reps', bodyweight: false, equipment: [] };
+    ? { famId: base.familyId, metric: base.metric, bodyweight: base.bodyweight, equipment: [...base.equipment] }
+    : { famId: famOf(sh.familyId)?.id ?? null, metric: 'load_reps', bodyweight: false, equipment: [] };
   if (/^weighted\b/i.test(name)) Object.assign(d, weightedDefaults(d));
   d.region = base?.region ?? L.guessRegion(name);
   d.explosive = base?.explosive ?? L.guessExplosive(name);
@@ -3086,6 +3086,39 @@ function qaHint(typed, sh) {
   return `Looks like a variation of ${esc(m.e.name)}. <button class="link" data-act="qaUseBase" data-id="${m.e.id}">Copy its details</button>`;
 }
 
+// A category (a family: exercises that swap for each other): its name, what's in it, exercises to move in from other
+// categories, and new ones typed one per line.
+function readCatInputs() {
+  const d = ui.sheet?.draft;
+  if (!d) return;
+  const name = sheetEl.querySelector('#cat-name'), add = sheetEl.querySelector('#cat-new');
+  if (name) d.name = name.value;
+  if (add) d.newLines = add.value;
+}
+
+function sheetCategory(sh) {
+  const d = sh.draft, fam = sh.id ? famOf(sh.id) : null;
+  const members = fam ? L.familyMembers(state, fam.id) : [];
+  const q = (sh.q || '').trim().toLowerCase();
+  const others = state.exercises.filter(e => !e.archived && e.familyId !== sh.id);
+  const shown = q ? others.filter(e => e.name.toLowerCase().includes(q) || famOf(e.familyId)?.name.toLowerCase().includes(q))
+    : sh.part ? others.filter(e => L.bodyPart(state, e) === sh.part) : others.filter(e => d.moveIn.includes(e.id));
+  const goals = fam ? state.slots.filter(sl => sl.familyId === fam.id).length : 0;
+  return `<h3>${fam ? 'Edit category' : 'New category'}</h3>
+    <div class="field"><label>Name</label><input id="cat-name" value="${esc(d.name)}" placeholder="e.g. Triceps" autocomplete="off"></div>
+    ${members.length ? `<div class="label">In it</div><div class="chips">${members.map(e => `<span class="chip">${esc(e.name)}${e.archived ? ' (archived)' : ''}</span>`).join('')}</div>` : ''}
+    <div class="label">Move exercises here</div>
+    <input class="search" id="catq" data-catq value="${esc(sh.q || '')}" placeholder="Search" autocomplete="off">
+    ${q ? '' : partChips(others, sh.part, 'catPart')}
+    <div class="list">${shown.sort((a, b) => a.name.localeCompare(b.name)).map(e => `<button class="row ${d.moveIn.includes(e.id) ? 'on' : ''}" data-act="catPick" data-id="${e.id}">
+      <span>${d.moveIn.includes(e.id) ? '☑' : '☐'} ${esc(e.name)}</span><span class="meta">${esc(famOf(e.familyId)?.name ?? '')}</span></button>`).join('')
+      || (q || sh.part ? '<p class="muted">No matches.</p>' : '')}</div>
+    <div class="field"><label>New exercises <span class="hint">one per line</span></label><textarea id="cat-new" rows="3" placeholder="e.g. Cable pushdown">${esc(d.newLines)}</textarea></div>
+    <div class="actions">${fam ? `<button class="danger" data-act="catDelete">Delete</button>` : ''}
+      <button class="primary" data-act="catSave">${fam ? 'Save' : 'Create'}${d.moveIn.length ? ` · move ${d.moveIn.length}` : ''}</button></div>
+    ${goals ? `<p class="meta">${goals} weekly goal${goals === 1 ? '' : 's'} use this category.</p>` : ''}`;
+}
+
 function sheetQuickAdd(sh) {
   const base = sh.baseId ? exOf(sh.baseId) : null;
   const d = qaDefaults(sh, base);
@@ -3097,9 +3130,9 @@ function sheetQuickAdd(sh) {
     <div id="qa-hint" class="qahint">${qaHint(sh.name ?? '', sh)}</div>
     ${base ? `<div class="field"><label>Compared with ${esc(base.name)}</label><div class="seg radio">
       ${radio('qa-place', 'harder', 'Harder', true)}${radio('qa-place', 'easier', 'Easier', false)}</div></div>` : ''}
-    <div class="field"><label>Family <span class="hint">swaps within it</span></label>
-      <input id="qa-fam" list="famlist" autocomplete="off" value="${esc(d.famName)}" placeholder="Blank starts a new one">
-      <datalist id="famlist">${state.families.map(f => `<option value="${esc(f.name)}">`).join('')}</datalist></div>
+    <div class="field"><label>Category <span class="hint">swaps within it</span></label>
+      <select id="qa-famsel" data-qafam>${opts([['', 'Choose…'], ...[...state.families].sort((a, b) => a.name.localeCompare(b.name)).map(f => [f.id, f.name]), ['__new', '+ New category']], d.famId ?? '')}</select>
+      <input id="qa-fam" autocomplete="off" value="" placeholder="New category name" hidden></div>
     <div class="field"><label>How do you log it?</label><div class="seg radio">
       ${LOG_TYPES.map(([v, t]) => radio('qa-metric', v, t, d.metric === v)).join('')}</div></div>
     <label class="toggle"><input type="checkbox" id="qa-bw" ${d.bodyweight ? 'checked' : ''}> Added to bodyweight <span class="hint">e.g. weighted dips</span></label>
@@ -3147,8 +3180,8 @@ function sheetEditEx(sh) {
   const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
   return `<h3>Edit exercise</h3>
     <div class="field"><label>Name</label><input id="ee-name" value="${esc(e.name)}"></div>
-    <div class="field"><label>Family</label><select id="ee-fam">${opts(famOpts, e.familyId)}</select></div>
-    <label class="toggle"><input type="checkbox" id="ee-default" ${fam?.defaultExerciseId === e.id ? 'checked' : ''}> Usual choice for this family</label>
+    <div class="field"><label>Category</label><select id="ee-fam">${opts(famOpts, e.familyId)}</select></div>
+    <label class="toggle"><input type="checkbox" id="ee-default" ${fam?.defaultExerciseId === e.id ? 'checked' : ''}> Usual choice for this category</label>
     <div class="field"><label>How do you log it?</label><select id="ee-metric">${opts(METRICS, e.metric)}</select></div>
     <label class="toggle"><input type="checkbox" id="ee-bw" ${e.bodyweight ? 'checked' : ''}> Added to bodyweight <span class="hint">e.g. weighted dips</span></label>
     <div class="field"><label>1-rep max (${unit()}${e.bodyweight ? ', added load' : ''}) <span class="hint">${e.testedMax?.at ? `tested ${shortDay(e.testedMax.at)}` : 'optional'}</span></label>
@@ -3192,6 +3225,22 @@ function swapTo(exerciseId) {
 
 function normalizeRanks(familyId) {
   L.familyMembers(state, familyId).forEach((e, i) => { e.rank = i + 1; });
+}
+
+// Moves an exercise to another category (to the end of it). Goals that name it go with it; the old category picks a new
+// usual choice if it was this one.
+function moveExercise(e, familyId) {
+  if (!e || e.familyId === familyId) return;
+  const old = famOf(e.familyId);
+  e.rank = (L.familyMembers(state, familyId).at(-1)?.rank ?? 0) + 1;
+  e.familyId = familyId;
+  for (const sl of state.slots) if (sl.exerciseId === e.id) sl.familyId = familyId;
+  if (old) {
+    normalizeRanks(old.id);
+    if (old.defaultExerciseId === e.id) old.defaultExerciseId = L.familyMembers(state, old.id).find(x => !x.archived)?.id ?? null;
+  }
+  const fam = famOf(familyId);
+  if (fam && !fam.defaultExerciseId) fam.defaultExerciseId = e.id;
 }
 
 const actions = {
@@ -4089,14 +4138,16 @@ const actions = {
     const sh = ui.sheet;
     const name = sheetEl.querySelector('#qa-name').value.trim();
     if (!name) return toast('Give the exercise a name');
-    const familyName = sheetEl.querySelector('#qa-fam').value.trim();
+    const famSel = sheetEl.querySelector('#qa-famsel').value;
+    const familyId = famSel === '__new' || !famSel ? null : famSel; // none chosen: it starts a category of its own
+    const familyName = famSel === '__new' ? sheetEl.querySelector('#qa-fam').value.trim() : '';
     const equipment = [...sheetEl.querySelectorAll('input[name="qa-eq"]:checked')].map(i => i.value);
     // A variation sits right next to its base exercise, on the side you picked.
     const base = sh.baseId && exOf(sh.baseId);
-    const sameFam = base && (famOf(base.familyId)?.name ?? '').toLowerCase() === familyName.toLowerCase();
+    const sameFam = base && base.familyId === familyId;
     const place = sheetEl.querySelector('input[name="qa-place"]:checked')?.value;
     const e = newExercise({
-      name, familyName, equipment,
+      name, familyId, familyName, equipment,
       metric: sheetEl.querySelector('input[name="qa-metric"]:checked')?.value ?? 'load_reps',
       bodyweight: sheetEl.querySelector('#qa-bw').checked,
       anytime: sheetEl.querySelector('#qa-any').checked,
@@ -4209,6 +4260,37 @@ const actions = {
   },
 
   libEdit: d => openSheet({ type: 'editEx', id: d.id }),
+  catNew: () => { openSheet({ type: 'category', id: null, q: '', part: null, draft: { name: '', moveIn: [], newLines: '' } }); ui.sheetFocus = '#cat-name'; renderSheet(); },
+  catEdit: d => { const f = famOf(d.id); openSheet({ type: 'category', id: f.id, q: '', part: null, draft: { name: f.name, moveIn: [], newLines: '' } }); },
+  catPart: d => { readCatInputs(); ui.sheet.part = ui.sheet.part === d.v ? null : d.v; renderSheet(); },
+  catPick: d => { readCatInputs(); const m = ui.sheet.draft.moveIn; ui.sheet.draft.moveIn = m.includes(d.id) ? m.filter(x => x !== d.id) : [...m, d.id]; renderSheet(); },
+  catSave: () => {
+    readCatInputs();
+    const sh = ui.sheet, d = sh.draft, name = d.name.trim();
+    if (!name) return toast('Name the category');
+    if (state.families.some(f => f.id !== sh.id && f.name.toLowerCase() === name.toLowerCase())) return toast(`There's already a ${name} category`);
+    let fam = sh.id && famOf(sh.id);
+    if (!fam) { fam = { id: L.uid(), name, defaultExerciseId: null }; state.families.push(fam); }
+    fam.name = name;
+    for (const id of d.moveIn) moveExercise(exOf(id), fam.id);
+    const lines = [...new Set(d.newLines.split('\n').map(x => x.trim()).filter(Boolean))];
+    const have = lines.filter(n => state.exercises.some(e => e.name.toLowerCase() === n.toLowerCase()));
+    for (const n of lines.filter(x => !have.includes(x))) newExercise({ name: n, familyId: fam.id, region: L.guessRegion(n), explosive: L.guessExplosive(n) });
+    if (!fam.defaultExerciseId) fam.defaultExerciseId = L.familyMembers(state, fam.id).find(e => !e.archived)?.id ?? null;
+    ui.sheet = null;
+    save(); render();
+    toast(have.length ? `Saved ${name}. Already in your library: ${have.join(', ')}` : `Saved ${name}`);
+  },
+  catDelete: () => {
+    const fam = famOf(ui.sheet.id);
+    if (L.familyMembers(state, fam.id).length) return toast('Move its exercises to another category first');
+    const goals = state.slots.filter(sl => sl.familyId === fam.id);
+    askConfirm(`Delete ${fam.name}?`, goals.length ? `Its ${goals.length} weekly goal${goals.length === 1 ? '' : 's'} go too.` : 'It has no exercises.', 'Delete', () => {
+      state.slots = state.slots.filter(sl => sl.familyId !== fam.id);
+      state.families = state.families.filter(f => f !== fam);
+      save(); render();
+    });
+  },
 
   libMove: d => {
     const e = exOf(d.id);
@@ -4267,13 +4349,7 @@ const actions = {
   exSave: d => {
     const e = exOf(d.id);
     const q = sel => sheetEl.querySelector(sel);
-    const newFam = q('#ee-fam').value;
-    if (newFam !== e.familyId) {
-      const old = famOf(e.familyId);
-      if (old?.defaultExerciseId === e.id) old.defaultExerciseId = null;
-      e.familyId = newFam;
-      e.rank = (L.familyMembers(state, newFam).at(-1)?.rank ?? 0) + 1;
-    }
+    moveExercise(e, q('#ee-fam').value);
     e.name = q('#ee-name').value.trim() || e.name;
     e.metric = q('#ee-metric').value;
     e.bodyweight = q('#ee-bw').checked;
@@ -4706,6 +4782,10 @@ document.addEventListener('change', e => {
   } else if (d.hgtier !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit), g = s && histGroups(s).find(x => x.key === d.hgtier);
     if (g) { for (const st of g.sets) st.tier = el.value; tidyBlocks(s); save(); render(); }
+  } else if (d.qafam !== undefined) {
+    const input = sheetEl.querySelector('#qa-fam');
+    input.hidden = el.value !== '__new';
+    if (!input.hidden) input.focus();
   } else if (d.bsched !== undefined && ui.blockSetup) {
     const wd = Number(d.bsched);
     ui.blockSetup.schedule = [...ui.blockSetup.schedule.filter(x => x.weekday !== wd), ...(el.value ? [{ weekday: wd, planId: el.value }] : [])].sort((a, b) => a.weekday - b.weekday);
@@ -4823,6 +4903,11 @@ document.addEventListener('input', e => {
   if (e.target.hasAttribute('data-sheetq')) {
     ui.sheet.q = e.target.value;
     ui.sheetFocus = '#sheetq';
+    renderSheet();
+  } else if (e.target.hasAttribute('data-catq')) {
+    readCatInputs();
+    ui.sheet.q = e.target.value;
+    ui.sheetFocus = '#catq';
     renderSheet();
   } else if (e.target.hasAttribute('data-qaname')) {
     onQaName(e.target.value);

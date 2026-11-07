@@ -1373,6 +1373,57 @@ step('T3 as areas: a switch in Settings; areas have no weekly count on the Week 
   click('[data-act=nav][data-tab=today]');
 });
 
+step('categories: split Arms into Biceps and Triceps, add exercises, pick a category for a new one', () => {
+  const st = () => store.state;
+  const fam = name => st().families.find(f => f.name === name);
+  click('[data-act=nav][data-tab=library]');
+  click('[data-act=catNew]');
+  check('Library has + Category, and it opens a category sheet', /New category/.test(sheet()) && !!q('#cat-name'));
+  setVal(q('#cat-name'), 'Triceps', 'input');
+  click('#sheet [data-act=catPart][data-v="Arms"]');
+  const tri = qa('#sheet [data-act=catPick]').filter(b => /tricep|french|extension/i.test(b.innerText)).map(b => b.dataset.id);
+  check('a body part lists exercises from other categories to move in', tri.length >= 2, sheet().slice(0, 400));
+  for (const id of tri) click(`#sheet [data-act=catPick][data-id="${id}"]`);
+  check('ticking keeps the name you typed', q('#cat-name').value === 'Triceps' && /move \d+/.test(q('#sheet [data-act=catSave]').innerText));
+  q('#cat-new').value = 'Cable pushdown\nSkull crusher\n\nDB curl';
+  click('#sheet [data-act=catSave]');
+  const t = fam('Triceps');
+  check('the category is made with the moved exercises', !!t && tri.every(id => L.byId(st().exercises, id).familyId === t.id));
+  const made = st().exercises.filter(e => e.familyId === t?.id && /Cable pushdown|Skull crusher/.test(e.name));
+  check('and new ones, one per line (ones you already have are skipped)', made.length === 2 && st().exercises.filter(e => e.name === 'DB curl').length === 1);
+  check('they count as Arms in the pickers', made.every(e => L.bodyPart(st(), e) === 'Arms') && t.defaultExerciseId != null);
+  click('[data-act=catEdit][data-id=fam-arms]');
+  check('a category\'s ✎ opens it with its exercises', /Edit category/.test(sheet()) && q('#cat-name').value === 'Biceps (pump)');
+  setVal(q('#cat-name'), 'Biceps', 'input');
+  click('#sheet [data-act=catSave]');
+  check('renaming it keeps its goals', fam('Biceps')?.id === 'fam-arms' && st().slots.some(sl => sl.familyId === 'fam-arms'));
+  click('[data-act=quickAdd]');
+  check('the new-exercise form picks a category from a list', !!q('#qa-famsel') && q('#qa-fam').hidden);
+  setVal(q('#qa-name'), 'Close-grip push-up', 'input');
+  setVal(q('#qa-famsel'), t.id);
+  click('[data-act=qaSave]');
+  check('and the exercise lands in it', st().exercises.find(e => e.name === 'Close-grip push-up')?.familyId === t.id);
+  click('[data-act=quickAdd]');
+  setVal(q('#qa-name'), 'Neck curl', 'input');
+  setVal(q('#qa-famsel'), '__new');
+  check('+ New category asks for its name', !q('#qa-fam').hidden);
+  q('#qa-fam').value = 'Neck';
+  click('[data-act=qaSave]');
+  check('a new category from the form', st().exercises.find(e => e.name === 'Neck curl')?.familyId === fam('Neck')?.id);
+  click('[data-act=catNew]');
+  setVal(q('#cat-name'), 'Temp', 'input');
+  click('#sheet [data-act=catSave]');
+  click(`[data-act=catEdit][data-id="${fam('Temp').id}"]`);
+  click('#sheet [data-act=catDelete]');
+  click('#sheet [data-act=confirmYes]');
+  check('an empty category can be deleted', !fam('Temp'));
+  click(`[data-act=catEdit][data-id="${fam('Neck').id}"]`);
+  click('#sheet [data-act=catDelete]');
+  check('one with exercises can\'t, until they move', !!fam('Neck') && !/Delete Neck/.test(sheet()));
+  click('[data-act=sheetClose]');
+  click('[data-act=nav][data-tab=today]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');

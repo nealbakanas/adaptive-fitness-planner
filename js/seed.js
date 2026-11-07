@@ -4,6 +4,7 @@ import { mobilitySeed } from './mobility.js';
 import { DEFAULT_PRESETS } from './interval.js';
 export { DEFAULT_PRESETS };
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
+import { splitCategories } from './categories.js';
 
 export const EQUIPMENT = [
   'barbell', 'rack', 'bench', 'dumbbells', 'kettlebell',
@@ -226,8 +227,8 @@ export function seed() {
     { id: 'sl-t2-hams', familyId: 'fam-hams', exerciseId: 'ex-deficit-rdl', tier: 'T2', quota: 1, priority: 2 },
   ];
 
-  return {
-    version: 30,
+  return splitCategories({
+    version: 31,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -278,5 +279,5 @@ export function seed() {
     blocks: [], // finished program blocks with their reports, newest first
     reviews: [], // weekly reviews (js/review.js): { id, weekStart, summary, proposals: [{ id, kind, text, status }], status }, newest 26
     imports: {}, // history brought in from other apps, e.g. fitnotes: { at, cutoff, map: { fitnotesExerciseId: exerciseId } }
-  };
+  });
 }
