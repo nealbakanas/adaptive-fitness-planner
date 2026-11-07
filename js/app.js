@@ -198,7 +198,7 @@ function restSummary(sets) {
   if (!m.length) return null;
   const avg = Math.round(m.reduce((t, x) => t + x.restSec, 0) / m.length);
   const plan = Math.round(m.reduce((t, x) => t + (x.restPlan || 0), 0) / m.length);
-  return { avg, plan, n: m.length, text: `real rest ${clock(avg)} avg · planned ${clock(plan)}` };
+  return { avg, plan, n: m.length, text: `rest ${clock(avg)} avg (plan ${clock(plan)})` };
 }
 
 function newSet(session, block, ex, sc, load) {
@@ -290,9 +290,10 @@ function setBlockTier(s, b, tier, reason = null) {
   genSets(s, b);
 }
 
-const readyText = r => r.tired ? 'Tired: explosive work becomes technique'
-  : r.heavy.length ? `Heavy ${r.heavy.join('/')} work since yesterday: explosive work there becomes technique`
-  : r.low ? 'Low energy: power work stays, in short sets' : 'Fresh for power work';
+// Only said when it changes something: a fresh day needs no line.
+const readyText = r => r.tired ? 'Tired: explosive work as technique'
+  : r.heavy.length ? `Heavy ${r.heavy.join('/')} work yesterday: explosive ${r.heavy.join('/')} work as technique`
+  : r.low ? 'Low energy: power work stays, in short sets' : '';
 
 // Conditioning supersets: the bike (or whatever conditioning is here), or null when there's none or it's skipped today.
 function condPairExercise(s) {
@@ -735,7 +736,7 @@ function viewToday() {
   if (B.settle(state)) save(); // a block past its end finishes now; its report waits below
   const s = currentSession(), m = currentMobility();
   if (m && !(s && ui.showWorkout)) return banners() + viewMobSession(m, !!s);
-  const back = m ? `<div class="banner">Your mobility session is still open. <button class="link" data-act="showMobility">Switch to it</button></div>` : '';
+  const back = m ? `<div class="banner">Mobility still open · <button class="link" data-act="showMobility">Switch to it</button></div>` : '';
   return banners() + back + (s ? viewSession(s) : viewCheckin());
 }
 
@@ -755,24 +756,22 @@ function programCards() {
   const started = P.PROGRAMS.filter(d => P.progress(state, d.id));
   if (!started.length) {
     return `<div class="field"><label>Programs</label><div class="list">${P.PROGRAMS.map(d =>
-      `<button class="row" data-act="progOpen" data-id="${d.id}"><span>${esc(d.name)}</span><span class="meta">${P.weeksOf(d)}-week jump program · optional ›</span></button>`).join('')}</div></div>`;
+      `<button class="row" data-act="progOpen" data-id="${d.id}"><span>${esc(d.name)}</span><span class="meta">${P.weeksOf(d)} weeks ›</span></button>`).join('')}</div></div>`;
   }
   return started.map(d => {
     const p = P.progress(state, d.id);
     if (p.finished) {
-      return `<div class="card prog"><b>${esc(d.name)}: all ${P.weeksOf(d)} weeks done</b>
-        <div class="brow"><button class="small" data-act="progOpen" data-id="${d.id}">See your progress</button></div></div>`;
+      return `<div class="card prog"><b>${esc(d.name)}: done</b>
+        <div class="brow"><button class="small" data-act="progOpen" data-id="${d.id}">Your progress</button></div></div>`;
     }
     const today = P.doneToday(state, d.id, L.dayKey());
     const last = P.lastSessionAt(state, d.id);
     const gap = last ? Math.floor((L.startOfDay() - L.startOfDay(last)) / 864e5) : null;
-    const weekend = [0, 6].includes(new Date().getDay());
-    const hint = today ? 'Done today ✓' : gap >= 7 ? `${gap} days since your last session: consider repeating week ${Math.max(1, p.week - 1)}.`
-      : weekend ? 'Program days are Monday to Friday.' : '';
+    const hint = today ? 'Done today ✓' : gap >= 7 ? `${gap} days off: maybe repeat week ${Math.max(1, p.week - 1)}` : '';
     const dose = P.dayPlan(d, p.week).map(e => `${e.name} ${M.doseText(e)}`).join(' · ');
-    return `<div class="card prog"><div><b>${esc(d.name)}</b> · week ${p.week} of ${P.weeksOf(d)}, day ${p.day} of ${d.days}</div>
+    return `<div class="card prog"><div><b>${esc(d.name)}</b> · week ${p.week}/${P.weeksOf(d)}, day ${p.day}/${d.days}</div>
       <div class="meta">${esc(dose)}</div>${hint ? `<div class="meta ${today ? 'good' : ''}">${esc(hint)}</div>` : ''}
-      <div class="brow"><button class="${today ? '' : 'primary'}" data-act="progSession" data-id="${d.id}">Start ${today ? 'another' : "today's"} session</button>
+      <div class="brow"><button class="${today ? '' : 'primary'}" data-act="progSession" data-id="${d.id}">${today ? 'Start another' : 'Start'}</button>
         <button data-act="progOpen" data-id="${d.id}">Program ›</button></div></div>`;
   }).join('');
 }
@@ -814,14 +813,14 @@ function viewTimer() {
     <div class="chips">${presets.map(p => `<button class="chip ${d.presetId === p.id ? 'on' : ''}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
     <div class="card">
       <div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div>
-      <div class="row2 fields">${field('work', 'Work', clock(d.work), 'm:ss')}${field('rest', 'Rest', clock(d.rest), '0 for EMOM')}</div>
+      <div class="row2 fields">${field('work', 'Work', clock(d.work))}${field('rest', 'Rest', clock(d.rest), '0 = EMOM')}</div>
       <div class="row2 fields">${field('rounds', 'Rounds', d.rounds)}${field('sets', 'Sets', d.sets)}</div>
       <div class="row2 fields">${field('setRest', 'Rest between sets', clock(d.setRest))}${field('prep', 'Get ready', clock(d.prep))}</div>
       ${sets}
-      <p class="meta">${esc(I.describe(d))}. Rounds you finish count toward your goals: conditioning toward the conditioning goal, anything else toward its own.</p>
+      <p class="meta">${esc(I.describe(d))}</p>
       <div class="brow"><button class="primary big" data-act="ivStart">Start</button></div>
       <div class="brow"><button class="small" data-act="ivSave">${d.presetId && presets.some(p => p.id === d.presetId && !p.id.startsWith('iv-')) ? 'Save changes' : 'Save as a timer'}</button>
-        ${d.presetId && !d.presetId.startsWith('iv-') ? '<button class="small quiet" data-act="ivDel">Delete this timer</button>' : ''}</div>
+        ${d.presetId && !d.presetId.startsWith('iv-') ? '<button class="small quiet" data-act="ivDel">Delete</button>' : ''}</div>
     </div>`;
 }
 
@@ -849,11 +848,11 @@ function ivRunInner(run, list, at) {
 // After a run: what you did, ready to log. Totals are per set (calories for the bike, else reps); blank still logs the rounds.
 function viewIntervalLog(lg) {
   const done = I.roundsDone(I.phases(lg.cfg), lg.ms);
-  if (!done.length) return `<header class="top"><h1>Timer</h1></header><div class="card"><p>No rounds finished, so there's nothing to log.</p>
+  if (!done.length) return `<header class="top"><h1>Timer</h1></header><div class="card"><p>No rounds finished.</p>
     <div class="brow"><button class="primary" data-act="ivDiscard">OK</button></div></div>`;
   const open = currentSession();
   return `<header class="top"><h1>Log it</h1></header>
-    <div class="card"><p class="meta">${esc(lg.cfg.name)} · ${clock(Math.round(lg.ms / 1000))}. ${open ? 'Goes into the workout you have open.' : 'Saved as its own workout today.'}</p>
+    <div class="card"><p class="meta">${esc(lg.cfg.name)} · ${clock(Math.round(lg.ms / 1000))} · ${open ? 'into your open workout' : 'as its own workout'}</p>
     ${done.map(d => {
       const ex = exOf(d.exerciseId);
       const unitWord = ex?.repUnit ?? (ex?.metric === 'time' ? null : 'reps');
@@ -946,19 +945,19 @@ function viewProgram(id) {
       <td><input class="vert" inputmode="decimal" data-vert="${id}|${w}" value="${esc(vert[w] ?? '')}" aria-label="Vertical, week ${w}"></td></tr>`;
   }).join('');
   let h = `<header class="top sub"><button class="back" data-act="progClose">‹ Plans</button></header><h1 class="pagetitle">${esc(d.name)}</h1>
-    <p class="meta pad">${P.weeksOf(d)} weeks, ${d.days} days a week: ${esc(d.schedule)} It's separate from your weekly goals: it doesn't count toward them or affect suggestions.</p>`;
+    <p class="meta pad">${P.weeksOf(d)} weeks · ${d.days} days a week · separate from your goals</p>`;
   if (!p) {
-    h += `<button class="primary big" data-act="progStart" data-id="${id}">Start the program at week 1</button>`;
+    h += `<button class="primary big" data-act="progStart" data-id="${id}">Start at week 1</button>`;
   } else if (p.finished) {
     h += `<div class="card"><b>All ${P.weeksOf(d)} weeks done.</b> <button class="link" data-act="progStart" data-id="${id}">Start over</button></div>`;
   } else {
     h += `<div class="card"><div><b>Week ${p.week}, day ${p.day} of ${d.days}</b></div>
-      <div class="brow"><button class="primary" data-act="progSession" data-id="${id}">Start today's session</button>
+      <div class="brow"><button class="primary" data-act="progSession" data-id="${id}">Start</button>
         ${p.day > 1 || p.week > 1 ? `<button data-act="progWeek" data-id="${id}" data-w="${p.week}">Restart week ${p.week}</button>` : ''}
         <select data-progweek="${id}" aria-label="Go to week">${opts(d.chart.map((_, i) => [i + 1, `Go to week ${i + 1}`]), p.week)}</select>
         <button class="quiet" data-act="progStop" data-id="${id}">Stop</button></div></div>`;
   }
-  h += `<div class="label">Workout chart <span class="hint">sets × reps, every program day that week · vertical in ${vu}</span></div>
+  h += `<div class="label">Chart <span class="hint">sets × reps · vertical in ${vu}</span></div>
     <div class="card flush tablewrap"><table class="progchart"><thead><tr><th>Wk</th>${names.map(n => `<th>${esc(n)}</th>`).join('')}<th>Days</th><th>Vert</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div class="label">The exercises</div><div class="card">${d.exercises.map(e => `<p><b>${esc(e.name)}</b>${e.perSide ? ' · each leg' : ''}<br><span class="meta">${esc(e.cues)}</span>
       ${M.videoSearch(e.video) ? ` <a class="small" href="${esc(M.videoSearch(e.video))}" target="_blank" rel="noopener">▶ Video</a>` : ''}</p>`).join('')}</div>`;
@@ -971,9 +970,13 @@ function skipField(ci) {
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!fams.length) return '';
   const on = ci.skip || [];
-  return `<details class="skip" ${on.length || ui.skipOpen ? 'open' : ''} data-skip><summary>Skip today${on.length ? `: ${esc(on.map(id => famOf(id)?.name).filter(Boolean).join(', '))}` : ''} <span class="hint">sore or hurt? nothing from these today</span></summary>
+  return `<details class="skip" ${on.length || ui.skipOpen ? 'open' : ''} data-skip><summary>Skip today${on.length ? `: ${esc(on.map(id => famOf(id)?.name).filter(Boolean).join(', '))}` : ''}</summary>
     <div class="chips">${fams.map(f => `<button class="chip ${on.includes(f.id) ? 'on' : ''}" data-act="ciSkip" data-v="${f.id}">${esc(f.name)}</button>`).join('')}</div></details>`;
 }
+
+// Morning check still to do today (its energy then stands in for the check-in's).
+const morningOpen = () => !!ui.morning || (!Mo.entryFor(state) && ui.morningSkip !== L.dayKey());
+const ciChip = (attr, on, label) => `<label class="chip ${on ? 'on' : ''}"><input type="checkbox" ${attr} ${on ? 'checked' : ''}>${label}</label>`;
 
 function viewCheckin() {
   const ci = ui.ci;
@@ -984,41 +987,36 @@ function viewCheckin() {
   h += blockReportCard() + morningCard() + programDayCard();
   for (const p of paused) {
     const left = state.sets.filter(x => x.sessionId === p.id && !x.done && !x.warmup).length;
-    const blocksLeft = p.blocks.filter(b => blockSets(b).some(x => !x.done)).length;
     const at = new Date(p.pausedAt ?? p.checkinAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    h += `<div class="card resume"><div><b>Paused at ${at}</b><div class="meta">${left} set${left === 1 ? '' : 's'} left in ${blocksLeft} exercise${blocksLeft === 1 ? '' : 's'}</div></div>
+    h += `<div class="card resume"><div><b>Paused at ${at}</b><div class="meta">${left} set${left === 1 ? '' : 's'} left</div></div>
       <button class="primary" data-act="resume" data-id="${p.id}">Resume</button></div>`;
   }
   if (doneToday.length) {
-    const sets = state.sets.filter(x => x.done && !x.warmup && doneToday.some(s => s.id === x.sessionId));
-    const rest = restSummary(sets);
+    const sets = state.sets.filter(x => x.done && !x.warmup && doneToday.some(s => s.id === x.sessionId)).length;
     const last = [...doneToday].sort((a, b) => (b.endedAt ?? b.checkinAt) - (a.endedAt ?? a.checkinAt))[0];
-    h += `<div class="card muted">Done today: ${doneToday.length} session${doneToday.length > 1 ? 's' : ''}, ${sets.length} sets${rest ? ` · ${rest.text}` : ''}.
-      <button class="link" data-act="sessionContinue" data-id="${last.id}">Continue ${doneToday.length > 1 ? 'the last one' : 'it'}</button></div>`;
+    h += `<div class="card muted">Done today · ${sets} sets <button class="link" data-act="sessionContinue" data-id="${last.id}">Continue</button></div>`;
   }
   const where = ci.locationIds?.length ? ci.locationIds : [ci.locationId];
-  h += `<div class="field"><label>Where <span class="hint">tap more than one if you'll move between them</span></label><div class="seg">${state.locations.map(l =>
-    `<button data-act="ciLoc" data-v="${l.id}" class="${where.includes(l.id) ? 'on' : ''}">${esc(l.name)}</button>`).join('')}</div></div>
-    <div class="field"><label>Time (min)</label>${seg('minutes', TIMES.map(t => [t, t]), ci.minutes)}</div>
-    <div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${seg('energy', [1, 2, 3, 4, 5].map(n => [n, n]), 6 - ci.fatigue)}</div>
-    <div class="field"><label>Sleep <span class="hint">optional · 1 poor · 5 great · tap again to clear</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
+  if (state.locations.length > 1) {
+    h += `<div class="field"><label>Where</label><div class="seg">${state.locations.map(l =>
+      `<button data-act="ciLoc" data-v="${l.id}" class="${where.includes(l.id) ? 'on' : ''}">${esc(l.name)}</button>`).join('')}</div></div>`;
+  }
+  h += `<div class="field"><label>Minutes</label>${seg('minutes', TIMES.map(t => [t, t]), ci.minutes)}</div>
+    ${morningOpen() ? '' : `<div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${seg('energy', [1, 2, 3, 4, 5].map(n => [n, n]), 6 - ci.fatigue)}</div>`}
+    <div class="field"><label>Sleep <span class="hint">optional</span></label>${seg('sleep', [1, 2, 3, 4, 5].map(n => [n, n]), ci.sleep)}</div>
     <div class="field"><label>Intent</label>${seg('intent', INTENTS, ci.intent)}</div>
-    <div class="field"><label>Lean <span class="hint">which half feels up for it today</span></label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
+    <div class="field"><label>Lean</label>${seg('lean', LEANS, ci.lean ?? 'either')}</div>
+    <div class="chips extras">${ciChip('data-ci-jumps', ci.jumps, '+ Jumps')}${ciChip('data-ci-cond', ci.cond, '+ Conditioning')}${ciChip('data-ci-condpair', ci.condPair, '+ Bike supersets')}${ciChip('data-ci-split', ci.split, 'Split across the day')}</div>
     ${skipField(ci)}
-    <label class="toggle"><input type="checkbox" data-ci-jumps ${ci.jumps ? 'checked' : ''}> Add jumps <span class="hint">one jumps block, toward your jumps goal</span></label>
-    <label class="toggle"><input type="checkbox" data-ci-cond ${ci.cond ? 'checked' : ''}> Add conditioning <span class="hint">an EMOM on the bike, done last</span></label>
-    <label class="toggle"><input type="checkbox" data-ci-condpair ${ci.condPair ? 'checked' : ''}> Conditioning supersets <span class="hint">the bike in the rests of your first T1 and T2</span></label>
-    <label class="toggle"><input type="checkbox" data-ci-split ${ci.split ? 'checked' : ''}> I may split this across the day</label>
     <button class="primary big" data-act="suggest">Suggest a session</button>
-    <details class="mixer" ${ui.mixOpen ? 'open' : ''} data-mix><summary>Or choose the mix <span class="hint">how many T1, T2 and T3 blocks · uses your goals first</span></summary>
+    <details class="mixer" ${ui.mixOpen ? 'open' : ''} data-mix><summary>Choose the mix</summary>
       ${['T1', 'T2', 'T3'].map(t => `<div class="row mixrow"><span>${t}</span><div class="stepper small"><button data-act="mixStep" data-t="${t}" data-d="-1" aria-label="Fewer ${t}">−</button><span>${ui.mix[t]}</span><button data-act="mixStep" data-t="${t}" data-d="1" aria-label="More ${t}">+</button></div></div>`).join('')}
-      <p class="meta">Uses the time, place and lean above.</p>
       <button class="primary" data-act="mixBuild">Build this mix</button></details>
-    <div class="field"><label>Or a focused workout <span class="hint">from your whole library, not just open goals${L.leanOf(ci) ? ` · leaning ${L.leanOf(ci)}` : ''}</span></label>${focusButtons(L.leanOf(ci))}</div>`;
-  h += `<p class="meta pad">Mobility and jump programs are under Plans.</p>`;
-  if (state.plans.length) {
-    h += `<div class="field"><label>Or start a saved plan</label><div class="list">${state.plans.map(p =>
-      `<button class="row" data-act="startPlan" data-id="${p.id}"><span>${esc(p.name)}</span><span class="meta">${p.items.length} items</span></button>`).join('')}</div></div>`;
+    <div class="field"><label>Focused workout</label>${focusButtons(L.leanOf(ci))}</div>`;
+  const own = state.plans.filter(p => !p.group);
+  if (own.length) {
+    h += `<div class="field"><label>Saved plans</label><div class="list">${own.map(p =>
+      `<button class="row" data-act="startPlan" data-id="${p.id}"><span>${esc(p.name)}</span></button>`).join('')}</div></div>`;
   }
   return h;
 }
@@ -1026,28 +1024,28 @@ function viewCheckin() {
 // ---------- morning check ----------
 
 const jumpWord = ex => (/broad|long jump|bound|standing long|triple/i.test(ex?.name ?? '') ? 'Distance' : 'Height');
-const numSeg = (k, vals, cur, extra = '') => `<div class="seg tight">${vals.map(n => `<button data-act="mornSet" data-m="${k}" ${extra} data-v="${n}" class="${cur === n ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+// The morning energy row also answers for the check-in's energy (data-k), which is hidden while this card is open.
+const numSeg = (k, vals, cur, extra = '') => `<div class="seg tight">${vals.map(n => `<button data-act="mornSet" data-m="${k}" ${k === 'energy' ? 'data-k="energy"' : ''} ${extra} data-v="${n}" class="${cur === n ? 'on' : ''}">${n}</button>`).join('')}</div>`;
 
-// Energy and pain each morning, before anything else (js/morning.js). Logged: one line, with what it changes today.
+// Energy and pain each morning (js/morning.js). Logged: one line, and what it changes today.
 function morningCard() {
   const e = Mo.entryFor(state), parts = Mo.morningOf(state).parts;
   const sore = Mo.jumpPain(state);
   if (e && !ui.morning) {
     const holds = Mo.reliefHolds(state);
-    return `<div class="card muted morning"><span>Morning: ${esc(Mo.entryText(e)) || 'logged'}</span> <button class="link" data-act="mornEdit">Edit</button>
-      ${sore.length ? `<p>${esc(sore.map(x => `${x.part} ${x.score}/10`).join(', '))}: no jumps today.${holds.length ? ` <button class="link" data-act="mornIsos">Do the isometric holds</button>` : ''}</p>` : ''}</div>`;
+    return `<div class="card muted morning"><span>Morning · ${esc(Mo.entryText(e)) || 'logged'}</span> <button class="link" data-act="mornEdit">Edit</button>
+      ${sore.length ? `<p>No jumps today${holds.length ? ` · <button class="link" data-act="mornIsos">Isometric holds</button>` : ''}</p>` : ''}</div>`;
   }
-  if (!e && !ui.morning && ui.morningSkip === L.dayKey()) return '';
+  if (!morningOpen()) return '';
   const d = ui.morning ?? (ui.morning = { energy: null, pain: {} });
   const ideas = [...new Set([...parts, ...Mo.PART_IDEAS])];
-  return `<div class="card morning"><h3>Morning check <span class="hint">about 10 seconds</span></h3>
+  return `<div class="card morning"><h3>Morning check</h3>
     <div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${numSeg('energy', [1, 2, 3, 4, 5], d.energy)}</div>
-    ${parts.map(p => `<div class="field"><label>${esc(p)} <span class="hint">0 none · 10 worst · same test each morning</span></label>${numSeg('pain', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], d.pain[p] ?? null, `data-p="${esc(p)}"`)}</div>`).join('')}
-    <details class="parts" ${parts.length ? '' : 'open'}><summary>Body parts you track <span class="hint">any you've hurt before</span></summary>
+    ${parts.map(p => `<div class="field"><label>${esc(p)} <span class="hint">pain</span></label>${numSeg('pain', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], d.pain[p] ?? null, `data-p="${esc(p)}"`)}</div>`).join('')}
+    <details class="parts" ${parts.length ? '' : 'open'}><summary>Tracked parts</summary>
       <div class="chips">${ideas.map(p => `<button class="chip ${parts.includes(p) ? 'on' : ''}" data-act="mornPart" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-      <div class="row2"><input id="morn-part" placeholder="Another part, e.g. Left wrist"><button class="small" data-act="mornPartAdd">Add</button></div></details>
-    <div class="brow"><button class="primary small" data-act="mornSave">Save</button>${e ? '<button class="small" data-act="mornCancel">Cancel</button>' : '<button class="small" data-act="mornSkip">Not today</button>'}</div>
-    <p class="meta">Over 3/10 on a knee, ankle, back or hip means no jumps that day: isometric holds instead.</p></div>`;
+      <div class="row2"><input id="morn-part" placeholder="Another part"><button class="small" data-act="mornPartAdd">Add</button></div></details>
+    <div class="brow"><button class="primary small" data-act="mornSave">Save</button>${e ? '<button class="small" data-act="mornCancel">Cancel</button>' : '<button class="small" data-act="mornSkip">Not today</button>'}</div></div>`;
 }
 
 // The holds that stand in for jumps on a sore morning, added to the workout's mobility (once).
@@ -1063,27 +1061,26 @@ const planName = id => L.byId(state.plans, id)?.name ?? '?';
 const shortPlan = id => planName(id).replace(/^.*?·\s*/, '').replace(/\s*\([^)]*\)\s*$/, '');
 
 // Check-in: the program session due today (or one you're behind on), or what's next on a day off.
+const planItemsText = p => p.items.map(it => `${exOf(it.exerciseId)?.name ?? '?'} ${schOf(it.schemeId)?.name ?? ''}`.trim()).join(' · ');
 function programDayCard() {
   const t = B.today(state);
   if (!t) {
     const b = state.block;
-    if (b?.pausedAt) return `<div class="card muted">${esc(b.group)} is paused: your goals run as usual. <button class="link" data-act="blockResume">Resume it</button></div>`;
-    if (b && Date.now() < b.startedAt) return `<div class="card muted">${esc(b.group)} starts ${esc(shortDate(b.startedAt))}.</div>`;
+    if (b?.pausedAt) return `<div class="card muted">${esc(b.group)} paused · <button class="link" data-act="blockResume">Resume</button></div>`;
+    if (b && Date.now() < b.startedAt) return `<div class="card muted">${esc(b.group)} starts ${esc(shortDate(b.startedAt))}</div>`;
     return '';
   }
-  const head = `${esc(t.block.group)} · Week ${t.week} of ${t.block.weeks}${t.deload ? ' · deload' : ''}`;
+  const head = `${esc(t.block.group)} · Week ${t.week}/${t.block.weeks}${t.deload ? ' · deload' : ''}`;
   if (t.due) {
     const p = L.byId(state.plans, t.due.planId);
     const low = 6 - ui.ci.fatigue <= 2;
     return `<div class="card program due"><div class="meta">${head}${t.due.behind ? ` · from ${B.WEEKDAY_NAMES[t.due.weekday]}` : ''}</div><h3>${esc(shortPlan(p.id))}</h3>
-      ${p.note ? `<p class="meta">${esc(p.note)}</p>` : ''}
-      ${low ? '<p class="meta">Low energy: run it as written, at deload volume, or leave it for tomorrow (it waits; nothing is skipped).</p>' : ''}
-      <div class="brow"><button class="primary" data-act="blockStart">Start${t.deload ? ' (deload)' : ''}</button>${t.deload ? '' : '<button class="small" data-act="blockStart" data-deload="1">Deload volume</button>'}</div>
-      <p class="meta">Your T3s and superset ideas fill the time left. Or check in below for your own goals; ${esc(B.ownsText(t.block))} stay with the program.</p></div>`;
+      <p class="meta">${esc(planItemsText(p))}</p>
+      ${low ? '<p class="meta">Low energy: deload it, or leave it for tomorrow.</p>' : ''}
+      <div class="brow"><button class="primary" data-act="blockStart">Start${t.deload ? ' (deload)' : ''}</button>${t.deload ? '' : '<button class="small" data-act="blockStart" data-deload="1">Deload</button>'}</div></div>`;
   }
-  const next = t.next ? `Next: ${esc(shortPlan(t.next.planId))} on ${B.WEEKDAY_NAMES[t.next.weekday]}. <button class="link" data-act="blockStart">Do it today</button>` : 'All this week\'s sessions done.';
-  return `<div class="card muted program"><div class="meta">${head} · ${t.done} of ${t.scheduled} done</div>
-    <p>${t.doneToday ? 'Program session done today. ' : 'A day off the program: your own goals, without ' + esc(B.ownsText(t.block)) + '. '}${next}</p></div>`;
+  const next = t.next ? `Next: ${esc(shortPlan(t.next.planId))} ${B.WEEKDAY_NAMES[t.next.weekday]} · <button class="link" data-act="blockStart">Start now</button>` : 'Week done';
+  return `<div class="card muted program"><div class="meta">${head} · ${t.done}/${t.scheduled}${t.doneToday ? ' · done today' : ''}</div><p>${next}</p></div>`;
 }
 
 // Week tab: the block at a glance, each scheduled day ticked or open.
@@ -1098,7 +1095,7 @@ function weekBlockCard() {
     if (ok) left.splice(i, 1);
     return `<span class="chip ${ok ? 'on' : ''}">${B.WEEKDAY_NAMES[x.weekday]} ${esc(shortPlan(x.planId))}${ok ? ' ✓' : ''}</span>`;
   }).join('');
-  return `<div class="card program"><h3>${esc(t.block.group)}</h3><div class="meta">Week ${t.week} of ${t.block.weeks}${t.deload ? ' · deload' : ''} · ${t.done} of ${t.scheduled} sessions · owns ${esc(B.ownsText(t.block))}</div>
+  return `<div class="card program"><h3>${esc(t.block.group)}</h3><div class="meta">Week ${t.week}/${t.block.weeks}${t.deload ? ' · deload' : ''} · ${t.done}/${t.scheduled} sessions</div>
     <div class="chips">${days}</div></div>`;
 }
 
@@ -1108,11 +1105,11 @@ function groupBlockRow(g) {
   if (b?.group === g) {
     const wk = Math.max(1, Math.min(b.weeks, B.weekNo(state, b)));
     const when = Date.now() < b.startedAt ? `starts ${shortDate(b.startedAt)}` : b.pausedAt ? 'paused' : `week ${wk} of ${b.weeks}`;
-    return `<div class="card program"><b>Running as a block: ${esc(when)}</b><div class="meta">Owns ${esc(B.ownsText(b))} · ${esc(B.sequence(state, b).map(x => `${B.WEEKDAY_NAMES[x.weekday]} ${shortPlan(x.planId)}`).join(' · '))}</div>
+    return `<div class="card program"><b>Running as a block · ${esc(when)}</b>
       <div class="brow">${b.pausedAt ? '<button class="small" data-act="blockResume">Resume</button>' : '<button class="small" data-act="blockPause">Pause</button>'}<button class="small danger" data-act="blockEnd">End block</button></div></div>`;
   }
   if (b) return '';
-  return `<div class="brow pad"><button class="small primary" data-act="blockSetup" data-g="${esc(g)}">Run as a block</button><span class="meta">a set number of weeks; it owns its part of your training</span></div>`;
+  return `<div class="brow pad"><button class="small primary" data-act="blockSetup" data-g="${esc(g)}">Run as a block</button></div>`;
 }
 
 function viewBlockSetup(d) {
@@ -1126,14 +1123,14 @@ function viewBlockSetup(d) {
     <h3>Schedule</h3><div class="card flush">${days.map(wd => `<div class="frow"><span class="grow"><span class="name">${WEEKDAYS[wd]}</span></span>
       <select data-bsched="${wd}">${opts([['', 'Your own day'], ...plans.map(p => [p.id, shortPlan(p.id)])], at(wd))}</select></div>`).join('')}</div>
     <h3>What the program owns</h3><div class="card">
-      <div class="field"><label>Body half <span class="hint">its T1/T2 goals pause; no T1/T2 from it on your own days</span></label><div class="seg">${[['', 'Neither'], ['lower', 'Lower body'], ['upper', 'Upper body']].map(([v, t]) =>
+      <div class="field"><label>Body half <span class="hint">its T1/T2</span></label><div class="seg">${[['', 'Neither'], ['lower', 'Lower body'], ['upper', 'Upper body']].map(([v, t]) =>
         `<button data-act="bOwnHalf" data-v="${v}" class="${(d.owns.half ?? '') === v ? 'on' : ''}">${t}</button>`).join('')}</div></div>
       <div class="field"><label>Whole tiers</label><div class="chips">${['JUMP', 'COND'].map(t => `<button class="chip ${d.owns.tiers.includes(t) ? 'on' : ''}" data-act="bOwnTier" data-v="${t}">${t === 'JUMP' ? 'Jumps' : 'Conditioning'}</button>`).join('')}</div></div></div>
     <h3>Length</h3><div class="card">
       <div class="frow"><span class="grow"><span class="name">Weeks</span></span><div class="stepper small"><button data-act="bWeeks" data-d="-1" aria-label="Fewer weeks">−</button><span>${d.weeks}</span><button data-act="bWeeks" data-d="1" aria-label="More weeks">+</button></div></div>
-      <label class="toggle"><input type="checkbox" data-bdeload ${d.deloadEvery ? 'checked' : ''}> Deload every 4th week <span class="hint">same plans, 40% fewer sets</span></label>
+      <label class="toggle"><input type="checkbox" data-bdeload ${d.deloadEvery ? 'checked' : ''}> Deload every 4th week <span class="hint">40% fewer sets</span></label>
       <div class="field"><label>Start</label><div class="seg">${[['next', 'Next week'], ['today', 'Today']].map(([v, t]) => `<button data-act="bStart" data-v="${v}" class="${d.start === v ? 'on' : ''}">${t}</button>`).join('')}</div></div></div>
-    <div class="card muted">${paused.length ? `These goals pause until it ends: ${esc(paused.map(slotLabel).join(', '))}. Sets still count toward them.` : 'None of your goals pause.'}</div>
+    ${paused.length ? `<div class="card muted">Pauses ${esc(paused.map(slotLabel).join(', '))}</div>` : ''}
     <div class="actions"><button data-act="blockSetupClose">Cancel</button><button class="primary" data-act="blockGo">Start the block</button></div>`;
 }
 
@@ -1203,34 +1200,32 @@ function laterBanner(s) {
   const later = laterSets(s);
   if (!later.length) return '';
   const names = [...new Set(later.map(x => exOf(x.exerciseId)?.name).filter(Boolean))].join(', ');
-  return `<div class="banner">${later.length} set${later.length === 1 ? '' : 's'} (${esc(names)}) ${later.length === 1 ? 'was' : 'were'} added in History, so ${later.length === 1 ? 'it counts' : 'they count'} as done. Did you do ${later.length === 1 ? 'it' : 'them'}?
-    <div class="brow"><button class="small" data-act="laterPlanned">Not yet: doing them now</button><button class="small" data-act="laterDone">Yes, done</button></div></div>`;
+  return `<div class="banner">${later.length} set${later.length === 1 ? '' : 's'} added in History (${esc(names)}). Done already?
+    <div class="brow"><button class="small" data-act="laterPlanned">Not yet</button><button class="small" data-act="laterDone">Yes, done</button></div></div>`;
 }
 
 function viewSession(s) {
   const loc = L.placeOf(state, s);
   const credit = L.creditWeek(state);
   const est = s.minutes - sessionBudget(s);
-  const intent = INTENTS.find(i => i[0] === s.intent)?.[1] ?? s.intent;
   const rest = restSummary(state.sets.filter(x => x.sessionId === s.id));
-  const paced = L.pacedBlocks(state, s.blocks, s.locationId ?? null);
   const burst = L.paceFor(state)?.bursty && !state.sets.some(x => x.sessionId === s.id && x.done);
-  let h = `<header class="top"><div><h1>Today</h1>
-    <div class="sub">${esc(loc?.name)} · ${s.minutes} min · ${esc(intent)}${L.leanOf(s) ? ` · leaning ${L.leanOf(s)}` : ''} · est ${est} min${paced ? ' (your pace)' : ''}</div>${s.skip?.length ? `<div class="sub">Skipping today: ${esc(s.skip.map(id => famOf(id)?.name).filter(Boolean).join(', '))}</div>` : ''}${burst ? '<div class="sub">Log each set as you finish it to teach the app your pace.</div>' : ''}${s.ready ? `<div class="sub ready ${s.ready.fresh && !s.ready.heavy.length ? 'good' : ''}">${esc(readyText(s.ready))}</div>` : ''}
-    ${rest ? `<div class="sub">${esc(rest.text)}</div>` : ''}</div>
-    <div class="hbtns"><span class="badge ${s.source}">${esc(s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : s.source)}</span><button class="small" data-act="moreTime">+ Time</button></div></header>`;
+  const bits = [loc?.name, s.source === 'focus' ? focusName(s.focusRegion, s.focusExplosive) : null, `${s.minutes} min`,
+    s.intent && s.intent !== 'auto' ? INTENTS.find(i => i[0] === s.intent)?.[1] : null, L.leanOf(s) ? `${L.leanOf(s)} lean` : null, `est ${est}`, rest?.text].filter(Boolean);
+  const ready = s.ready ? readyText(s.ready) : '';
+  let h = `<header class="top"><div><h1>Today</h1><div class="sub">${esc(bits.join(' · '))}</div>
+    ${s.skip?.length ? `<div class="sub">Skipping ${esc(s.skip.map(id => famOf(id)?.name).filter(Boolean).join(', '))}</div>` : ''}
+    ${ready ? `<div class="sub ready">${esc(ready)}</div>` : ''}${burst ? '<div class="sub">Tick each set as you finish it to learn your pace.</div>' : ''}</div>
+    <div class="hbtns"><button class="small" data-act="moreTime">+ Time</button></div></header>`;
   h += laterBanner(s);
-  if (s.blockRun) h += `<div class="banner program">${esc(s.programLabel ?? 'Program')}${s.deload ? ' · deload volume' : ''}</div>`;
-  if (s.painSwap?.length) h += `<div class="card muted">No jumps today (${esc(s.painSwap.join(', '))} over 3/10 this morning): the isometric holds below stand in for them.</div>`;
-  if (s.planNote) h += `<div class="card muted plannote">${esc(s.planNote)}</div>`;
-  if (!s.blocks.length) {
-    h += `<div class="card muted">Nothing from your weekly goals fits this location and time. Add an exercise below, use a plan, or check in with more time.</div>`;
-  }
+  if (s.blockRun) h += `<div class="banner program">${esc(s.programLabel ?? 'Program')}${s.deload ? ' · deload' : ''}</div>`;
+  if (s.painSwap?.length) h += `<div class="card muted">No jumps today (${esc(s.painSwap.join(', '))}): isometric holds instead.</div>`;
+  if (s.planNote) h += `<details class="plannote"><summary>Plan notes</summary><p>${esc(s.planNote)}</p></details>`;
+  if (!s.blocks.length) h += `<div class="card muted">Nothing from your goals fits here. Add an exercise or use a plan.</div>`;
   // Goals nearly done: they fill little of the time and the rest came from the library. Offer a focused workout instead.
   const goalMin = s.goalMinutes ?? s.minutes - sessionBudget(s);
   if (s.source === 'suggested' && s.minutes - goalMin >= Math.max(15, s.minutes * 0.4) && !state.sets.some(x => x.sessionId === s.id && x.done)) {
-    h += `<div class="card focusoffer"><b>${goalMin > 0 ? `Your open goals only fill about ${goalMin} of your ${s.minutes} minutes.` : 'Nothing left from your goals here.'}</b>
-      <p class="meta">${s.blocks.length ? 'The rest is from your library (see How this was built). Or pick a focused workout instead; ' : 'Want a full workout instead? '}it uses your whole library and still counts toward any goal it matches.</p>${focusButtons(L.leanOf(s))}</div>`;
+    h += `<div class="card focusoffer"><b>${goalMin > 0 ? `Goals fill ${goalMin} of ${s.minutes} min` : 'No goals left here'}</b><p class="meta">Or a focused workout:</p>${focusButtons(L.leanOf(s))}</div>`;
   }
   // Each superset partner renders right after the block it's paired with.
   const ordered = [];
@@ -1241,19 +1236,20 @@ function viewSession(s) {
   const ideas = pairIdeas(s, ordered, credit);
   h += ordered.map(b => viewBlock(s, b, credit, ideas.get(b.id))).join('');
   if (s.mobility?.length) h += `<div class="sectionhead"><h3>Mobility</h3></div>${s.mobility.map(viewMobItem).join('')}`;
-  h += `<div class="addrow"><button class="addblock" data-act="addEx">+ Add exercise</button><button class="addblock" data-act="mobPick" data-mode="workout">+ Mobility</button></div>`;
+  h += `<div class="addrow"><button class="addblock" data-act="addEx">+ Exercise</button><button class="addblock" data-act="mobPick" data-mode="workout">+ Mobility</button></div>`;
   if (s.focusNotes?.length) {
     h += `<details class="why" ${ui.whyOpen ? 'open' : ''} data-why><summary>How this was built</summary><ul>${s.focusNotes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></details>`;
   }
   if (s.why?.length) {
+    // Picked goals get a tick; the rest say what held them back.
     h += `<details class="why" ${ui.whyOpen ? 'open' : ''} data-why><summary>Why this session</summary><ul>${s.why.map(w =>
-      `<li class="${w.picked ? 'picked' : ''}"><b>${esc(w.label)}</b> ${w.score.toFixed(2)}${w.picked ? ' ✓' : ''} <span class="meta">${esc(w.why.join(' · '))}${w.note ? ' · ' + esc(w.note) : ''}</span></li>`).join('')}</ul></details>`;
+      `<li class="${w.picked ? 'picked' : ''}"><b>${esc(w.label)}</b>${w.picked ? ' ✓' : w.note ? ` <span class="meta">${esc(w.note)}</span>` : ''}</li>`).join('')}</ul></details>`;
   }
   h += `<div class="actions">
-    <button data-act="usePlan">Use a plan instead</button>
+    <button data-act="usePlan">Use a plan</button>
     ${['suggested', 'swapped', 'focus'].includes(s.source) ? '<button data-act="regen">Regenerate</button>' : ''}
-    <button data-act="recheck">New check-in</button>
-    <button data-act="pause">Pause for later</button>
+    <button data-act="recheck">Check in again</button>
+    <button data-act="pause">Pause</button>
     <button class="primary" data-act="finish">Finish</button></div>`;
   return h;
 }
@@ -1295,13 +1291,11 @@ function viewBlock(s, b, credit, idea = null) {
   if (there) info.push(`at ${esc(there.name)}`);
   // With progression the load is last time's (+ the increment), so show what share of your e1RM that really is.
   const progPct = prog && max ? (prog.load + (ex.bodyweight ? state.settings.bodyweight || 0 : 0)) / max : null;
-  if (ex.metric === 'load_reps' && (progPct || pct)) info.push(`${round((progPct || pct) * 100)}% of e1RM`);
-  if (max) info.push(`e1RM ${round(max)}${ex.bodyweight ? ' total' : ''}`);
-  else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`no max yet: enter a load or <button class="link" data-act="maxSet" data-id="${ex.id}">set your 1RM</button>`);
-  const lastDay = prog && new Date(prog.last.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (max) info.push(`e1RM ${round(max)}${ex.bodyweight ? ' total' : ''}${ex.metric === 'load_reps' && (progPct || pct) ? ` · ${round((progPct || pct) * 100)}%` : ''}`);
+  else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`<button class="link" data-act="maxSet" data-id="${ex.id}">Set 1RM</button>`);
   const progLine = !prog ? '' : prog.up
-    ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()}: you hit every rep at ${prog.last.load} on ${lastDay}${prog.last.amrap != null ? `, ${prog.last.amrap} on the AMRAP set${prog.steps > 1 ? ' (more than double)' : ''}` : ''}</div>`
-    : `<div class="dose prog">= ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} again: ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short on ${lastDay}. Hit them all to go up.</div>`;
+    ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} · every rep at ${prog.last.load} last time${prog.last.amrap != null ? `, ${prog.last.amrap} on the AMRAP` : ''}</div>`
+    : `<div class="dose prog">= ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} again · ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short last time</div>`;
   const emom = sc.emom && b.restSec == null;
   const restBtn = emom
     ? `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ every ${clock(sc.emom)}</button>${blockSets(b).some(x => x.done) || b.emomStart ? '' : ` <button class="restchip go-emom" data-act="emomStart" data-b="${b.id}">▶ Start EMOM</button>`}`
@@ -1314,13 +1308,12 @@ function viewBlock(s, b, credit, idea = null) {
     const agg = r?.days.get(L.dayKey()) || { reps: 0, sets: 0 };
     const need = L.slotDose(state, slot, b.tier).repMin;
     const orSets = L.TIER[b.tier]?.orSets;
-    const prog = orSets ? `${agg.reps}/${need} ${L.repUnit(b.tier)} or ${agg.sets}/${cfg.setMin || orSets} ${L.setUnit(b.tier)}` : `${agg.reps}/${need} ${L.doseUnit(b.tier)}`;
-    dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? '✓ Filled' : 'Toward'} ${esc(slotLabel(slot))}: ${prog}</div>`;
+    const prog = orSets ? `${agg.reps}/${need} ${L.repUnit(b.tier)} or ${agg.sets}/${cfg.setMin || orSets} ${L.setUnit(b.tier)}` : `${agg.reps}/${need} ${L.repUnit(b.tier)}`;
+    const goal = esc(exOf(slot.exerciseId)?.name ?? famOf(slot.familyId)?.name ?? '');
+    dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? `✓ ${goal} goal done` : `${goal} · ${prog}`}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
-    dose += `<div class="dose warn">Reps-only, so it won't count toward a ${b.tier} goal on its own. Tag the sets in Week if you want it to.</div>`;
-  } else if (!slot) {
-    dose += `<div class="dose">Not part of a weekly goal. It still builds history.</div>`;
+    dose += `<div class="dose warn">Reps only: won't count toward a ${b.tier} goal</div>`;
   }
 
   const rest = restSummary(sets);
@@ -1328,7 +1321,7 @@ function viewBlock(s, b, credit, idea = null) {
 
   if (ex.explosive && (b.tier === 'T1' || b.tier === 'T2')) {
     const rd = L.powerReadiness(state, s, ex, Date.now(), b.id);
-    if (!rd.fresh) dose += `<div class="dose warn">Not fresh for power work: ${esc(rd.reasons.join('; '))}. <button class="link" data-act="toTech" data-b="${b.id}">Do it as technique</button></div>`;
+    if (!rd.fresh) dose += `<div class="dose warn">Not fresh: ${esc(rd.reasons.join('; '))} · <button class="link" data-act="toTech" data-b="${b.id}">As technique</button></div>`;
   }
 
   const warmRows = warmSets(b).map((st, i) => {
@@ -1360,17 +1353,17 @@ function viewBlock(s, b, credit, idea = null) {
   }).join('');
 
   const vid = videoUrl(ex);
+  const more = !!ui.bmore?.has(b.id);
   const group = groupOf(s, b);
   const main = b.pairOf && group[0] !== b ? group[0] : null;
   const others = group.filter(x => x !== b).map(x => esc(exOf(x.exerciseId)?.name)).join(' and ');
-  const what = main?.tier !== 'T3' ? `Superset with ${others}: do a set in its rest`
-    : group.length > 2 ? `Giant set with ${others}: one set of each, then rest` : `Superset with ${others}: alternate sets, rest after each round`;
+  const what = `${group.length > 2 ? 'Giant set' : 'Superset'} with ${others}`;
   const pairHead = main ? `<div class="sslabel">↔ ${what}
     <button class="link" data-act="pairUnlink" data-b="${b.id}">Unlink</button></div>` : '';
-  const ideaRow = idea ? `<div class="pairidea"><span>Superset idea: <b>${esc(idea.exercise.name)}</b> <span class="meta">${idea.tier ?? 'T3'} · ${esc(idea.why)}</span></span>
+  const ideaRow = idea ? `<div class="pairidea"><span>↔ <b>${esc(idea.exercise.name)}</b>${idea.tier === 'COND' ? ` <span class="meta">${condPairCal(b)} cal each rest</span>` : ''}</span>
     <span class="brow"><button class="small" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}">+ Add</button>
     <button class="small quiet" data-act="pairOpen" data-b="${b.id}">Other</button>
-    <button class="small quiet" data-act="pairNo" data-b="${b.id}">No thanks</button></span></div>` : '';
+    <button class="small quiet" data-act="pairNo" data-b="${b.id}" aria-label="No thanks">✕</button></span></div>` : '';
   return `<section class="block ${main ? 'paired' : ''} ${s.blocks.some(x => x.pairOf === b.id) ? 'haspair' : ''}">
     ${pairHead}
     <div class="bhead"><button class="tier ${b.tier}" data-act="tierEdit" data-b="${b.id}" aria-label="Change tier">${b.tier} ▾</button>
@@ -1381,17 +1374,20 @@ function viewBlock(s, b, credit, idea = null) {
     ${progLine}${dose}
     <div class="sets">${warmRows}${rows}</div>
     <div class="brow">
-      ${canWarm(b, ex) ? `<button class="small" data-act="addWarm" data-b="${b.id}">+ warm-up</button>` : ''}
       <button class="small" data-act="addSet" data-b="${b.id}">+ set</button>
       <button class="small" data-act="removeSet" data-b="${b.id}">− set</button>
-      ${canAmrap(b, ex) ? `<button class="small ${b.amrap ? 'on' : ''}" data-act="amrapToggle" data-b="${b.id}" aria-pressed="${!!b.amrap}">AMRAP last</button>` : ''}
-      <button class="small" data-act="timerStart" data-b="${b.id}">⏱ Rest</button>
       ${inPair(s, b) ? '' : `<button class="small" data-act="pairOpen" data-b="${b.id}">↔ Superset</button>`}
+      <button class="small quiet ${more ? 'on' : ''}" data-act="bMore" data-b="${b.id}" aria-expanded="${more}" aria-label="More for ${esc(ex.name)}">⋯</button>
+    </div>
+    <div class="brow bmorerow" ${more ? '' : 'hidden'}>
+      ${canWarm(b, ex) ? `<button class="small" data-act="addWarm" data-b="${b.id}">+ warm-up</button>` : ''}
+      ${canAmrap(b, ex) ? `<button class="small ${b.amrap ? 'on' : ''}" data-act="amrapToggle" data-b="${b.id}" aria-pressed="${!!b.amrap}">AMRAP last</button>` : ''}
+      <button class="small" data-act="timerStart" data-b="${b.id}">⏱ Rest now</button>
       <button class="small" data-act="exHist" data-id="${ex.id}">History</button>
       ${vid ? `<a class="small" href="${esc(vid)}" target="_blank" rel="noopener">▶ Video</a>` : ''}
+      ${ex.cues ? `<p class="meta cuesline">${esc(ex.cues)}</p>` : ''}
     </div>
     ${ideaRow}
-    ${ex.cues ? `<details class="cues"><summary>Cues</summary><p>${esc(ex.cues)}</p></details>` : ''}
   </section>`;
 }
 
@@ -1415,10 +1411,10 @@ function viewMobItem(item) {
   return `<section class="block mob">
     <div class="bhead"><span class="tier MOB">${item.def ? 'JUMP' : 'MOB'}</span><span class="mobname">${esc(ex.name)}</span>
       <button class="icon bremove" data-act="mRemove" data-i="${item.id}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
-    <div class="meta">${esc([M.doseText(ex), `rest ${clock(ex.restSec || 0)}`, ex.parts.join(', ')].filter(Boolean).join(' · '))}</div>
-    ${last ? `<div class="dose">Last time (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
+    <div class="meta">${esc([M.doseText(ex), `rest ${clock(ex.restSec || 0)}`].join(' · '))}</div>
+    ${last ? `<div class="dose">Last (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
     <div class="sets">${rows}</div>
-    <input class="mobnote" data-mnote="${item.id}" value="${esc(item.note)}" placeholder="Notes for today: depth, pain, how it felt">
+    <input class="mobnote" data-mnote="${item.id}" value="${esc(item.note)}" placeholder="Notes">
     <div class="brow">
       <button class="small" data-act="mAddSet" data-i="${item.id}">+ set</button>
       <button class="small" data-act="mRemoveSet" data-i="${item.id}">− set</button>
@@ -1432,11 +1428,9 @@ function viewMobSession(m, workoutOpen) {
   const total = m.items.reduce((n, it) => n + it.sets.length, 0);
   const done = m.items.reduce((n, it) => n + it.sets.filter(s => s.done).length, 0);
   const title = progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Your picks');
-  let h = `<header class="top"><div><h1>${m.program ? 'Jump program' : 'Mobility'}</h1><div class="sub">${esc(title)} · ${done}/${total} sets</div></div>
-    <span class="badge mobility">${m.program ? 'program' : 'mobility'}</span></header>`;
-  if (m.program) h += `<p class="meta pad">${esc(P.programDef(m.program.id)?.schedule ?? '')} Log what you did; finishing moves the program to the next day.</p>`;
-  if (workoutOpen) h += `<div class="banner">Your workout is still open. <button class="link" data-act="showWorkout">Switch to it</button></div>`;
-  h += m.items.map(viewMobItem).join('') || '<div class="card muted">Nothing here yet. Add some mobility work below.</div>';
+  let h = `<header class="top"><div><h1>${m.program ? 'Jump program' : 'Mobility'}</h1><div class="sub">${esc(title)} · ${done}/${total} sets</div></div></header>`;
+  if (workoutOpen) h += `<div class="banner">Workout still open · <button class="link" data-act="showWorkout">Switch to it</button></div>`;
+  h += m.items.map(viewMobItem).join('') || '<div class="card muted">Nothing here yet.</div>';
   return h + `<button class="addblock" data-act="mobPick" data-mode="session">+ Add mobility</button>
     <div class="actions"><button data-act="mobDiscard">Discard</button><button class="primary" data-act="mobFinish">Finish</button></div>`;
 }
@@ -1452,8 +1446,8 @@ function viewMobLibrary() {
   return `<header class="top"><h1>Library</h1><button class="primary" data-act="mobExNew">+ Mobility</button></header>${libModeSeg()}
     <input class="search" id="libq" placeholder="Search mobility" value="${esc(ui.libQuery)}" data-libq>
     <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${pf === p ? 'on' : ''}" data-act="mobPartFilter" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-    <div class="card">${list.map(e => `<div class="exrow"><button class="name" data-act="mobExEdit" data-id="${e.id}">${esc(e.name)}<span class="meta">${esc([M.doseText(e), e.parts.join(', '),
-      last.has(e.id) ? `last ${fmtAgo(last.get(e.id))}` : 'not logged yet', e.archived ? 'archived' : ''].filter(Boolean).join(' · '))}</span></button></div>`).join('') || '<p class="muted">No matches.</p>'}</div>`;
+    <div class="card">${list.map(e => `<div class="exrow"><button class="name" data-act="mobExEdit" data-id="${e.id}">${esc(e.name)}<span class="meta">${esc([M.doseText(e),
+      last.has(e.id) ? fmtAgo(last.get(e.id)) : '', e.archived ? 'archived' : ''].filter(Boolean).join(' · '))}</span></button></div>`).join('') || '<p class="muted">No matches.</p>'}</div>`;
 }
 
 function viewMobRoutine(r) {
@@ -1461,7 +1455,7 @@ function viewMobRoutine(r) {
     <div class="field"><label>Name</label><input id="mr-name" data-mrname value="${esc(r.name)}" placeholder="e.g. Hips before volleyball"></div>
     <div class="card">${r.items.map((id, i) => {
       const e = mobEx(id);
-      return `<div class="exrow"><span class="name">${esc(e?.name ?? '?')}<span class="meta">${e ? esc(`${M.doseText(e)} · ${e.parts.join(', ')}`) : ''}</span></span>
+      return `<div class="exrow"><span class="name">${esc(e?.name ?? '?')}<span class="meta">${e ? esc(M.doseText(e)) : ''}</span></span>
         <button class="icon" data-act="mobRoutineMove" data-i="${i}" data-dir="-1" aria-label="Move up">↑</button>
         <button class="icon" data-act="mobRoutineMove" data-i="${i}" data-dir="1" aria-label="Move down">↓</button>
         <button class="icon" data-act="mobRoutineDel" data-i="${i}" aria-label="Remove">✕</button></div>`;
@@ -1490,17 +1484,16 @@ function viewOnboard(d) {
   const famName = id => famOf(id)?.name ?? '?';
   let body = '';
   if (step === 'welcome') {
-    body = `<p>A few questions and the app sets up your weekly goals: 2–3 heavy lifts, support lifts and jumps, and accessory work, sized to the time you have.</p>
-      <p class="meta">About two minutes. You can change anything later, and nothing you've logged is touched.</p>
+    body = `<p>A few questions to set up your weekly goals. About two minutes.</p>
       <button class="primary big" data-act="obNext">Start</button>
-      <div class="actions"><button data-act="obImport">Import from FitNotes first</button><button data-act="obSkip">${state.settings.onboarded ? 'Cancel' : 'Skip: use the starter setup'}</button></div>`;
+      <div class="actions"><button data-act="obImport">Import from FitNotes</button><button data-act="obSkip">${state.settings.onboarded ? 'Cancel' : 'Skip'}</button></div>`;
   } else if (step === 'you') {
     body = `<div class="menu">
         ${frow('Units', `<div class="seg">${['lb', 'kg'].map(u => `<button class="${d.unit === u ? 'on' : ''}" data-act="obSet" data-k="unit" data-v="${u}">${u}</button>`).join('')}</div>`)}
-        ${frow(`Bodyweight (${d.unit})`, `<input class="num" inputmode="decimal" data-ob="bodyweight" value="${esc(d.bodyweight ?? '')}">`, 'For weighted pull-ups and dips')}
+        ${frow(`Bodyweight (${d.unit})`, `<input class="num" inputmode="decimal" data-ob="bodyweight" value="${esc(d.bodyweight ?? '')}">`)}
       </div>`;
   } else if (step === 'where') {
-    body = `<p class="meta">Name each place you train and tap the gear there. Suggestions only use exercises your gear allows.</p>` +
+    body = `<p class="meta">Name each place and tap its gear.</p>` +
       d.locations.map((l, i) => `<div class="card">
         <input class="titleinput" data-ob="loc.${i}.name" value="${esc(l.name)}" aria-label="Location name">
         <div class="chips">${state.equipment.map(eq => `<button class="chip ${l.equipment.includes(eq) ? 'on' : ''}" data-act="obEq" data-i="${i}" data-eq="${esc(eq)}">${esc(eq)}</button>`).join('')}</div>
@@ -1509,62 +1502,59 @@ function viewOnboard(d) {
   } else if (step === 'week') {
     body = `<div class="menu">
         ${frow('Workouts a week', `<input class="num" inputmode="numeric" data-ob="week.workouts" value="${esc(d.week.workouts)}">`)}
-        ${frow('Minutes each', `<input class="num" inputmode="numeric" data-ob="week.minutes" value="${esc(d.week.minutes)}">`, 'A typical session')}
-      </div><p class="meta">Used to size your goals. Any time your goals don't use is filled from your library.</p>`;
+        ${frow('Minutes each', `<input class="num" inputmode="numeric" data-ob="week.minutes" value="${esc(d.week.minutes)}">`)}
+      </div>`;
   } else if (step === 'heavy' || step === 'support') {
     const kind = step === 'heavy' ? 't1' : 't2';
     const other = step === 'heavy' ? d.t2 : d.t1;
     const groups = O.strengthChoices(state, d);
     body = (step === 'heavy'
-      ? `<p class="meta">Pick 2–3 lifts to take heavy (sets of 1–3) and stick with for a few weeks. ${Object.keys(O.picks(state, d, 't1')).length} picked.</p>`
-      : `<p class="meta">Moderate lifts that complement your heavy ones (sets of 5–8). Pick any number; the review shows what fits.</p>`) +
+      ? `<p class="meta">Pick 2–3 to take heavy · ${Object.keys(O.picks(state, d, 't1')).length} picked</p>`
+      : `<p class="meta">Moderate lifts, sets of 5–8</p>`) +
       groups.map(([label, list]) => `<div class="label">${label}</div><div class="chips">${list.filter(e => !(e.id in other)).map(e => obChip(kind, e.id, e.name, e.id in d[kind])).join('')}</div>`).join('') +
       `<button class="addblock" data-act="quickAdd" data-from="ob">+ Add an exercise</button>` +
       (step === 'support' ? `<div class="label">Power work (jumps, Olympic lifts)</div><div class="chips">${O.powerChoices(state, d).map(f => obChip('power', f.id, f.name, f.id in d.power)).join('')}</div>` : '') +
       obPicked(kind, O.picks(state, d, kind), exName) + (step === 'support' ? obPicked('power', O.picks(state, d, 'power'), famName) : '');
   } else if (step === 'pump') {
-    body = `<p class="meta">Accessory areas for pump and conditioning, done in supersets. The app picks the exercises and rotates them.</p>
+    body = `<p class="meta">Accessory areas; the exercises rotate</p>
       <div class="chips">${O.pumpChoices(state, d).map(f => obChip('pump', f.id, f.name, f.id in d.pump)).join('')}</div>` + obPicked('pump', O.picks(state, d, 'pump'), famName);
   } else if (step === 'maxes') {
     const ids = [...Object.keys(O.picks(state, d, 't1')), ...Object.keys(O.picks(state, d, 't2'))];
     body = ids.length
-      ? `<p class="meta">Optional: a 1RM you've tested sets your heavy and moderate loads (${d.unit}). Leave blank and the app learns from your sets.</p>
+      ? `<p class="meta">Optional, in ${d.unit}. Blank: learned from your sets.</p>
         <div class="menu">${ids.map(id => frow(`${esc(exName(id))}${exOf(id)?.bodyweight ? ' <span class="hint">added load</span>' : ''}`,
           `<input class="num" inputmode="decimal" data-ob="max.${id}" value="${esc(d.maxes[id] ?? '')}" placeholder="1RM">`)).join('')}</div>`
-      : `<p class="muted">No heavy or support lifts picked, so nothing to enter.</p>`;
+      : `<p class="muted">No lifts picked.</p>`;
   } else if (step === 'review') {
     const slots = O.buildSlots(state, d);
     const b = O.draftBudget(state, d);
     const label = sl => sl.exerciseId ? exName(sl.exerciseId) : famName(sl.familyId);
     body = `<div class="card flush">${slots.map(sl => `<div class="slotrow"><span class="tier ${sl.tier}">${sl.tier}</span><span class="grow"><span class="name">${esc(label(sl))}</span></span><b>${sl.quota}/wk</b></div>`).join('') || '<p class="muted pad">No goals picked.</p>'}</div>
       <div class="card"><p>${b.room >= 0
-        ? `These take about <b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes a week (${b.workouts} × ${b.minutes}). Room for about ${b.addT2} more T2 or ${b.addT3} more T3; the rest of each workout is filled from your library.`
-        : `These need about <b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> more than the ${round(b.total)} you have. Go back and lower a few, accessories first, or some will slip each week.`}</p></div>
+        ? `<b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes a week. Room for ${b.addT2} more T2 or ${b.addT3} more T3.`
+        : `<b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> over your ${round(b.total)}. Lower a few, accessories first.`}</p></div>
       <button class="primary big" data-act="obFinish">Save these goals</button>
-      <p class="meta">Replaces your weekly goals and locations. Your history stays, and you can undo right after.</p>`;
+      <p class="meta">Replaces your goals and locations; you can undo.</p>`;
   }
   const nav = step === 'welcome' || step === 'review' ? (step === 'review' ? `<div class="actions"><button data-act="obBack">Back</button></div>` : '')
     : `<div class="actions"><button data-act="obBack">Back</button><button class="primary" data-act="obNext">Next</button></div>`;
   return `<header class="top"><div><h1>${OB_TITLES[step]}</h1>${d.step ? `<div class="sub">Step ${d.step} of ${n}</div>` : ''}</div></header>${body}${nav}`;
 }
 
-// How the weekly goals fit the time you train, and how many more T2 or T3 sessions would.
+// Goal time against training time, folded away: the summary line says whether it fits.
 function weekBudgetCard() {
   const b = G.weekBudget(state);
-  const src = k => b.fromHistory[k] ? 'from your last 4 weeks' : state.settings.week?.[k] ? 'you set this' : 'a starting guess';
+  const src = k => b.fromHistory[k] ? 'last 4 weeks' : state.settings.week?.[k] ? '' : 'a guess';
   const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
-  const rows = L.TIERS.filter(t => L.TIER[t].core || b.count[t]).map(t => [t, L.TIER[t].label])
-    .map(([t, label]) => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${label}</span>
-      <span class="meta">${L.takesTime(t) ? `~${round(b.cost[t])} min each` : 'in your warm-up, no workout time'}${b.guide[t] ? ` · guide ${range(b.guide[t])} a week` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
-  const verdict = b.room >= 0
-    ? `Your goals take about <b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes. Room for about <b>${b.addT2} more T2</b> or <b>${b.addT3} more T3</b> sessions a week (or a mix).`
-    : `Your goals need about <b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> more than the ${round(b.total)} you train. Some will slip to next week: lower a quota or two, accessories first.`;
-  return `<div class="card"><h3>Week budget</h3>
-    <div class="frow"><span class="grow"><span class="name">Workouts a week</span><span class="meta">${src('workouts')}</span></span>${numIn('settings.week.workouts', state.settings.week?.workouts ?? '', `placeholder="${b.workouts}" data-rerender`)}</div>
-    <div class="frow"><span class="grow"><span class="name">Minutes each</span><span class="meta">${src('minutes')}</span></span>${numIn('settings.week.minutes', state.settings.week?.minutes ?? '', `placeholder="${b.minutes}" data-rerender`)}</div>
+  const rows = L.TIERS.filter(t => L.TIER[t].core || b.count[t]).map(t => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${L.TIER[t].label}</span>
+      <span class="meta">${L.takesTime(t) ? `~${round(b.cost[t])} min each` : 'in the warm-up'}${b.guide[t] ? ` · guide ${range(b.guide[t])}` : ''}</span></span><b>${b.count[t]}/wk</b></div>`).join('');
+  const verdict = b.room >= 0 ? `Room for ${b.addT2} more T2 or ${b.addT3} more T3 a week.` : `${round(-b.room)} min over: lower a quota or two, accessories first.`;
+  const hint = k => (src(k) ? `<span class="meta">${src(k)}</span>` : '');
+  return `<details class="card budget"><summary><b>Week budget</b> <span class="meta">${round(b.used)} of ${round(b.total)} min</span></summary>
+    <div class="frow"><span class="grow"><span class="name">Workouts a week</span>${hint('workouts')}</span>${numIn('settings.week.workouts', state.settings.week?.workouts ?? '', `placeholder="${b.workouts}" data-rerender`)}</div>
+    <div class="frow"><span class="grow"><span class="name">Minutes each</span>${hint('minutes')}</span>${numIn('settings.week.minutes', state.settings.week?.minutes ?? '', `placeholder="${b.minutes}" data-rerender`)}</div>
     ${rows}
-    <p>${verdict}</p>
-    <p class="meta">Guide = GZCL per workout (1 T1, 1–2 T2, 2–4 T3) for ${b.workouts} workouts. Time your goals don't use is filled from your library anyway, so goals are the minimum you want guaranteed each week.</p></div>`;
+    <p class="meta">${verdict}</p></details>`;
 }
 
 function viewWeek() {
@@ -1574,75 +1564,62 @@ function viewWeek() {
   const c = L.creditWeek(state);
   const fmt = t => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const dayName = k => new Date(k + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' });
-  let h = `<header class="top"><div><h1>This week</h1><div class="sub">${fmt(c.start)} – ${fmt(c.end - 864e5)} · ${L.daysLeftInWeek(state)} day(s) left</div></div>
+  const left = L.daysLeftInWeek(state);
+  let h = `<header class="top"><div><h1>This week</h1><div class="sub">${fmt(c.start)} – ${fmt(c.end - 864e5)} · ${left} day${left === 1 ? '' : 's'} left</div></div>
     <button class="small" data-act="histOpen">History</button></header>`;
   if (ui.goalsUndo) h += `<div class="banner">Goals updated. <button class="link" data-act="gsUndo">Undo</button></div>`;
-  if (ui.reviewUndo) h += `<div class="banner">Goals changed from your review. <button class="link" data-act="reviewUndo">Undo</button></div>`;
+  if (ui.reviewUndo) h += `<div class="banner">Goals changed. <button class="link" data-act="reviewUndo">Undo</button></div>`;
   h += lastWeekCard();
-
   h += weekBlockCard();
   const owned = B.ownedSlotIds(state);
   const allSlots = [...c.slots.values()].sort((a, b) => a.slot.tier.localeCompare(b.slot.tier) || (b.slot.priority - a.slot.priority));
   const slots = allSlots.filter(r => !owned.has(r.slot.id));
   const ownedRows = allSlots.filter(r => owned.has(r.slot.id));
-  h += `<div class="sectionhead"><h3>Weekly goals</h3><div class="brow"><button class="small" data-act="gsOpen">Suggest from history</button><button class="small" data-act="goalNew">+ Add goal</button></div></div>
-    <div class="card flush">${slots.map(r => {
+  const goalRow = r => {
     const pips = Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
     const unitOf = [L.repUnit(r.slot.tier), L.setUnit(r.slot.tier)];
-    const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? `${a.reps} ${unitOf[0]}` : `${a.sets} ${unitOf[1]}`}${a.met ? ' ✓' : ' (partial)'}`).join(' · ');
+    const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? `${a.reps} ${unitOf[0]}` : `${a.sets} ${unitOf[1]}`}${a.met ? ' ✓' : ''}`).join(' · ');
     const ex = exOf(r.slot.exerciseId);
     const name = ex?.name ?? famOf(r.slot.familyId)?.name;
-    const sub = [r.slot.quota ? '' : 'paused', ex ? famOf(r.slot.familyId)?.name : 'any exercise in family', days].filter(Boolean).join(' · ');
+    const sub = [r.slot.quota ? '' : 'paused', days].filter(Boolean).join(' · ');
     return `<button class="slotrow" data-act="goalEdit" data-id="${r.slot.id}"><span class="tier ${r.slot.tier}">${r.slot.tier}</span>
-      <span class="grow"><span class="name">${esc(name)}</span><span class="meta">${esc(sub)}</span></span>
+      <span class="grow"><span class="name">${esc(name)}</span>${sub ? `<span class="meta">${esc(sub)}</span>` : ''}</span>
       <span class="pips">${pips}</span></button>`;
-  }).join('') || '<p class="muted pad">No weekly goals yet. Add one to get suggestions.</p>'}</div>`;
+  };
+  h += `<div class="sectionhead"><h3>Weekly goals</h3><div class="brow"><button class="small" data-act="gsOpen">Suggest</button><button class="small" data-act="goalNew">+ Goal</button></div></div>
+    <div class="card flush">${slots.map(goalRow).join('') || '<p class="muted pad">No weekly goals yet.</p>'}</div>`;
   if (ownedRows.length) {
-    h += `<details class="owned"><summary>Paused while ${esc(state.block?.group ?? 'the program')} runs: ${ownedRows.length} goal${ownedRows.length === 1 ? '' : 's'}</summary><div class="card flush">${ownedRows.map(r =>
-      `<button class="slotrow" data-act="goalEdit" data-id="${r.slot.id}"><span class="tier ${r.slot.tier}">${r.slot.tier}</span><span class="grow"><span class="name">${esc(exOf(r.slot.exerciseId)?.name ?? famOf(r.slot.familyId)?.name)}</span>
-        <span class="meta">${r.days.size ? `${r.exposures} day${r.exposures === 1 ? '' : 's'} this week via the program` : 'the program has it'}</span></span></button>`).join('')}</div></details>`;
+    h += `<details class="owned"><summary>${ownedRows.length} paused for ${esc(state.block?.group ?? 'the program')}</summary><div class="card flush">${ownedRows.map(goalRow).join('')}</div></details>`;
   }
   h += `<div class="brow pad"><button class="small" data-act="reviewOpen" data-w="${c.start}">Review this week</button></div>`;
   h += weekBudgetCard();
 
-  const wk = L.sessionStats(state, c.start, c.end), all = L.sessionStats(state);
-  const secs = v => v == null ? '—' : `${round(v)}s`;
-  const acc = st => st.count ? `${round(100 * st.bySource.suggested / st.count)}% as suggested · ${st.bySource.swapped} swapped · ${st.bySource.custom} custom` : '—';
-  h += `<div class="card"><h3>Loop health</h3>
-    <div class="kv"><span>Check-in → first set (median)</span><b>${secs(wk.medianToFirstSet)} week · ${secs(all.medianToFirstSet)} all</b></div>
-    <div class="kv"><span>Sessions this week</span><b>${wk.count}</b></div>
-    <div class="kv"><span>Acceptance (week)</span><b>${acc(wk)}</b></div></div>`;
-
   const sets = state.sets.filter(s => s.done && !s.warmup && s.loggedAt >= c.start && s.loggedAt < c.end).sort((a, b) => a.loggedAt - b.loggedAt);
   if (sets.length) {
+    // What each set counts toward, to fix by hand: folded away.
     const byDay = new Map();
     for (const s of sets) { const k = L.dayKey(s.loggedAt); byDay.set(k, [...(byDay.get(k) || []), s]); }
-    h += `<h3>Sets and what they count toward</h3>`;
+    h += `<details class="card setsweek"><summary><b>Sets this week</b> <span class="meta">${sets.length}</span></summary>`;
     for (const [k, list] of byDay) {
-      h += `<div class="card"><div class="dayhead">${dayName(k)}</div>${list.map(s => {
+      h += `<div class="dayhead">${dayName(k)}</div>${list.map(s => {
         const ex = exOf(s.exerciseId);
         const auto = L.autoSlotFor(state, s);
         const autoLbl = auto ? slotLabel(L.byId(state.slots, auto)) : 'none';
         const val = s.countsManual ? (s.countsToward ?? 'none') : 'auto';
-        const amount = setAmount(ex, s);
-        return `<div class="setlog"><div class="grow"><span class="tier ${s.tier}">${s.tier}</span> ${esc(ex?.name ?? '?')} <span class="meta">${esc(amount)}</span></div>
-          <select data-counts="${s.id}">${opts([['auto', `Auto: ${autoLbl}`], ...state.slots.map(sl => [sl.id, slotLabel(sl)]), ['none', 'Counts toward nothing']], val)}</select></div>`;
-      }).join('')}</div>`;
+        return `<div class="setlog"><div class="grow"><span class="tier ${s.tier}">${s.tier}</span> ${esc(ex?.name ?? '?')} <span class="meta">${esc(setAmount(ex, s))}</span></div>
+          <select data-counts="${s.id}" aria-label="Counts toward">${opts([['auto', `Auto: ${autoLbl}`], ...state.slots.map(sl => [sl.id, slotLabel(sl)]), ['none', 'Nothing']], val)}</select></div>`;
+      }).join('')}`;
     }
-  } else {
-    h += `<p class="muted">No sets logged this week yet.</p>`;
+    h += `</details>`;
   }
   const mw = M.weekSummary(state, c.start, c.end);
-  h += `<div class="sectionhead"><h3>Mobility this week</h3></div><div class="card">${mw.sessions
-    ? `<p>${mw.sessions} session${mw.sessions === 1 ? '' : 's'} on ${mw.days} day${mw.days === 1 ? '' : 's'}. Highlighted: body parts you've worked.</p>
-      <div class="chips">${M.BODY_PARTS.map(p => `<span class="chip ${mw.parts.includes(p) ? 'on' : ''}">${esc(p)}</span>`).join('')}</div>`
-    : '<p class="muted">None yet. Start one from Today, or add mobility to a workout.</p>'}</div>`;
+  if (mw.sessions) h += `<div class="card"><b>Mobility</b> <span class="meta">${mw.sessions} session${mw.sessions === 1 ? '' : 's'}${mw.parts.length ? ` · ${esc(mw.parts.join(', '))}` : ''}</span></div>`;
   for (const d of P.PROGRAMS) {
     const p = P.progress(state, d.id);
     if (!p) continue;
     const n = P.programSessions(state, d.id).filter(m => m.startedAt >= c.start && m.startedAt < c.end).length;
     h += `<button class="card row" data-act="progOpen" data-id="${d.id}"><span><b>${esc(d.name)}</b>
-      <span class="meta">${n} of ${d.days} days this week · ${p.finished ? 'finished' : `next: week ${p.week}, day ${p.day}`}</span></span><span>›</span></button>`;
+      <span class="meta">${n}/${d.days} days · ${p.finished ? 'finished' : `next: week ${p.week}, day ${p.day}`}</span></span><span>›</span></button>`;
   }
   return h;
 }
@@ -1864,11 +1841,10 @@ function viewHistoryEdit(hs) {
       <div class="brow"><button class="small" data-act="histAddSet" data-g="${esc(g.key)}">+ set</button></div></section>`;
   }).join('');
   return `<header class="top sub"><button class="back" data-act="histEditDone">‹ History</button></header><h1 class="pagetitle">Edit workout</h1>
-    <p class="meta pad">Changes save as you type. Weekly goals and estimated maxes follow.</p>
     <div class="card"><div class="field"><label for="hist-date">Date</label><input id="hist-date" type="date" data-hdate max="${L.dayKey()}" value="${L.dayKey(when)}"></div>
       <div class="field"><label for="hist-loc">Where</label><select id="hist-loc" data-hloc>${[['', '—'], ...state.locations.map(l => [l.id, l.name])].map(([v, t]) => `<option value="${esc(v)}" ${v === (s.locationId ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
       <div class="field"><label for="hist-dur">How long (min) <span class="hint">optional</span></label><input id="hist-dur" class="num" inputmode="numeric" data-hdur value="${esc(s.durationMin ?? '')}" placeholder="${loggedMinutes(s) ?? ''}">
-        <p class="meta">For a workout logged after the fact. Left empty, it's first set to last.</p></div></div>
+</div></div>
     ${groups || '<p class="muted">No exercises left in this workout.</p>'}
     <button class="addblock" data-act="histAddEx">+ Add exercise</button>
     <div class="actions"><button class="danger" data-act="histDeleteWorkout">Delete workout</button><button class="primary" data-act="histEditDone">Done</button></div>`;
@@ -1892,7 +1868,7 @@ function viewHistory(hs) {
       else {
         bits.push(L.placeOf(state, s)?.name);
         const mins = s.durationMin ?? Math.round((e.end - e.at) / 60e3);
-        if (mins > 0) bits.push(s.status === 'done' && s.minutes ? `planned ${s.minutes} · took ${mins} min` : `${mins} min`);
+        if (mins > 0) bits.push(`${mins} min`);
       }
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
       if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
@@ -1953,7 +1929,7 @@ function viewProgress() {
   // Tiles: per-week averages in this range, against the same length of time before it.
   const now = PG.summary(state, from, to), was = pg.range === 'all' ? null : PG.summary(state, prev.from, prev.to);
   const tile = (label, v, w, fmt, dp = 0) => `<div class="tile"><div class="tlabel">${label}</div><div class="tvalue">${v == null ? '—' : fmt(v)}</div>
-    ${was && v != null && w != null && (w > 0 || v > 0) ? `<div class="tdelta">${w > 0 ? `${signedNum(100 * (v - w) / w)}%` : 'new'} vs previous ${pg.range === '1y' ? 'year' : `${Math.round(days / 7)} wk`}</div>` : ''}</div>`;
+    ${was && v != null && w > 0 ? `<div class="tdelta">${signedNum(100 * (v - w) / w)}% vs prior ${pg.range === '1y' ? 'year' : `${Math.round(days / 7)} wk`}</div>` : ''}</div>`;
   h += `<div class="tiles">
     ${tile('Workouts / week', now.workouts, was?.workouts, v => v.toFixed(1))}
     ${tile(`Volume / week (${u})`, now.volume, was?.volume, CH.fmtNum)}
@@ -1971,27 +1947,27 @@ function viewProgress() {
     const ch = PG.liftChange(ser);
     const name = exOf(pg.lift)?.name ?? '?';
     const chart = CH.lineChart('e1rm', `${name} estimated 1-rep max`, ser.map(p => ({ t: p.t, v: p.v, tip: { value: `${Math.round(p.v)} ${u}`, title: fmtShortDay(p.t), sub: `best set ${p.load} × ${p.reps}` } })), { unit: '' });
-    const take = ch ? `<b>${signedNum(ch.delta)} ${u}</b> in this range (${Math.round(ch.first)} → ${Math.round(ch.last)}; best ${Math.round(ch.best)}).` : ser.length ? 'One day logged in this range: more days draw the trend.' : '';
+    const take = ch ? `<b>${signedNum(ch.delta)} ${u}</b> · ${Math.round(ch.first)} → ${Math.round(ch.last)}${ch.best > ch.last ? ` · best ${Math.round(ch.best)}` : ''}` : '';
     h += chartCard('e1rm', 'Estimated 1-rep max', take, chart,
       { head: ['Day', `e1RM (${u})`, 'Best set'], rows: ser.map(p => [fmtShortDay(p.t), Math.round(p.v), `${p.load} × ${p.reps}`]) },
-      `<select class="liftpick" data-proglift aria-label="Lift">${opts(lifts.map(x => [x.id, `${x.name} (${x.count} sets)`]), pg.lift)}</select>`);
+      `<select class="liftpick" data-proglift aria-label="Lift">${opts(lifts.map(x => [x.id, x.name]), pg.lift)}</select>`);
   }
 
   // Volume and reps per workout.
   const ws = PG.workouts(state, from, to);
   const avg = k => ws.length ? ws.reduce((x, w) => x + w[k], 0) / ws.length : 0;
-  const half = k => { const n = Math.floor(ws.length / 2); if (n < 2) return ''; const a = ws.slice(0, n), b = ws.slice(-n); const m = xs => xs.reduce((x, w) => x + w[k], 0) / xs.length; const d = m(a) ? 100 * (m(b) - m(a)) / m(a) : 0; return ` Your last ${n} workouts average ${signedNum(d)}% against your first ${n}.`; };
-  h += chartCard('volume', 'Volume per workout', ws.length ? `Load × reps on loaded lifts. Average <b>${CH.fmtNum(avg('volume'))} ${u}</b>.${half('volume')}` : '',
+  const half = k => { const n = Math.floor(ws.length / 2); if (n < 2) return ''; const a = ws.slice(0, n), b = ws.slice(-n); const m = xs => xs.reduce((x, w) => x + w[k], 0) / xs.length; const d = m(a) ? 100 * (m(b) - m(a)) / m(a) : 0; return ` · last ${n} vs first ${n}: ${signedNum(d)}%`; };
+  h += chartCard('volume', 'Volume per workout', ws.length ? `Avg <b>${CH.fmtNum(avg('volume'))} ${u}</b>${half('volume')}` : '',
     CH.columnChart('volume', 'Volume per workout', ws.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.volume }], tip: { value: `${CH.fmtNum(w.volume)} ${u}`, title: fmtShortDay(w.t), sub: `${w.sets} sets` } }))),
     { head: ['Workout', `Volume (${u})`, 'Sets'], rows: ws.map(w => [fmtShortDay(w.t), Math.round(w.volume).toLocaleString('en-US'), w.sets]) });
-  h += chartCard('reps', 'Reps per workout', ws.length ? `Average <b>${Math.round(avg('reps'))}</b> reps.${half('reps')}` : '',
+  h += chartCard('reps', 'Reps per workout', ws.length ? `Avg <b>${Math.round(avg('reps'))}</b>${half('reps')}` : '',
     CH.columnChart('reps', 'Reps per workout', ws.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.reps }], tip: { value: `${w.reps} reps`, title: fmtShortDay(w.t), sub: `${w.sets} sets` } }))),
     { head: ['Workout', 'Reps', 'Sets'], rows: ws.map(w => [fmtShortDay(w.t), w.reps, w.sets]) });
 
   // Energy by day.
   const en = PG.energySeries(state, from, to);
   const low = en.filter(e => e.v <= 2).length;
-  h += chartCard('energy', 'Energy by day', en.length ? `Average <b>${(en.reduce((x, e) => x + e.v, 0) / en.length).toFixed(1)}</b> over ${en.length} day${en.length === 1 ? '' : 's'}; ${low} low day${low === 1 ? '' : 's'} (1–2). From the morning check, else that day's check-in.` : '',
+  h += chartCard('energy', 'Energy by day', en.length ? `Avg <b>${(en.reduce((x, e) => x + e.v, 0) / en.length).toFixed(1)}</b> · ${low} low day${low === 1 ? '' : 's'}` : '',
     CH.lineChart('energy', 'Energy by day', en.map(e => ({ t: e.t, v: e.v, tip: { value: `${e.v} / 5`, title: fmtShortDay(e.t), sub: e.source === 'morning' ? 'morning check' : 'check-in' } })), { domain: [1, 5], fmt: v => String(v) }),
     { head: ['Day', 'Energy', 'From'], rows: en.map(e => [fmtShortDay(e.t), e.v, e.source]) });
 
@@ -2000,15 +1976,14 @@ function viewProgress() {
   const keys = [['T1', 'T1 heavy'], ['T2', 'T2 moderate'], ['T3', 'T3 accessory'], ['Other', 'Other']];
   const tot = w => w.sets.T1 + w.sets.T2 + w.sets.T3 + w.sets.Other;
   const share = k => { const all = wk.reduce((x, w) => x + tot(w), 0); return all ? Math.round(100 * wk.reduce((x, w) => x + w.sets[k], 0) / all) : 0; };
-  h += chartCard('tiers', 'Working sets per week, by tier', wk.some(w => tot(w)) ? `T1 ${share('T1')}% · T2 ${share('T2')}% · T3 ${share('T3')}% of your sets. GZCL's rough guide is a little T1, more T2, most T3.` : '',
+  h += chartCard('tiers', 'Sets per week by tier', wk.some(w => tot(w)) ? `T1 ${share('T1')}% · T2 ${share('T2')}% · T3 ${share('T3')}%` : '',
     CH.columnChart('tiers', 'Working sets per week by tier', wk.some(w => tot(w)) ? wk.map(w => ({ t: w.start, parts: keys.map(([k]) => ({ key: k, v: w.sets[k] })), tip: { value: `${tot(w)} sets`, title: weekLabel(w.start), sub: keys.map(([k]) => `${k} ${w.sets[k]}`).join(' · ') } })) : []),
     { head: ['Week', 'T1', 'T2', 'T3', 'Other'], rows: wk.map(w => [weekLabel(w.start), w.sets.T1, w.sets.T2, w.sets.T3, w.sets.Other]) }, legend(keys));
   const hit = wk.filter(w => w.quota > 0);
   const avgHit = hit.length ? Math.round(100 * hit.reduce((x, w) => x + w.filled / w.quota, 0) / hit.length) : null;
-  h += chartCard('goals', 'Weekly goals hit', avgHit != null ? `Average <b>${avgHit}%</b> of goal sessions a week (this week counts so far).` : '',
+  h += chartCard('goals', 'Weekly goals hit', avgHit != null ? `Avg <b>${avgHit}%</b> a week` : '',
     CH.columnChart('goals', 'Share of weekly goal sessions hit', hit.map(w => ({ t: w.start, parts: [{ key: 'series', v: Math.round(100 * w.filled / w.quota) }], tip: { value: `${Math.round(100 * w.filled / w.quota)}%`, title: weekLabel(w.start), sub: `${w.filled} of ${w.quota} goal sessions` } })), { max: 100, fmt: v => `${v}%` }),
     { head: ['Week', 'Hit', 'Goal sessions'], rows: hit.map(w => [weekLabel(w.start), `${Math.round(100 * w.filled / w.quota)}%`, `${w.filled} of ${w.quota}`]) });
-  h += `<p class="meta pad">Volume counts loaded lifts only (bodyweight included for weighted bodyweight lifts). Tap a chart to read a point.</p>`;
   return h;
 }
 
@@ -2056,14 +2031,14 @@ function viewLibrary() {
     const all = L.familyMembers(state, f.id);
     const members = all.filter(e => (ui.showArchived || !e.archived) && (!q || famMatch || e.name.toLowerCase().includes(q)));
     if (!members.length && (q || all.length)) continue; // nothing to show; truly empty families stay so you can add to them
-    h += `<div class="card"><h3>${esc(f.name)} <span class="hint">harder ↑ easier ↓</span></h3>${members.map(e => {
+    h += `<div class="card"><h3>${esc(f.name)}</h3>${members.map(e => {
       const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
-      const meta = [METRICS.find(m => m[0] === e.metric)?.[1], e.equipment.join(', ') || 'no equipment', e.explosive ? 'explosive' : '', e.region === 'lower' || e.region === 'upper' ? `${e.region} body` : '', e.anytime ? 'any time' : '', e.archived ? 'archived' : '', max ? `e1RM ${round(max)}` : ''].filter(Boolean).join(' · ');
-      return `<div class="exrow"><button class="name" data-act="libEdit" data-id="${e.id}">${f.defaultExerciseId === e.id ? '★ ' : ''}${esc(e.name)}<span class="meta">${esc(meta)}</span></button>
+      const meta = [max ? `e1RM ${round(max)}` : '', e.equipment.join(', '), e.archived ? 'archived' : ''].filter(Boolean).join(' · ');
+      return `<div class="exrow"><button class="name" data-act="libEdit" data-id="${e.id}">${f.defaultExerciseId === e.id ? '★ ' : ''}${esc(e.name)}${meta ? `<span class="meta">${esc(meta)}</span>` : ''}</button>
         <button class="icon" data-act="libMove" data-id="${e.id}" data-dir="-1" aria-label="Move up">↑</button>
         <button class="icon" data-act="libMove" data-id="${e.id}" data-dir="1" aria-label="Move down">↓</button></div>`;
     }).join('') || '<p class="muted">Empty family.</p>'}
-    <button class="small" data-act="quickAdd" data-fam="${f.id}">+ Add to ${esc(f.name)}</button></div>`;
+    <button class="small" data-act="quickAdd" data-fam="${f.id}">+ Add</button></div>`;
   }
   return h;
 }
@@ -2093,30 +2068,27 @@ function viewPlans() {
         <button data-act="planCancel">Cancel</button><button class="primary" data-act="planSave">Save plan</button></div>`;
   }
   let h = `<header class="top"><h1>Plans</h1><button class="primary" data-act="planNew">+ New plan</button></header>`;
-  // Starting points outside your weekly goals: jump programs and mobility.
   h += programCards();
-  const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? ` · last ${fmtAgo(t)}` : ''; };
-  h += `<div class="field"><label>Mobility <span class="hint">its own session, outside your weekly goals</span></label><div class="list">${state.mobility.routines.map(r =>
-    `<button class="row" data-act="mobStart" data-id="${r.id}"><span>${esc(r.name)}</span><span class="meta">${r.items.length} exercises${lastRoutine(r.id)}</span></button>`).join('')}
-    <button class="row add" data-act="mobPick" data-mode="new">Pick body parts ›</button></div></div>
-    <div class="sectionhead"><h3>Saved plans</h3></div>`;
+  // Mobility routines: tap to start one, ✎ to edit it.
+  const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? fmtAgo(t) : ''; };
+  h += `<div class="sectionhead"><h3>Mobility</h3><button class="small" data-act="mobRoutineNew">+ Routine</button></div>
+    <div class="card flush">${state.mobility.routines.map(r => `<div class="exrow"><button class="name" data-act="mobStart" data-id="${r.id}">${esc(r.name)}<span class="meta">${[`${r.items.length} exercises`, lastRoutine(r.id)].filter(Boolean).join(' · ')}</span></button>
+      <button class="icon" data-act="mobRoutineEdit" data-id="${r.id}" aria-label="Edit ${esc(r.name)}">✎</button></div>`).join('')}
+      <button class="row add" data-act="mobPick" data-mode="new">Pick body parts ›</button></div>`;
   const own = state.plans.filter(p => !p.group);
-  if (!own.length) h += `<p class="muted">Hand-built sessions you can pick instead of the suggestion. Choosing one is logged as an override.</p>`;
   const planItems = p => esc(p.items.map(it => `${it.tier} ${exOf(it.exerciseId)?.name ?? '?'} ${schOf(it.schemeId)?.name ?? ''}`).join(' · '));
-  h += own.map(p => `<button class="card row" data-act="planEdit" data-id="${p.id}"><span><b>${esc(p.name)}</b>
-    <span class="meta">${planItems(p)}</span></span><span>›</span></button>`).join('');
-  // Plan groups (the THP-style jump plan): a heading, what it's about, and each day with Start and Edit.
+  if (own.length) {
+    h += `<div class="sectionhead"><h3>Saved plans</h3></div>` + own.map(p => `<button class="card row" data-act="planEdit" data-id="${p.id}"><span><b>${esc(p.name)}</b>
+      <span class="meta">${planItems(p)}</span></span><span>›</span></button>`).join('');
+  }
+  // Plan groups (the THP-style jump plan): a heading, what it's about (folded), and each day with Start and Edit.
   for (const g of [...new Set(state.plans.filter(p => p.group).map(p => p.group))]) {
     const about = g === THP.THP_GROUP ? THP.THP_ABOUT : '';
-    h += `<div class="sectionhead"><h3>${esc(g)}</h3></div>${about ? `<p class="meta pad">${esc(about)}</p>` : ''}${groupBlockRow(g)}`;
+    h += `<div class="sectionhead"><h3>${esc(g)}</h3></div>${about ? `<details class="plannote"><summary>About</summary><p>${esc(about)}</p></details>` : ''}${groupBlockRow(g)}`;
     h += state.plans.filter(p => p.group === g).map(p => `<div class="card plangroup"><b>${esc(p.name)}</b>
-      <div class="meta">${planItems(p)}</div>${p.note ? `<p class="meta">${esc(p.note)}</p>` : ''}
+      <div class="meta">${planItems(p)}</div>${p.note ? `<details class="plannote"><summary>Notes</summary><p>${esc(p.note)}</p></details>` : ''}
       <div class="brow"><button class="small primary" data-act="startPlan" data-id="${p.id}">Start</button><button class="small" data-act="planEdit" data-id="${p.id}">Edit</button></div></div>`).join('');
   }
-  h += `<div class="sectionhead"><h3>Mobility routines</h3><button class="small" data-act="mobRoutineNew">+ New routine</button></div>`;
-  h += state.mobility.routines.map(r => `<button class="card row" data-act="mobRoutineEdit" data-id="${r.id}"><span><b>${esc(r.name)}</b>
-    <span class="meta">${esc(r.items.map(id => mobEx(id)?.name ?? '?').join(' · '))}</span></span><span>›</span></button>`).join('')
-    || '<p class="muted">No mobility routines yet.</p>';
   return h;
 }
 
@@ -2143,28 +2115,28 @@ function viewSettingsMenu() {
   const st = state.settings, tc = st.timer;
   const t1 = state.tiers.T1;
   const summary = {
-    you: `${st.bodyweight ? `${st.bodyweight} ${unit()}` : 'Bodyweight not set'} · week starts ${WEEKDAYS[st.weekStartDay]}`,
-    timer: [tc.autoStart ? 'Starts automatically' : 'Manual start', tc.sound ? 'beeps' : 'silent', tc.keepAwake ? 'screen stays on' : ''].filter(Boolean).join(' · '),
+    you: `${st.bodyweight ? `${st.bodyweight} ${unit()}` : 'Bodyweight not set'}`,
+    timer: [tc.autoStart ? 'Automatic' : 'Manual', tc.sound ? 'beeps' : 'silent'].join(' · '),
     locations: state.locations.map(l => l.name).join(', '),
-    tiers: `T1 ${t1.repMin}–${t1.repMax} reps at ${round(t1.intMin * 100)}%+ · T2 · T3`,
+    tiers: `T1 ${t1.repMin}–${t1.repMax} reps at ${round(t1.intMin * 100)}%+`,
     schemes: `${state.schemes.length} schemes`,
-    maxes: (() => { const n = state.exercises.filter(e => e.testedMax?.load > 0).length; return n ? `${n} entered · used for T1 and T2 loads` : 'Enter your tested maxes for T1 and T2 loads'; })(),
-    data: `Last backup: ${st.lastExportAt ? new Date(st.lastExportAt).toLocaleDateString() : 'never'}`,
+    maxes: (() => { const n = state.exercises.filter(e => e.testedMax?.load > 0).length; return n ? `${n} entered` : 'None entered'; })(),
+    data: `Last backup ${st.lastExportAt ? new Date(st.lastExportAt).toLocaleDateString() : 'never'}`,
   };
   return `<header class="top"><h1>Settings</h1></header>
     <div class="menu">
       ${SETTINGS_PAGES.slice(0, 3).map(([k, t]) => menuRow(k, t, summary[k])).join('')}
       <button class="menurow" data-act="goWeek"><span class="grow"><span class="name">Weekly goals</span>
-        <span class="meta">${state.slots.length} goals · edit on the Week tab</span></span><span class="chev">›</span></button>
+        <span class="meta">${state.slots.length} · on the Week tab</span></span><span class="chev">›</span></button>
     </div>
     <div class="label">Programming</div>
     <div class="menu">${SETTINGS_PAGES.slice(3, 6).map(([k, t]) => menuRow(k, t, summary[k])).join('')}</div>
     <div class="menu">${menuRow('data', 'Backup and data', summary.data)}
       <button class="menurow" data-act="setupAgain"><span class="grow"><span class="name">Set up again</span>
-        <span class="meta">Walk through locations, your week, lifts and maxes; replaces your goals</span></span><span class="chev">›</span></button></div>
+        <span class="meta">replaces your goals</span></span><span class="chev">›</span></button></div>
     <div class="label">App</div>
     <div class="menu"><button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
-      <span class="meta">${ui.swVersion ? `You have ${esc(String(ui.swVersion).replace(/^afp-/, ''))}. ` : ''}Reloads the app fresh from the server; your data stays</span></span></button></div>`;
+      <span class="meta">${ui.swVersion ? `you have ${esc(String(ui.swVersion).replace(/^afp-/, ''))} · ` : ''}your data stays</span></span></button></div>`;
 }
 
 const menuRow = (k, t, sub) => `<button class="menurow" data-act="setPage" data-p="${k}"><span class="grow"><span class="name">${esc(t)}</span>
@@ -2179,24 +2151,24 @@ const switchIn = (path, on) => `<input type="checkbox" class="switch" data-bind=
 function settingsYou() {
   const st = state.settings;
   return `<div class="menu">
-      ${frow(`Bodyweight (${unit()})`, numIn('settings.bodyweight', st.bodyweight), 'Used for weighted pull-ups and dips')}
+      ${frow(`Bodyweight (${unit()})`, numIn('settings.bodyweight', st.bodyweight))}
       ${frow('Units', `<select data-bind="settings.unit" data-rerender>${opts([['lb', 'lb'], ['kg', 'kg']], st.unit)}</select>`)}
-      ${frow('Round loads to', numIn('settings.increment', st.increment), `Smallest jump you can load, in ${unit()}`)}
-      ${frow(`Kettlebells (${unit()})`, `<input class="list" inputmode="decimal" data-kb value="${esc((st.kettlebells || []).join(', '))}" placeholder="30, 40, 53">`, 'Kettlebell loads use these')}
-      ${frow('Changeover (min)', numIn('settings.changeover', st.changeover ?? 2), 'Added per exercise in suggestions: moving, loading and setting up. Jumps take none. Your own pace replaces it where learned (below).')}
-      ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`, 'Weekly goals reset on this day')}
+      ${frow(`Round loads to (${unit()})`, numIn('settings.increment', st.increment))}
+      ${frow(`Kettlebells (${unit()})`, `<input class="list" inputmode="decimal" data-kb value="${esc((st.kettlebells || []).join(', '))}" placeholder="30, 40, 53">`)}
+      ${frow('Changeover (min)', numIn('settings.changeover', st.changeover ?? 2), 'setup time per exercise')}
+      ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`)}
     </div>
     <div class="label">Suggestions</div>
-    <div class="menu">${frow('Power work on low-energy days', switchIn('settings.recovery.powerWhenTired', st.recovery?.powerWhenTired !== false), 'Cleans and snatches stay power work at energy 1–2, in short sets. Off: they become technique work')}
-      ${frow('Rest what you trained yesterday', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1), 'The day after heavy or moderate lower-body work, lower-body strength goals wait and upper-body ones come first (and the other way round)')}
-      ${frow('Learn from my swaps', switchIn('settings.learnTaste', st.learnTaste !== false), 'Suggestions follow what you swap to, swap away from and remove. Favorites and Never suggest always count')}
+    <div class="menu">${frow('Power work on low-energy days', switchIn('settings.recovery.powerWhenTired', st.recovery?.powerWhenTired !== false), 'off: technique work instead')}
+      ${frow('Rest what you trained yesterday', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1), 'alternate upper and lower days')}
+      ${frow('Learn from my swaps', switchIn('settings.learnTaste', st.learnTaste !== false))}
       <button class="menurow" data-act="tasteForget"><span class="grow"><span class="name">Forget what it learned</span>
-        <span class="meta">${st.tasteSince ? `Earlier swaps are ignored since ${esc(new Date(st.tasteSince).toLocaleDateString())}` : 'Starts it fresh; your history stays'}</span></span></button></div>
+        ${st.tasteSince ? `<span class="meta">since ${esc(new Date(st.tasteSince).toLocaleDateString())}</span>` : ''}</span></button></div>
     <div class="label">Pace</div>
-    <div class="menu">${frow('Use my pace', switchIn('settings.learnPace', st.learnPace !== false) , 'Time estimates use how long you take per set and between exercises, from when you log sets')}
+    <div class="menu">${frow('Use my pace', switchIn('settings.learnPace', st.learnPace !== false), 'time estimates from your sets')}
       ${paceRows()}
       <button class="menurow" data-act="paceReset"><span class="grow"><span class="name">Reset my pace</span>
-        <span class="meta">${st.paceSince ? `Learning since ${esc(new Date(st.paceSince).toLocaleDateString())}` : 'Earlier workouts stop counting; your history stays'}</span></span></button></div>`;
+        ${st.paceSince ? `<span class="meta">learning since ${esc(new Date(st.paceSince).toLocaleDateString())}</span>` : ''}</span></button></div>`;
 }
 
 // What the estimates learned: changeover per location, and how many per-set times.
@@ -2206,28 +2178,26 @@ function paceRows() {
   const rows = state.locations.map(l => {
     const c = p.all.get(l.id);
     const text = !c ? 'not learned yet' : p.change.has(l.id)
-      ? `${(Math.round(c.minutes * 2) / 2).toFixed(1)} min changeover, from ${c.sessions} workout${c.sessions === 1 ? '' : 's'}`
-      : `learning (${c.samples} of ${MIN_CHANGEOVERS} changeovers)`;
+      ? `${(Math.round(c.minutes * 2) / 2).toFixed(1)} min changeover`
+      : `learning (${c.samples}/${MIN_CHANGEOVERS})`;
     return `<div class="frow"><span class="grow"><span class="name">${esc(l.name)}</span><span class="meta">${esc(text)}</span></span></div>`;
   });
   const n = p.perSet.size;
-  rows.push(`<div class="frow"><span class="grow"><span class="name">Per-set times</span><span class="meta">${n ? `${n} exercise${n === 1 ? '' : 's'} learned from ${p.used} workout${p.used === 1 ? '' : 's'}` : 'after 3 cleanly logged workouts with an exercise'}</span></span></div>`);
+  rows.push(`<div class="frow"><span class="grow"><span class="name">Per-set times</span><span class="meta">${n ? `${n} exercise${n === 1 ? '' : 's'}` : 'not learned yet'}</span></span></div>`);
   return rows.join('');
 }
 
 function settingsTimer() {
   const tc = state.settings.timer;
   const sw = (key, label, hint) => frow(label, switchIn(`settings.timer.${key}`, tc[key]), hint);
-  return `<p class="meta pad">Each scheme sets the rest. An exercise can override it, and you can change it for today by tapping ⏱ on a block.
-      Timed sets and mobility holds have ▶ to run a hold timer: it counts you in, times the hold (each side in turn when it's per side) and logs the set.</p>
-    <div class="menu">
+  return `<div class="menu">
       ${sw('autoStart', 'Start when I log a set')}
       ${sw('sound', 'Beep when rest is over')}
       ${sw('warn10', 'Beep at 10 seconds left')}
       ${sw('vibrate', 'Vibrate when rest is over', 'Android only')}
-      ${sw('keepAwake', 'Keep the screen on', 'During a session')}
-      ${sw('notify', 'Notify in the background', 'Works best on Android with the app installed')}
-      ${frow('Get-ready countdown (s)', numIn('settings.timer.prep', tc.prep ?? 5), 'Before a hold timer starts, and between sides')}
+      ${sw('keepAwake', 'Keep the screen on')}
+      ${sw('notify', 'Notify in the background', 'best on Android')}
+      ${frow('Get-ready countdown (s)', numIn('settings.timer.prep', tc.prep ?? 5), 'before hold timers')}
     </div>
     <div class="actions"><button data-act="timerTest">Test sound</button>
       ${tc.notify ? '<button data-act="notifyTest">Test notification</button>' : ''}</div>`;
@@ -2236,7 +2206,6 @@ function settingsTimer() {
 function settingsLocations() {
   return state.locations.map((l, i) => `<div class="card">
       <input class="titleinput" data-bind="locations.${i}.name" value="${esc(l.name)}" aria-label="Location name">
-      <div class="meta">Tap the equipment available here.</div>
       <div class="chips">${state.equipment.map(eq => `<label class="chip ${l.equipment.includes(eq) ? 'on' : ''}"><input type="checkbox" data-loceq="${l.id}|${esc(eq)}" ${l.equipment.includes(eq) ? 'checked' : ''}>${esc(eq)}</label>`).join('')}
         <input class="chipinput" data-eqnew="loc:${l.id}" placeholder="+ New" aria-label="Add equipment" enterkeyhint="done"></div>
     </div>`).join('') + `<button class="addblock" data-act="locAdd">+ Add location</button>`;
@@ -2256,7 +2225,7 @@ function settingsMaxes() {
   const row = e => `<label class="frow"><span class="grow"><span class="name">${esc(e.name)}${e.bodyweight ? ' <span class="hint">added load</span>' : ''}</span>
       <span class="meta">${esc(maxLine(e) || 'No max yet')}</span></span>
       <input class="num" inputmode="decimal" data-max="${e.id}" value="${esc(e.testedMax?.load ?? '')}" placeholder="1RM"></label>`;
-  return `<p class="meta pad">Type a 1RM you've tested (${unit()}). T1 and T2 loads are worked out from it for ${L.TESTED_MAX_WEEKS} weeks, and stronger logged sets still raise it. Leave blank to go by your sets.</p>` +
+  return `<p class="meta pad">Tested 1RMs (${unit()}). Blank uses your sets.</p>` +
     groups.filter(([, list]) => list.length).map(([label, list]) => `<div class="label">${label}</div><div class="menu">${list.map(row).join('')}</div>`).join('');
 }
 
@@ -2264,34 +2233,25 @@ function settingsMaxes() {
 function tierRows(t, c) {
   const k = L.TIER[t];
   if (k.orSets) return frow(`Or minimum ${L.setUnit(t)}`, numIn(`tiers.${t}.setMin`, c.setMin ?? k.orSets), k.orSetsHint);
-  if (k.targetLoad) return frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max. Any load still counts.') + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax));
-  if (k.strength) return frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin), 'Of estimated max') + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax));
+  if (k.targetLoad) return frow('Target load from (%)', pctIn(`tiers.${t}.intMin`, c.intMin)) + frow('Target load up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax));
+  if (k.strength) return frow('Intensity from (%)', pctIn(`tiers.${t}.intMin`, c.intMin)) + frow('Intensity up to (%)', pctIn(`tiers.${t}.intMax`, c.intMax));
   return '';
 }
 
 function settingsTiers() {
-  const desc = {
-    T1: 'Heavy sets of 1–3 on main lifts (GZCL: 85–100%, 10–15 reps)',
-    T2: 'Sets of 5–8 on supporting lifts, or 10 × 2–3 on a minute\'s rest for power work and tired days (GZCL: 65–85%, 20–30 reps)',
-    T3: 'Accessory work, 10+ reps a set (GZCL: 30+ reps total)',
-    TECH: 'Technique: quality explosive reps when tired or after a heavy day',
-    JUMP: 'Jumps and plyometrics, counted in contacts. Only in a workout when you turn on Add jumps at check-in',
-    COND: 'Conditioning: EMOMs on the Assault bike, counted in calories. Only in a workout when you turn on Add conditioning at check-in',
-  };
-  return `<p class="meta pad">A session fills a goal when its counted sets reach the minimum reps for that tier. For T1 and T2, only sets at or above the minimum intensity count.</p>` +
+  return `<p class="meta pad">A session counts toward a goal once it reaches the minimum.</p>` +
     L.TIERS.map(t => {
       const c = state.tiers[t];
-      return `<div class="label"><span class="tier ${t}">${t}</span> ${desc[t]}</div><div class="menu">
-        ${frow('Minimum reps', numIn(`tiers.${t}.repMin`, c.repMin), 'Working reps needed to count')}
-        ${frow('Maximum reps', numIn(`tiers.${t}.repMax`, c.repMax), 'Upper end when picking schemes')}
+      return `<div class="label"><span class="tier ${t}">${t}</span> ${esc(L.TIER[t].label)}</div><div class="menu">
+        ${frow(`Minimum ${L.repUnit(t)}`, numIn(`tiers.${t}.repMin`, c.repMin))}
+        ${frow(`Maximum ${L.repUnit(t)}`, numIn(`tiers.${t}.repMax`, c.repMax))}
         ${tierRows(t, c)}
       </div>`;
     }).join('');
 }
 
 function settingsSchemes() {
-  return `<p class="meta pad">Ways to deliver a tier's dose. Suggestions pick one that fits your time.</p>` +
-    L.TIERS.map(t => {
+  return L.TIERS.map(t => {
       const list = state.schemes.filter(sc => sc.tiers.includes(t));
       return `<div class="label"><span class="tier ${t}">${t}</span></div><div class="menu">${list.map(sc =>
         `<button class="menurow" data-act="schemeEdit" data-id="${sc.id}"><span class="grow"><span class="name">${esc(sc.name)}</span>
@@ -2328,27 +2288,26 @@ function cloudSection() {
       ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : c.offline ? '<p class="meta pad">You\'re offline. It syncs when the network is back.</p>' : ''}
       ${c.ask ? '<button class="menurow" data-act="cloudAsk"><span class="grow"><span class="name">Choose what to do with your account\'s backup</span></span><span class="chev">›</span></button>' : ''}
       <button class="menurow" data-act="cloudSync" ${busy ? 'disabled' : ''}><span class="grow"><span class="name">Sync now</span></span></button>
-      <button class="menurow" data-act="cloudSignOut"><span class="grow"><span class="name">Sign out</span><span class="meta">Your data stays on this device</span></span></button>`;
+      <button class="menurow" data-act="cloudSignOut"><span class="grow"><span class="name">Sign out</span><span class="meta">data stays here</span></span></button>`;
   } else if (c.sentTo) {
-    body = `<p class="meta pad">We emailed ${esc(c.sentTo)} a sign-in link and a code. Open the link on this device, or type the code here.</p>
+    body = `<p class="meta pad">Link and code sent to ${esc(c.sentTo)}</p>
       <div class="field pad"><label for="cloud-code">Code</label><input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></div>
       ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
       <button class="menurow" data-act="cloudVerify" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Sign in with the code</span></span></button>
       <button class="menurow" data-act="cloudChange"><span class="grow"><span class="name">Use a different email</span></span></button>`;
   } else if (c.mode === 'link') {
-    body = `<p class="meta pad">We email you a sign-in link and a code. No password to remember.</p>
-      <div class="field pad"><label for="cloud-email">Email</label><input id="cloud-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${esc(c.email ?? '')}"></div>
+    body = `      <div class="field pad"><label for="cloud-email">Email</label><input id="cloud-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${esc(c.email ?? '')}"></div>
       ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
       <button class="menurow" data-act="cloudSend" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Email me a sign-in link</span></span></button>
       <button class="menurow" data-act="cloudMode" data-m="password"><span class="grow"><span class="name">Use a password instead</span></span></button>`;
   } else {
-    body = `<p class="meta pad">Keeps a copy of your data in your own account, so a new phone or a cleared browser can get it back. First time: type an email and a password you'll remember (6 or more characters) and tap Create account.</p>
+    body = `<p class="meta pad">Keeps a copy in your account for a new phone or a cleared browser.</p>
       <div class="field pad"><label for="cloud-email">Email</label><input id="cloud-email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="${esc(c.email ?? '')}"></div>
       <div class="field pad"><label for="cloud-password">Password</label><input id="cloud-password" type="password" autocomplete="current-password" placeholder="6 or more characters"></div>
       ${c.error ? `<p class="meta pad bad">${esc(c.error)}</p>` : ''}
       <button class="menurow" data-act="cloudPassword" data-m="in" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Sign in</span></span></button>
-      <button class="menurow" data-act="cloudPassword" data-m="up" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Create account</span><span class="meta">New here? Use this the first time</span></span></button>
-      <button class="menurow" data-act="cloudMode" data-m="link"><span class="grow"><span class="name">Email me a sign-in link instead</span></span></button>`;
+      <button class="menurow" data-act="cloudPassword" data-m="up" ${c.busy ? 'disabled' : ''}><span class="grow"><span class="name">Create account</span><span class="meta">first time</span></span></button>
+      <button class="menurow" data-act="cloudMode" data-m="link"><span class="grow"><span class="name">Email me a sign-in link</span></span></button>`;
   }
   return `<div class="label">Back up to your account</div><div class="menu">${body}</div>`;
 }
@@ -2372,7 +2331,7 @@ function handleSync(r) {
   } else if (r.kind !== 'skipped' && r.kind !== 'error') c.ask = null;
   if (r.kind === 'pulled' || r.kind === 'merged') {
     ui.ci = defaultCheckin();
-    toast(r.kind === 'merged' ? 'Merged changes from your other device. The earlier copy is under Saved copies.' : 'Updated from your other device. The earlier copy is under Saved copies.');
+    toast(r.kind === 'merged' ? 'Merged with your other device' : 'Updated from your other device');
     render();
   } else if (ui.setPage === 'data' || was !== JSON.stringify([c.error, c.offline, !!c.ask])) render();
 }
@@ -2382,12 +2341,12 @@ function sheetCloudAsk() {
   if (!a) return '<p class="muted">Nothing to choose.</p>';
   const choice = (id, name, hint) => `<button class="row ${a.choice === id ? 'on' : ''}" data-act="cloudChoose" data-c="${id}"><span>${name}</span><span class="meta">${hint}</span></button>`;
   return `<h3>Your account has a backup</h3>
-    <p class="meta">Saved ${esc(fmtDateTime(Date.parse(a.remote.saved_at)))}${a.remote.device ? ` from ${esc(a.remote.device)}` : ''}: ${a.remote.workouts} workouts, ${a.remote.sets} sets.
-      This device has ${a.local.workouts} workouts, ${a.local.sets} sets. Nothing changes until you choose, and whatever gets replaced stays under Saved copies.</p>
+    <p class="meta">Account: ${a.remote.workouts} workouts, ${a.remote.sets} sets (${esc(fmtDateTime(Date.parse(a.remote.saved_at)))}${a.remote.device ? `, ${esc(a.remote.device)}` : ''}).
+      This device: ${a.local.workouts} workouts, ${a.local.sets} sets. What's replaced stays under Saved copies.</p>
     <div class="list">
-      ${choice('account', 'Use the account\'s copy', 'Replace what\'s on this device')}
-      ${choice('merge', 'Merge both', 'Keep the workouts and changes from both')}
-      ${choice('keep', 'Keep this device\'s', 'Upload it over the account\'s copy')}
+      ${choice('account', 'Use the account\'s copy', 'replaces this device')}
+      ${choice('merge', 'Merge both', 'keeps both')}
+      ${choice('keep', 'Keep this device\'s', 'replaces the account\'s')}
     </div>`;
 }
 
@@ -2398,26 +2357,25 @@ function settingsData() {
   const status = statusRow;
   const rows = (v?.rows ?? []).map(r => `<button class="menurow" data-act="vaultRestore" data-at="${r.at}"><span class="grow"><span class="name">${esc(fmtDateTime(r.at))}</span>
     <span class="meta">${esc(SNAP_LABEL[r.reason] ?? r.reason)} · ${r.workouts ?? '?'} workouts, ${r.sets ?? '?'} sets</span></span><span class="chev">›</span></button>`).join('');
-  return `<p class="meta pad">Your data lives in this browser, with a second copy and dated snapshots on this device. A backup saved somewhere else is what survives a lost phone or a cleared browser.</p>
-    <div class="label">Status</div>
+  return `<div class="label">Status</div>
     <div class="menu">
-      ${status('Protected from automatic clearing', persisted, st.storagePersisted === false ? 'Add the app to your home screen so the browser keeps it' : '')}
+      ${status('Protected from automatic clearing', persisted, st.storagePersisted === false ? 'add the app to your home screen' : '')}
       ${status('Copy on this device', copyLine)}
       ${status('Last backup off this device', st.lastExportAt ? `${esc(new Date(st.lastExportAt).toLocaleDateString())} · ${fmtAgo(st.lastExportAt)}` : 'Never')}
     </div>
     ${cloudSection()}
     <div class="label">Back up</div>
     <div class="menu">
-      <button class="menurow" data-act="saveBackup"><span class="grow"><span class="name">Save backup to…</span><span class="meta">Files, iCloud Drive, Google Drive or email; downloads a file on a computer</span></span></button>
-      <button class="menurow" data-act="copyBackup"><span class="grow"><span class="name">Copy backup</span><span class="meta">Paste it into a note or email to yourself</span></span></button>
+      <button class="menurow" data-act="saveBackup"><span class="grow"><span class="name">Save backup to…</span><span class="meta">Files, iCloud, Drive or email</span></span></button>
+      <button class="menurow" data-act="copyBackup"><span class="grow"><span class="name">Copy backup</span></span></button>
     </div>
     <div class="label">Saved copies on this device</div>
-    <div class="menu">${rows || `<p class="muted pad">${v ? 'None yet. One is taken each day you log a set, and before anything replaces your data.' : '…'}</p>`}</div>
+    <div class="menu">${rows || `<p class="muted pad">${v ? 'None yet' : '…'}</p>`}</div>
     <div class="label">Import</div>
     <div class="menu">
       <button class="menurow" data-act="setPage" data-p="fitnotes"><span class="grow"><span class="name">Import from FitNotes</span>
-        <span class="meta">${st.imports?.fitnotes?.at ? `Last import ${new Date(st.imports.fitnotes.at).toLocaleDateString()}` : 'Bring in your workout history'}</span></span><span class="chev">›</span></button>
-      ${hasCopy('before-import') ? '<button class="menurow" data-act="fnUndo"><span class="grow"><span class="name">Undo last import</span><span class="meta">Puts everything back the way it was just before</span></span></button>' : ''}
+        ${st.imports?.fitnotes?.at ? `<span class="meta">last ${new Date(st.imports.fitnotes.at).toLocaleDateString()}</span>` : ''}</span><span class="chev">›</span></button>
+      ${hasCopy('before-import') ? '<button class="menurow" data-act="fnUndo"><span class="grow"><span class="name">Undo last import</span></span></button>' : ''}
     </div>
     <div class="label">Restore</div>
     <div class="menu">
@@ -2445,14 +2403,13 @@ function settingsFitnotes() {
 function fnPick(f) {
   const bw = f.bodyweight ?? state.settings.bodyweight ?? '';
   return `${f.error ? `<div class="banner bad">${esc(f.error)}</div>` : ''}
-    <p class="meta pad">Brings in your FitNotes history: exercises, sets and estimated maxes. The file is read on this phone and never uploaded.
-      You'll check the exercises you use most before anything is saved, and you can undo the import afterwards.</p>
+    <p class="meta pad">Read on this phone, never uploaded. You check it before anything is saved.</p>
     <div class="menu">
-      ${frow(`Bodyweight (${unit()})`, `<input id="fn-bw" class="num" inputmode="decimal" value="${esc(bw)}">`, 'Used for weighted pull-ups and dips in your history')}
+      ${frow(`Bodyweight (${unit()})`, `<input id="fn-bw" class="num" inputmode="decimal" value="${esc(bw)}">`)}
       ${frow('How far back', `<select id="fn-years">${opts([[1, 'Last year'], [2, 'Last 2 years'], [4, 'Last 4 years']], f.years ?? 2)}</select>`)}
     </div>
     <label class="btn primary big fnpick">Choose the FitNotes backup<input type="file" data-fnfile hidden></label>
-    <p class="meta pad">Make a backup in FitNotes first, then pick the .fitnotes file it saves.${state.imports?.fitnotes?.at ? ' Sets you already imported are skipped, so a newer backup only adds what\'s new.' : ''}</p>`;
+    <p class="meta pad">The .fitnotes file from a FitNotes backup${state.imports?.fitnotes?.at ? '; sets already imported are skipped' : ''}.</p>`;
 }
 
 function fnLine(r) {
@@ -2483,7 +2440,7 @@ function fnEditor(r) {
       <div class="field"><label>How it was logged</label><select data-fn="${id}" data-k="mode">${opts(FN.MODES, r.mode)}</select></div>
       <div class="field"><label>Body region</label><select data-fn="${id}" data-k="region">${opts(Object.entries(REGION_LABEL), r.region)}</select></div>
       <label class="toggle"><input type="checkbox" data-fn="${id}" data-k="explosive" ${r.explosive ? 'checked' : ''}> Explosive</label>
-      <label class="toggle"><input type="checkbox" data-fn="${id}" data-k="archive" ${r.archive ? 'checked' : ''}> Archive it <span class="hint">kept for history, left out of suggestions</span></label>
+      <label class="toggle"><input type="checkbox" data-fn="${id}" data-k="archive" ${r.archive ? 'checked' : ''}> Archive it <span class="hint">history only</span></label>
       <div class="field"><label>Equipment</label><div class="chips">${[...new Set([...state.equipment, ...r.equipment])].map(eq =>
         `<label class="chip ${r.equipment.includes(eq) ? 'on' : ''}"><input type="checkbox" data-fn="${id}" data-k="eq" value="${esc(eq)}" ${r.equipment.includes(eq) ? 'checked' : ''}>${esc(eq)}</label>`).join('')}</div></div>`;
   } else if (FN.willAdopt(state, r)) {
@@ -2497,8 +2454,7 @@ function fnReview(f) {
   const active = rows.filter(r => r.active), older = rows.filter(r => !r.active);
   const fams = [...new Set([...state.families.map(x => x.name), ...rows.map(r => r.family)])].sort();
   return `${f.error ? `<div class="banner bad">${esc(f.error)}</div>` : ''}
-    <p class="meta pad">${rows.length} exercises and ${f.plan.sets} sets since ${fmtDay(f.plan.cutoff)}. Check the ${active.length} you've used most in the last year: tap one to change anything.
-      ${older.length ? `The other ${older.length} come in archived, kept for your history.` : ''}</p>
+    <p class="meta pad">${rows.length} exercises, ${f.plan.sets} sets since ${fmtDay(f.plan.cutoff)}. Check the ${active.length} you use most${older.length ? `; ${older.length} older ones come in archived` : ''}.</p>
     <datalist id="fn-fams">${fams.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
     <div class="menu">${active.map(r => fnRow(r, f)).join('') || '<p class="muted pad">None in the last year.</p>'}</div>
     ${older.length ? `<button class="addblock" data-act="fnOlder">${f.showOlder ? 'Hide' : 'Show'} the ${older.length} older exercises</button>
@@ -2519,12 +2475,12 @@ function fnDone(f) {
       ${s.defaults.length ? `<p class="meta">Each family's usual choice is now what you do most: ${esc(s.defaults.join(' · '))}. Change it in Library.</p>` : ''}
     </div>
     <div class="card"><h3>Estimated maxes from your history</h3>
-      ${s.maxes.map(m => `<div class="kv"><span>${esc(m.name)}<span class="meta">last done ${fmtDay(m.last)}${m.stale ? ' · over 12 weeks ago, so treat it as rough' : ''}</span></span>
+      ${s.maxes.map(m => `<div class="kv"><span>${esc(m.name)}<span class="meta">last ${fmtDay(m.last)}${m.stale ? ' · rough, over 12 weeks ago' : ''}</span></span>
         <b>${m.added != null ? `BW+${round(m.added)}` : round(m.max)} ${unit()}</b></div>`).join('') || '<p class="muted">Not enough loaded sets yet.</p>'}
     </div>
-    <button class="primary big" data-act="gsOpen">Suggest weekly goals from this history</button>
+    <button class="primary big" data-act="gsOpen">Suggest weekly goals</button>
     <div class="actions"><button data-act="fnLibrary">Open Library</button><button data-act="fnFinish">Done</button></div>
-    <p class="meta pad">To take it back out: Settings → Backup and data → Undo last import.</p>`;
+    <p class="meta pad">Undo: Settings → Backup and data</p>`;
 }
 
 // ---------- suggested goals ----------
@@ -2542,7 +2498,7 @@ function lastWeekCard() {
   const r = R.weekReview(state, w);
   const t = r.totals;
   return `<div class="card review-due"><h3>Last week</h3>
-    <p>${t.filled} of ${t.quota} goal sessions · ${t.workouts} workout${t.workouts === 1 ? '' : 's'}${r.topReason ? ` · mostly: ${esc(R.REASONS[r.topReason].toLowerCase())}` : ''}</p>
+    <p>${t.filled}/${t.quota} goal sessions · ${t.workouts} workout${t.workouts === 1 ? '' : 's'}${r.topReason ? ` · ${esc(R.REASONS[r.topReason].toLowerCase())}` : ''}</p>
     <div class="brow"><button class="primary small" data-act="reviewOpen" data-w="${w}">Review</button><button class="small" data-act="reviewDismiss" data-w="${w}">Dismiss</button></div></div>`;
 }
 
@@ -2562,10 +2518,10 @@ function viewReview(rv) {
     <div class="kv"><span>Working sets</span><b>${t.sets} (${esc(tiers)})</b></div></div>`;
   h += `<h3>Goals</h3><div class="card flush">${r.goals.map(g => `<div class="slotrow"><span class="tier ${g.tier}">${g.tier}</span>
       <span class="grow"><span class="name">${esc(g.label.slice(g.tier.length + 1))}</span>
-      <span class="meta">${g.met ? 'met' : esc(R.REASONS[g.reason])}${g.missed >= 2 ? ` · missed ${g.missed} weeks running` : ''} · last done ${esc(ago(g.lastDone))}</span></span>
+      <span class="meta">${g.met ? 'met' : esc(R.REASONS[g.reason])}${g.missed >= 2 ? ` · ${g.missed} weeks running` : ''}${g.lastDone != null ? ` · last ${esc(ago(g.lastDone))}` : ''}</span></span>
       <b class="${g.met ? 'good' : ''}">${g.filled}/${g.quota}</b></div>`).join('') || '<p class="muted pad">No weekly goals.</p>'}</div>`;
   if (r.block) {
-    h += `<h3>Program</h3><div class="card"><p>${esc(r.block.text)}.</p>${r.program.length ? `<p class="meta">Its goals (not reviewed while it runs): ${esc(r.program.map(g => `${g.label} ${g.filled}/${g.quota}`).join(' · '))}</p>` : ''}</div>`;
+    h += `<h3>Program</h3><div class="card"><p>${esc(r.block.text)}</p>${r.program.length ? `<p class="meta">${esc(r.program.map(g => `${g.label} ${g.filled}/${g.quota}`).join(' · '))}</p>` : ''}</div>`;
   }
   if (r.lifts.length) {
     const word = { up: 'up', held: 'held', down: 'down', stalled: 'stalled', new: 'first time' };
@@ -2580,25 +2536,22 @@ function viewReview(rv) {
     const btns = st !== 'open' ? `<span class="meta">${st === 'accepted' ? 'accepted' : 'skipped'}</span>`
       : `${p.change ? `<button class="small primary" data-act="reviewAccept" data-id="${esc(p.id)}">Accept</button>` : ''}<button class="small" data-act="reviewSkip" data-id="${esc(p.id)}">${p.change ? 'Skip' : 'OK'}</button>`;
     return `<div class="slotrow proposal"><span class="grow"><span class="name">${esc(p.text)}</span></span><span class="brow">${btns}</span></div>`;
-  }).join('')}</div>` : `<p class="muted pad">${r.finished ? 'Nothing to change: the goals fit.' : 'Changes to quotas are proposed once the week is over.'}</p>`;
-  h += `<div class="brow pad"><button class="small" data-act="reviewCopy">Copy review</button></div>
-    <p class="meta pad">Copies a plain-text summary to paste to Claude or a coach. Nothing changes unless you accept it.</p>`;
+  }).join('')}</div>` : `<p class="muted pad">${r.finished ? 'Nothing to change.' : 'Proposals come when the week ends.'}</p>`;
+  h += `<div class="brow pad"><button class="small" data-act="reviewCopy">Copy review</button></div>`;
   return h;
 }
 
 function viewGoalSuggest(g) {
   const head = `<header class="top sub"><button class="back" data-act="gsCancel">‹ This week</button></header><h1 class="pagetitle">Suggested goals</h1>`;
   if (!g.rows.length) {
-    return `${head}<p class="meta pad">Not enough history yet: ${g.workouts} workouts in the last ${g.weeks} weeks. Log a few weeks, or import from FitNotes (Settings → Backup and data).</p>`;
+    return `${head}<p class="meta pad">Not enough history yet (${g.workouts} workouts in ${g.weeks} weeks).</p>`;
   }
   const total = g.rows.filter(r => r.include).reduce((t, r) => t + r.quota, 0);
   return `${head}
-    <p class="meta pad">From your last ${g.weeks} weeks: ${g.workouts} workouts, about ${g.perWeek.toFixed(1)} a week. Explosive work comes first and lifts use GZCL tiers,
-      with about one heavy (T1) lift per workout. Untick anything you don't want, or tap a goal to change it.</p>
-    <div class="card"><div class="kv ${total > g.capacity ? 'over' : ''}"><span>Goal sessions a week</span><b>${total}</b></div>
-      <div class="kv"><span>What about ${(state.settings.week?.workouts || g.perWeek).toFixed(1)} workouts of ~${g.minutes} min fit</span><b>about ${g.capacity}</b></div></div>
+    <p class="meta pad">From ${g.workouts} workouts in ${g.weeks} weeks. Tap one to change it.</p>
+    <div class="card"><div class="kv ${total > g.capacity ? 'over' : ''}"><span>Goal sessions a week</span><b>${total} of ~${g.capacity} that fit</b></div></div>
     <div class="menu">${g.rows.map(r => gsRow(r, g)).join('')}</div>
-    <button class="primary big" data-act="gsApply" data-mode="replace">Replace my goals with these</button>
+    <button class="primary big" data-act="gsApply" data-mode="replace">Replace my goals</button>
     <div class="actions"><button data-act="gsApply" data-mode="add">Add to my goals</button><button data-act="gsCancel">Cancel</button></div>`;
 }
 
@@ -2613,11 +2566,11 @@ function gsRow(r, g) {
         <span class="chev">${open ? '−' : '+'}</span></button></div>
     ${open ? `<div class="fnedit">
       <div class="field"><label>Tier</label><div class="seg">${L.TIERS.map(t => `<button class="${r.tier === t ? 'on' : ''}" data-act="gsSet" data-key="${r.key}" data-k="tier" data-v="${t}">${t}</button>`).join('')}</div>
-        <p class="meta">${TIER_DESC[r.tier]}</p></div>
+</div>
       <div class="field"><label>Times per week</label><div class="stepper">
         <button data-act="gsStep" data-key="${r.key}" data-d="-1" aria-label="Fewer">−</button><span>${r.quota}</span><button data-act="gsStep" data-key="${r.key}" data-d="1" aria-label="More">+</button></div></div>
       <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${r.priority === v ? 'on' : ''}" data-act="gsSet" data-key="${r.key}" data-k="priority" data-v="${v}">${t}</button>`).join('')}</div></div>
-      <div class="field"><label>Reps per session <span class="hint">optional · ${L.slotDose(state, null, r.tier).repMin} by default for ${r.tier}</span></label>
+      <div class="field"><label>Reps per session <span class="hint">optional</span></label>
         <input inputmode="numeric" data-gs="${r.key}" data-k="repMin" value="${esc(r.repMin ?? '')}" placeholder="${L.slotDose(state, null, r.tier).repMin}"></div>
     </div>` : ''}</div>`;
 }
@@ -2672,13 +2625,14 @@ function renderSheet() {
   }
 }
 
+// One line per tier, for the pickers.
 const TIER_DESC = {
-  T1: 'Heavy: sets of 1–3 at 85%+ of your max, 10–15 reps total.',
-  T2: 'Moderate: sets of 5–8 at 65–85%, 20–30 reps total. Power work and tired days: 10 × 2–3 on a minute\'s rest.',
-  T3: 'Accessory: 10+ reps a set, 30+ total. Any load counts.',
-  TECH: 'Technique: crisp, low-volume explosive work when tired or after heavy days. Has its own goal.',
-  JUMP: 'Jumps: plyometrics in short, fast sets, counted in contacts. Suggested only when you turn on Add jumps.',
-  COND: 'Conditioning: EMOMs on the Assault bike, counted in calories. Suggested only when you turn on Add conditioning.',
+  T1: 'Heavy · sets of 1–3 at 85%+',
+  T2: 'Moderate · sets of 5–8 at 65–85%',
+  T3: 'Accessory · 10+ reps a set',
+  TECH: 'Technique · light explosive work',
+  JUMP: 'Jumps · counted in contacts',
+  COND: 'Conditioning · bike EMOMs, in calories',
 };
 
 // Pick any exercise, from any family: mode 'add' adds a block, mode 'swap' replaces one.
@@ -2702,22 +2656,21 @@ function sheetAddEx(sh) {
       <span class="meta">${(tier === 'T1' || tier === 'T2') && e.metric !== 'load_reps' && !e.explosive ? 'reps only' : ''}</span></button>`).join('')}`).join('');
   const raw = (sh.q || '').trim();
   return `<h3>${title}</h3>
-    ${sh.mode !== 'swap' && sh.mode !== 'histSwap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>
-      <p class="meta">${TIER_DESC[sh.tier]}</p>` : ''}
+    ${sh.mode !== 'swap' && sh.mode !== 'histSwap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>` : ''}
     <input class="search" id="sheetq" data-sheetq value="${esc(sh.q || '')}" placeholder="Search, or type a new name" autocomplete="off">
     <div class="list">${rows || '<p class="muted">No matches here.</p>'}
       <button class="row add" data-act="addExCreate">+ ${raw ? `Create “${esc(raw)}”` : 'New exercise'}</button></div>
-    ${away ? `<p class="meta">${away} more need equipment that isn't at ${esc(loc?.name)}.</p>` : ''}`;
+    ${away ? `<p class="meta">${away} more need gear that isn't at ${esc(loc?.name)}</p>` : ''}`;
 }
 
 function sheetTier(sh) {
   const { b } = findBlock(sh.blockId);
   const ex = exOf(b.exerciseId);
-  return `<h3>Tier for ${esc(ex.name)}</h3><p class="meta">Changing the tier picks a new scheme and load. Sets you've logged keep their tier.</p>
+  return `<h3>Tier for ${esc(ex.name)}</h3>
     <div class="list">${L.TIERS.map(t => {
       const sl = L.slotFor(state, ex, t);
       return `<button class="row ${b.tier === t ? 'on' : ''}" data-act="tierPick" data-t="${t}"><span><span class="tier ${t}">${t}</span> ${TIER_DESC[t]}</span>
-        <span class="meta">${sl ? `counts toward ${esc(slotLabel(sl))}` : 'no goal'}</span></button>`;
+        <span class="meta">${sl ? `goal: ${esc(exOf(sl.exerciseId)?.name ?? famOf(sl.familyId)?.name ?? '')}` : ''}</span></button>`;
     }).join('')}</div>`;
 }
 
@@ -2733,12 +2686,10 @@ function sheetGoal(sh) {
     <div class="field"><label>Tier</label><div class="seg">${L.TIERS.map(t => `<button class="${g.tier === t ? 'on' : ''}" data-act="goalSet" data-k="tier" data-v="${t}">${t}</button>`).join('')}</div>
       <p class="meta">${TIER_DESC[g.tier]}</p></div>
     <div class="field"><label>Family</label><select data-gdraft="familyId">${opts(famOpts, g.familyId)}</select></div>
-    <div class="field"><label>Exercise</label><select data-gdraft="exerciseId">${opts([['', `Any${usual ? ` (usually ${usual})` : ''}`], ...members.map(e => [e.id, e.name])], g.exerciseId ?? '')}</select>
-      <p class="meta">Pick an exercise to make the goal about it, like T1 Weighted dip plus T3 Bar dip in the same week.</p></div>
+    <div class="field"><label>Exercise</label><select data-gdraft="exerciseId">${opts([['', `Any${usual ? ` (usually ${usual})` : ''}`], ...members.map(e => [e.id, e.name])], g.exerciseId ?? '')}</select></div>
     <div class="field"><label>Times per week</label><div class="stepper">
-      <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota || 'Paused'}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div>
-      ${sh.isNew ? '' : '<p class="meta">Go down to Paused to keep the goal without it being suggested.</p>'}</div>
-    <div class="field"><label>Reps per session <span class="hint">optional · ${L.slotDose(state, null, g.tier).repMin} by default for ${g.tier}</span></label>
+      <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota || 'Paused'}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div></div>
+    <div class="field"><label>Reps per session <span class="hint">optional</span></label>
       <input id="g-reps" inputmode="numeric" value="${esc(g.repMin ?? '')}" placeholder="${L.slotDose(state, null, g.tier).repMin}"></div>
     <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${g.priority === v ? 'on' : ''}" data-act="goalSet" data-k="priority" data-v="${v}">${t}</button>`).join('')}</div></div>
     <div class="actions">${sh.isNew ? '' : '<button class="danger" data-act="goalDelete">Delete</button>'}
@@ -2757,9 +2708,9 @@ function sheetScheme(sh) {
       <div class="field"><label>Rest</label><input id="sc-rest" class="num" value="${esc(clock(d.restSec || 0))}"></div>
       <div class="field"><label>Minutes</label><input id="sc-min" class="num" inputmode="numeric" value="${esc(d.minutes ?? '')}" placeholder="${est}"></div>
     </div>
-    <p class="meta">${d.sets * d.reps} total reps. About ${est} minutes at that rest.</p>
+    <p class="meta">${d.sets * d.reps} reps · ~${est} min</p>
     <div class="field"><label>Use for</label><div class="seg">${L.TIERS.map(t => `<button class="${d.tiers.includes(t) ? 'on' : ''}" data-act="schemeTier" data-t="${t}">${t}</button>`).join('')}</div></div>
-    <div class="actions">${sh.id ? (used ? '<p class="meta">In use by logged sets or plans, so it can’t be deleted.</p>' : '<button class="danger" data-act="schemeDelete">Delete</button>') : ''}
+    <div class="actions">${sh.id ? (used ? '<p class="meta">In use, so it can’t be deleted</p>' : '<button class="danger" data-act="schemeDelete">Delete</button>') : ''}
       <button class="primary" data-act="schemeSave">Save</button></div>`;
 }
 
@@ -2788,13 +2739,13 @@ function sheetSwapEx(sh) {
   // What you usually swap this for comes first, marked; favorites carry a star.
   const usual = new Map(Taste.replacements(Taste.taste(state), cur.id, b.tier).map(r => [r.id, r.count]));
   const alts = L.alternatives(state, cur, loc).sort((x, y) => (usual.get(y.id) ?? 0) - (usual.get(x.id) ?? 0));
-  return `<h3>Swap ${esc(cur.name)}</h3><div class="meta">${esc(fam?.name)} at ${esc(loc?.name)} · ${usual.size ? 'your usual first, then ' : ''}closest first</div>
-    <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
+  return `<h3>Swap ${esc(cur.name)}</h3><div class="meta">${esc(fam?.name)} at ${esc(loc?.name)}</div>
+    <div class="label">Why? <span class="hint">optional</span></div>${reasonChips(sh.reason)}
     <div class="list">${alts.map(a => `<button class="row" data-act="pickEx" data-id="${a.id}"><span>${a.pref === 'fav' ? '★ ' : ''}${esc(a.name)}</span>
-      <span class="meta">${usual.has(a.id) ? `your usual (${usual.get(a.id)}×) · ` : ''}${a.rank < cur.rank ? 'harder' : 'easier'}${a.metric !== 'load_reps' && !a.explosive && (b.tier === 'T1' || b.tier === 'T2') ? ' · won’t auto-count' : ''}</span></button>`).join('')
-      || '<p class="muted">No other family members available here.</p>'}
-    <button class="row add" data-act="qaVariation" data-id="${cur.id}" data-from="swap">+ New variation of ${esc(cur.name)}</button>
-    <button class="row add" data-act="swapAny">Pick from all exercises ›</button>
+      <span class="meta">${usual.has(a.id) ? 'your usual · ' : ''}${a.rank < cur.rank ? 'harder' : 'easier'}${a.metric !== 'load_reps' && !a.explosive && (b.tier === 'T1' || b.tier === 'T2') ? ' · won’t count' : ''}</span></button>`).join('')
+      || '<p class="muted">Nothing else in this family here.</p>'}
+    <button class="row add" data-act="qaVariation" data-id="${cur.id}" data-from="swap">+ New variation</button>
+    <button class="row add" data-act="swapAny">All exercises ›</button>
     <button class="row add" data-act="tastePref" data-id="${cur.id}" data-v="never">${cur.pref === 'never' ? `Suggest ${esc(cur.name)} again` : `Never suggest ${esc(cur.name)}`}</button></div>`;
 }
 
@@ -2803,13 +2754,13 @@ function sheetSwapScheme(sh) {
   const ex = exOf(b.exerciseId);
   const budget = sessionBudget(s, b) - L.overhead(state, b.tier, b.exerciseId, s.locationId ?? null);
   const time = sc => round(L.schemeTime(state, b.tier, b.exerciseId, sc, !!b.pairOf || s.blocks.some(x => x.pairOf === b.id)));
-  return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${b.tier} · ${budget} min left in budget · loads recalculate automatically</div>
-    <div class="label">Reason (optional)</div>${reasonChips(sh.reason)}
+  return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${b.tier} · ${round(budget)} min left</div>
+    <div class="label">Why? <span class="hint">optional</span></div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {
       const load = L.targetLoad(state, ex, b.tier, sc, s.checkinAt);
-      const bits = [`${time(sc)} min`, `${L.schemeReps(sc)} ${L.repUnit(b.tier)}`, L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? 'fits dose' : 'off dose',
-        load != null ? `${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : '', time(sc) > budget ? 'over time' : '',
-        L.overRepCap(ex, sc) ? `over ${ex.maxReps}-rep cap` : ''].filter(Boolean);
+      const bits = [`${time(sc)} min`, `${L.schemeReps(sc)} ${L.repUnit(b.tier)}`, load != null ? `${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : '',
+        L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? '✓ goal' : '', time(sc) > budget ? 'over time' : '',
+        L.overRepCap(ex, sc) ? 'too many reps' : ''].filter(Boolean);
       const dim = time(sc) > budget || L.overRepCap(ex, sc);
       return `<button class="row ${sc.id === b.schemeId ? 'on' : ''} ${dim ? 'dim' : ''}" data-act="pickScheme" data-id="${sc.id}">
         <span>${esc(sc.name)}</span><span class="meta">${esc(bits.join(' · '))}</span></button>`;
@@ -2824,12 +2775,11 @@ function sheetPair(sh) {
   const others = s.blocks.filter(x => x !== b && !x.pairOf);
   const names = o => groupOf(s, o).map(x => esc(exOf(x.exerciseId)?.name)).join(' + ');
   return `<h3>Superset with ${esc(ex.name)}</h3>
-    <p class="meta">${b.tier === 'T3' ? 'Alternate sets and rest after each round.' : `Do a set of the partner in ${esc(ex.name)}'s rest. The rest timer keeps counting for ${esc(ex.name)}.`}</p>
     <div class="list">
-      ${idea && b.tier !== 'T3' ? `<button class="row" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}"><span>+ ${esc(idea.exercise.name)} <span class="tier T3">T3</span></span><span class="meta">${esc(idea.why)}</span></button>` : ''}
+      ${idea && b.tier !== 'T3' ? `<button class="row" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}"><span>+ ${esc(idea.exercise.name)} <span class="tier T3">T3</span></span><span class="meta">suggested</span></button>` : ''}
       ${others.length ? `<div class="label">Already in this workout</div>${others.map(o => `<button class="row" data-act="pairLink" data-b="${b.id}" data-o="${o.id}">
-        <span>${names(o)} <span class="tier ${o.tier}">${o.tier}</span></span><span class="meta">${inPair(s, o) ? 'make it a giant set' : 'pair them'}</span></button>`).join('')}` : ''}
-      <button class="row add" data-act="pairAny" data-b="${b.id}">Choose any exercise ›</button></div>`;
+        <span>${names(o)} <span class="tier ${o.tier}">${o.tier}</span></span><span class="meta">${inPair(s, o) ? 'giant set' : ''}</span></button>`).join('')}` : ''}
+      <button class="row add" data-act="pairAny" data-b="${b.id}">All exercises ›</button></div>`;
 }
 
 const MOB_PICK_TITLE = { new: 'Mobility session', session: 'Add mobility', workout: 'Add mobility to this workout', routine: 'Add to routine' };
@@ -2838,12 +2788,12 @@ function sheetMobPick(sh) {
   const last = M.lastDoneAt(state);
   const shown = sh.parts.length || sh.mode === 'routine' ? M.rankForParts(state, sh.parts, sh.exclude) : [];
   return `<h3>${MOB_PICK_TITLE[sh.mode]}</h3>
-    <p class="meta">Pick up to 3 body parts. The moves you've done least recently are ticked; change the ticks as you like.</p>
+    <p class="meta">Up to 3 body parts</p>
     <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${sh.parts.includes(p) ? 'on' : ''}" data-act="mobPart" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
     <div class="list">${shown.map(({ e }) => `<button class="row ${sh.picked.includes(e.id) ? 'on' : ''}" data-act="mobTick" data-id="${e.id}">
       <span>${sh.picked.includes(e.id) ? '☑' : '☐'} ${esc(e.name)}</span>
-      <span class="meta">${esc(`${e.parts.join(', ')} · ${M.doseText(e)} · ${last.has(e.id) ? fmtAgo(last.get(e.id)) : 'not logged yet'}`)}</span></button>`).join('')
-      || `<p class="muted">${sh.parts.length ? 'Nothing for those body parts yet.' : 'Pick a body part to see moves.'}</p>`}
+      <span class="meta">${esc(`${M.doseText(e)}${last.has(e.id) ? ` · ${fmtAgo(last.get(e.id))}` : ''}`)}</span></button>`).join('')
+      || (sh.parts.length ? '<p class="muted">Nothing for those yet.</p>' : '')}
       <button class="row add" data-act="mobExNew">+ New mobility exercise</button></div>
     <div class="actions"><button class="primary" data-act="mobAddPicked">${sh.mode === 'new' ? 'Start' : 'Add'}${sh.picked.length ? ` ${sh.picked.length}` : ''}</button></div>`;
 }
@@ -2865,13 +2815,13 @@ function sheetMobEx(sh) {
       <div class="field"><label>Up to</label>${num('me-holdmax', d.holdMax)}</div>
       <div class="field"><label>Rest</label><input id="me-rest" class="num" value="${esc(clock(d.restSec || 0))}"></div></div>
     ${box('me-side', d.perSide, 'Each side')}
-    <div class="field"><label>Tempo or detail <span class="hint">optional</span></label><input id="me-tempo" value="${esc(d.tempo)}" placeholder="e.g. 4s down / 2s hold"></div>
+    <div class="field"><label>Tempo <span class="hint">optional</span></label><input id="me-tempo" value="${esc(d.tempo)}" placeholder="e.g. 4s down / 2s hold"></div>
     <div class="field"><label>Log each set with</label>${box('me-t-reps', d.track.reps, 'Reps')}${box('me-t-hold', d.track.hold, 'Hold time')}${box('me-t-load', d.track.load, 'Load')}
-      <input id="me-t-extra" value="${esc(d.track.extra)}" placeholder="Anything else, e.g. Depth or Deficit (cm)"></div>
+      <input id="me-t-extra" value="${esc(d.track.extra)}" placeholder="Other, e.g. Depth"></div>
     <div class="field"><label>Cues</label><textarea id="me-cues" rows="2">${esc(d.cues)}</textarea></div>
-    <div class="field"><label>Video <span class="hint">a YouTube search phrase or a link</span></label><input id="me-video" value="${esc(d.video)}" placeholder="e.g. kneesovertoesguy elephant walk"></div>
+    <div class="field"><label>Video <span class="hint">link or search</span></label><input id="me-video" value="${esc(d.video)}" placeholder="e.g. kneesovertoesguy elephant walk"></div>
     <div class="field"><label>History notes</label><textarea id="me-notes" rows="2">${esc(d.notes)}</textarea></div>
-    ${sh.isNew ? '' : box('me-arch', d.archived, 'Archived <span class="hint">kept for history, left out of pickers</span>')}
+    ${sh.isNew ? '' : box('me-arch', d.archived, 'Archived')}
     <div class="actions">${!sh.isNew && !used ? '<button class="danger" data-act="mobExDelete">Delete</button>' : ''}${used ? `<button data-act="histOpen" data-q="${esc(d.name)}">History</button>` : ''}<button class="primary" data-act="mobExSave">Save</button></div>`;
 }
 
@@ -2946,11 +2896,11 @@ function exerciseCharts(ex, sh) {
     const ser = PG.e1rmSeries(state, ex.id, from, to);
     const ch = PG.liftChange(ser);
     if (ser.length) {
-      h += chartCard('ex-e1rm', 'Estimated 1-rep max', ch ? `<b>${signedNum(ch.delta)} ${u}</b> in this range (${round(ch.first)} → ${round(ch.last)}; best ${round(ch.best)}).` : '',
+      h += chartCard('ex-e1rm', 'Estimated 1-rep max', ch ? `<b>${signedNum(ch.delta)} ${u}</b> · ${round(ch.first)} → ${round(ch.last)}${ch.best > ch.last ? ` · best ${round(ch.best)}` : ''}` : '',
         CH.lineChart('ex-e1rm', `${ex.name} estimated 1-rep max`, ser.map(p => ({ t: p.t, v: p.v, tip: { value: `${round(p.v)} ${u}`, title: fmtShortDay(p.t), sub: `best set ${p.load} × ${p.reps}` } }))),
         { head: ['Day', `e1RM (${u})`, 'Best set'], rows: ser.map(p => [fmtShortDay(p.t), round(p.v), `${p.load} × ${p.reps}`]) });
     }
-    h += chartCard('ex-volume', 'Volume per session', `Load × reps. Average <b>${CH.fmtNum(ss.reduce((x, w) => x + w.volume, 0) / ss.length)} ${u}</b>.`,
+    h += chartCard('ex-volume', 'Volume per session', `Avg <b>${CH.fmtNum(ss.reduce((x, w) => x + w.volume, 0) / ss.length)} ${u}</b>`,
       CH.columnChart('ex-volume', `${ex.name} volume per session`, ss.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.volume }], tip: tipDay(w, `${CH.fmtNum(w.volume)} ${u}`, `${w.sets} sets, ${w.reps} reps`) }))),
       table([`Volume (${u})`, 'Sets', 'Reps'], w => [round(w.volume).toLocaleString('en-US'), w.sets, w.reps]));
   } else if (ex.metric === 'time') {
@@ -2959,13 +2909,13 @@ function exerciseCharts(ex, sh) {
       table(['Longest (s)', 'Sets'], w => [w.hold, w.sets]));
   }
   if (ex.metric === 'reps' || (ex.metric === 'load_reps' && !ss.some(w => w.volume))) {
-    h += chartCard('ex-reps', 'Reps per session', `Average <b>${round(ss.reduce((x, w) => x + w.reps, 0) / ss.length)}</b>.`,
+    h += chartCard('ex-reps', 'Reps per session', `Avg <b>${round(ss.reduce((x, w) => x + w.reps, 0) / ss.length)}</b>`,
       CH.columnChart('ex-reps', `${ex.name} reps per session`, ss.map(w => ({ t: w.t, parts: [{ key: 'series', v: w.reps }], tip: tipDay(w, `${w.reps} reps`, `${w.sets} sets`) }))),
       table(['Reps', 'Sets'], w => [w.reps, w.sets]));
   }
   const jumps = ss.filter(w => w.jump > 0);
   if (jumps.length) {
-    h += chartCard('ex-jump', 'Best jump', jumps.length > 1 ? `<b>${signedNum(jumps.at(-1).jump - jumps[0].jump, 1)} ${ju}</b> in this range (best ${Math.max(...jumps.map(w => w.jump))}).` : '',
+    h += chartCard('ex-jump', 'Best jump', jumps.length > 1 ? `<b>${signedNum(jumps.at(-1).jump - jumps[0].jump, 1)} ${ju}</b> · best ${Math.max(...jumps.map(w => w.jump))}` : '',
       CH.lineChart('ex-jump', `${ex.name} best jump`, jumps.map(w => ({ t: w.t, v: w.jump, tip: tipDay(w, `${w.jump} ${ju}`, `${w.sets} sets`) }))),
       { head: ['Day', `Best (${ju})`], rows: jumps.map(w => [fmtShortDay(w.t), w.jump]) });
   }
@@ -2974,13 +2924,12 @@ function exerciseCharts(ex, sh) {
 
 function sheetFinishAsk(sh) {
   return `<h3>${sh.left} set${sh.left === 1 ? '' : 's'} not logged yet</h3>
-    <p class="meta">Pause to pick this workout up later today: what you haven't done stays waiting on the Today tab. Finishing drops the unlogged sets.</p>
-    <div class="actions"><button data-act="finishNow">Finish now</button><button class="primary" data-act="pause">Pause for later</button></div>`;
+    <p class="meta">Finishing drops them. Pause keeps them for later today.</p>
+    <div class="actions"><button data-act="finishNow">Finish now</button><button class="primary" data-act="pause">Pause</button></div>`;
 }
 
 function sheetMoreTime() {
-  return `<h3>More time?</h3>
-    <p class="meta">Adds exercises from your weekly goals that fit the extra minutes, after what's left in this workout.</p>
+  return `<h3>More time</h3>
     <div class="seg">${[10, 15, 20, 30, 45].map(m => `<button data-act="addTime" data-v="${m}">+${m} min</button>`).join('')}</div>`;
 }
 
@@ -2995,17 +2944,17 @@ function sheetConfirm(sh) {
 }
 
 function sheetReviewText(sh) {
-  return `<h3>Copy review</h3><p class="meta">Copying was blocked here. Select the text below and copy it.</p>
+  return `<h3>Copy review</h3><p class="meta">Select and copy:</p>
     <textarea id="review-text" rows="12" readonly>${esc(sh.text)}</textarea>`;
 }
 
 function sheetBackupText(sh) {
-  return `<h3>Copy your backup</h3><p class="meta">Copying was blocked here. Select all of the text below, copy it, and paste it into a note.</p>
+  return `<h3>Copy your backup</h3><p class="meta">Select all, copy, and paste it into a note:</p>
     <textarea id="backup-json" rows="8" readonly>${esc(sh.json)}</textarea>`;
 }
 
 function sheetPasteImport() {
-  return `<h3>Restore from a backup</h3><p class="meta">Paste the backup text you copied earlier.</p>
+  return `<h3>Restore from a backup</h3>
     <textarea id="paste-json" rows="8" placeholder='{"version":1,...}'></textarea>
     <div class="actions"><button class="primary" data-act="pasteImportGo">Restore</button></div>`;
 }
@@ -3017,20 +2966,20 @@ function sheetRest(sh) {
   const ex = exOf(b.exerciseId), sc = schOf(b.schemeId);
   const cur = sh.value ?? effectiveRest(b);
   return `<h3>Rest for ${esc(ex.name)}</h3>
-    <div class="meta">Scheme ${esc(sc.name)} default ${clock(sc.restSec)}${ex.restSec != null ? ` · exercise default ${clock(ex.restSec)}` : ''}</div>
+    <div class="meta">${esc(sc.name)} default ${clock(sc.restSec)}${ex.restSec != null ? ` · yours ${clock(ex.restSec)}` : ''}</div>
     <div class="restbig">${clock(cur)}</div>
     <div class="seg"><button data-act="restNudge" data-d="-15">−15s</button><button data-act="restNudge" data-d="15">+15s</button></div>
     <div class="chips">${REST_PRESETS.map(v => `<button class="chip ${v === cur ? 'on' : ''}" data-act="restPreset" data-v="${v}">${clock(v)}</button>`).join('')}</div>
-    <label class="toggle"><input type="checkbox" id="rest-save" ${sh.saveDefault ? 'checked' : ''}> Make ${clock(cur)} the default for ${esc(ex.name)}</label>
+    <label class="toggle"><input type="checkbox" id="rest-save" ${sh.saveDefault ? 'checked' : ''}> Always for ${esc(ex.name)}</label>
     <div class="actions">
-      ${b.restSec != null || ex.restSec != null ? '<button data-act="restClear">Back to scheme default</button>' : ''}
+      ${b.restSec != null || ex.restSec != null ? '<button data-act="restClear">Scheme default</button>' : ''}
       <button class="primary" data-act="restApply">Use ${clock(cur)}</button></div>`;
 }
 
 function sheetPlans() {
   if (!state.plans.length) return `<h3>Plans</h3><p class="muted">No saved plans yet.</p><button data-act="goPlans">Build one</button>`;
-  return `<h3>Use a plan instead</h3><div class="meta">Logged sets stay; the rest is replaced.</div><div class="list">${state.plans.map(p =>
-    `<button class="row" data-act="applyPlan" data-id="${p.id}"><span>${esc(p.name)}</span><span class="meta">${p.items.length} items</span></button>`).join('')}</div>`;
+  return `<h3>Use a plan</h3><div class="meta">Logged sets stay</div><div class="list">${state.plans.map(p =>
+    `<button class="row" data-act="applyPlan" data-id="${p.id}"><span>${esc(p.name)}</span></button>`).join('')}</div>`;
 }
 
 const equipChip = (eq, on, name) => `<label class="chip ${on ? 'on' : ''}"><input type="checkbox" name="${name}" value="${esc(eq)}" ${on ? 'checked' : ''}>${esc(eq)}</label>`;
@@ -3091,17 +3040,17 @@ function sheetQuickAdd(sh) {
     <div id="qa-hint" class="qahint">${qaHint(sh.name ?? '', sh)}</div>
     ${base ? `<div class="field"><label>Compared with ${esc(base.name)}</label><div class="seg radio">
       ${radio('qa-place', 'harder', 'Harder', true)}${radio('qa-place', 'easier', 'Easier', false)}</div></div>` : ''}
-    <div class="field"><label>Family <span class="hint">exercises in a family can swap for each other</span></label>
-      <input id="qa-fam" list="famlist" autocomplete="off" value="${esc(d.famName)}" placeholder="Leave blank to start a new one">
+    <div class="field"><label>Family <span class="hint">swaps within it</span></label>
+      <input id="qa-fam" list="famlist" autocomplete="off" value="${esc(d.famName)}" placeholder="Blank starts a new one">
       <datalist id="famlist">${state.families.map(f => `<option value="${esc(f.name)}">`).join('')}</datalist></div>
     <div class="field"><label>How do you log it?</label><div class="seg radio">
       ${LOG_TYPES.map(([v, t]) => radio('qa-metric', v, t, d.metric === v)).join('')}</div></div>
-    <label class="toggle"><input type="checkbox" id="qa-bw" ${d.bodyweight ? 'checked' : ''}> Weight is added to bodyweight <span class="hint">(weighted pull-ups, dips)</span></label>
-    <div class="field"><label>Equipment <span class="hint">it's only suggested where this is available</span></label>${equipChips(d.equipment, 'qa-eq')}</div>
-    <label class="toggle"><input type="checkbox" id="qa-any" ${base ? (base.anytime ? 'checked' : '') : ''}> Easy to do any time <span class="hint">no setup, fits a spare few minutes</span></label>
-    <div class="field"><label>Body region <span class="hint">heavy work here makes explosive work wait</span></label><div class="seg radio">
+    <label class="toggle"><input type="checkbox" id="qa-bw" ${d.bodyweight ? 'checked' : ''}> Added to bodyweight <span class="hint">e.g. weighted dips</span></label>
+    <div class="field"><label>Equipment</label>${equipChips(d.equipment, 'qa-eq')}</div>
+    <label class="toggle"><input type="checkbox" id="qa-any" ${base ? (base.anytime ? 'checked' : '') : ''}> No setup <span class="hint">fits a spare few minutes</span></label>
+    <div class="field"><label>Body region</label><div class="seg radio">
       ${radio('qa-region', 'lower', 'Lower', d.region === 'lower')}${radio('qa-region', 'upper', 'Upper', d.region === 'upper')}${radio('qa-region', 'full', 'Whole body', d.region === 'full')}</div></div>
-    <label class="toggle"><input type="checkbox" id="qa-expl" ${d.explosive ? 'checked' : ''}> Explosive <span class="hint">jumps, throws, Olympic lifts: best done fresh</span></label>
+    <label class="toggle"><input type="checkbox" id="qa-expl" ${d.explosive ? 'checked' : ''}> Explosive <span class="hint">jumps, throws, Olympic lifts</span></label>
     <button class="primary big" data-act="qaSave">${label}</button>`;
 }
 
@@ -3111,10 +3060,10 @@ function maxLine(e) {
   const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
   if (!max) return '';
   const tm = e.testedMax;
-  const total = e.bodyweight ? ' total incl. bodyweight' : '';
+  const total = e.bodyweight ? ' incl. bodyweight' : '';
   return L.maxSource(state, e.id) === 'tested'
-    ? `Using your 1RM: ${round(max)}${total}${tm?.at ? `, tested ${shortDay(tm.at)}` : ''}`
-    : `Using e1RM ${round(max)}${total} from your recent sets`;
+    ? `1RM ${round(max)}${total}${tm?.at ? ` · tested ${shortDay(tm.at)}` : ''}`
+    : `e1RM ${round(max)}${total} · from your sets`;
 }
 // Saves a typed-in 1RM (blank clears it); a changed value is dated today.
 function setTestedMax(e, raw) {
@@ -3129,7 +3078,7 @@ function sheetMax(sh) {
   return `<h3>1-rep max: ${esc(e.name)}</h3>
     <div class="field"><label>Tested 1RM (${unit()}${e.bodyweight ? ', added load' : ''})</label>
       <input id="mx-load" inputmode="decimal" value="${esc(e.testedMax?.load ?? '')}" placeholder="e.g. 315"></div>
-    <p class="meta">Heavy and moderate loads are worked out from it. It counts for ${L.TESTED_MAX_WEEKS} weeks; stronger logged sets still raise it.</p>
+    <p class="meta">Counts for ${L.TESTED_MAX_WEEKS} weeks; stronger sets still raise it.</p>
     <div class="actions"><button class="primary" data-act="maxSave" data-id="${e.id}">Save</button></div>`;
 }
 
@@ -3144,24 +3093,24 @@ function sheetEditEx(sh) {
     <div class="field"><label>Family</label><select id="ee-fam">${opts(famOpts, e.familyId)}</select></div>
     <label class="toggle"><input type="checkbox" id="ee-default" ${fam?.defaultExerciseId === e.id ? 'checked' : ''}> Usual choice for this family</label>
     <div class="field"><label>How do you log it?</label><select id="ee-metric">${opts(METRICS, e.metric)}</select></div>
-    <label class="toggle"><input type="checkbox" id="ee-bw" ${e.bodyweight ? 'checked' : ''}> Weight is added to bodyweight <span class="hint">(weighted pull-ups, dips)</span></label>
+    <label class="toggle"><input type="checkbox" id="ee-bw" ${e.bodyweight ? 'checked' : ''}> Added to bodyweight <span class="hint">e.g. weighted dips</span></label>
     <div class="field"><label>1-rep max (${unit()}${e.bodyweight ? ', added load' : ''}) <span class="hint">${e.testedMax?.at ? `tested ${shortDay(e.testedMax.at)}` : 'optional'}</span></label>
       <input id="ee-max" inputmode="decimal" value="${esc(e.testedMax?.load ?? e.startMax ?? '')}" placeholder="Your tested max">
-      <div class="meta">${max ? esc(maxLine(e)) : 'No max yet.'} A max you enter counts for ${L.TESTED_MAX_WEEKS} weeks; stronger sets still raise it.</div></div>
-    <div class="field"><label>Max reps per set <span class="hint">optional · e.g. 5 for Olympic lifts</span></label>
-      <input id="ee-maxreps" inputmode="numeric" value="${esc(e.maxReps)}"></div>
-    <div class="field"><label>Rest override (m:ss) <span class="hint">optional · otherwise the scheme's rest</span></label>
+      <div class="meta">${max ? esc(maxLine(e)) : 'No max yet'}</div></div>
+    <div class="field"><label>Max reps per set <span class="hint">optional</span></label>
+      <input id="ee-maxreps" inputmode="numeric" value="${esc(e.maxReps)}" placeholder="e.g. 5"></div>
+    <div class="field"><label>Rest (m:ss) <span class="hint">optional</span></label>
       <input id="ee-rest" value="${esc(e.restSec != null ? clock(e.restSec) : '')}" placeholder="e.g. 2:30"></div>
     <div class="field"><label>Equipment</label>${equipChips(e.equipment, 'ee-eq')}</div>
-    <label class="toggle"><input type="checkbox" id="ee-any" ${e.anytime ? 'checked' : ''}> Easy to do any time <span class="hint">no setup, fits a spare few minutes</span></label>
-    <div class="field"><label>Body region <span class="hint">heavy work here makes explosive work wait</span></label>
+    <label class="toggle"><input type="checkbox" id="ee-any" ${e.anytime ? 'checked' : ''}> No setup <span class="hint">fits a spare few minutes</span></label>
+    <div class="field"><label>Body region</label>
       <select id="ee-region">${opts([['lower', 'Lower body'], ['upper', 'Upper body'], ['full', 'Whole body']], e.region || 'full')}</select></div>
-    <label class="toggle"><input type="checkbox" id="ee-expl" ${e.explosive ? 'checked' : ''}> Explosive <span class="hint">jumps, throws, Olympic lifts: best done fresh</span></label>
-    <div class="field"><label>Role <span class="hint">what suggestions may use it for</span></label>
+    <label class="toggle"><input type="checkbox" id="ee-expl" ${e.explosive ? 'checked' : ''}> Explosive <span class="hint">jumps, throws, Olympic lifts</span></label>
+    <div class="field"><label>Role</label>
       <select id="ee-role">${opts([['main', 'Main lift (T1/T2 strength)'], ['power', 'Power (explosive T1/T2)'], ['accessory', 'Accessory (T3 only)'], ['technique', 'Technique drill']], e.role ?? L.guessRole(e.name, e.metric, e.explosive))}</select></div>
-    <div class="field"><label>In suggestions <span class="hint">Never suggest still lets you pick it yourself</span></label>
-      <select id="ee-pref">${opts([['', 'Normal'], ['fav', 'Favorite: picked over equals'], ['never', 'Never suggest']], e.pref ?? '')}</select></div>
-    <label class="toggle"><input type="checkbox" id="ee-arch" ${e.archived ? 'checked' : ''}> Archived <span class="hint">kept for history, left out of suggestions and pickers</span></label>
+    <div class="field"><label>In suggestions</label>
+      <select id="ee-pref">${opts([['', 'Normal'], ['fav', 'Favorite'], ['never', 'Never suggest']], e.pref ?? '')}</select></div>
+    <label class="toggle"><input type="checkbox" id="ee-arch" ${e.archived ? 'checked' : ''}> Archived <span class="hint">history only</span></label>
     <div class="field"><label>YouTube URL</label><input id="ee-yt" value="${esc(e.youtube)}" placeholder="https://youtu.be/..."></div>
     <div class="field"><label>Start time (m:ss)</label><input id="ee-start" value="${esc(fmtMSS(e.start))}" placeholder="0:42"></div>
     <div class="field"><label>Cues</label><textarea id="ee-cues" rows="3">${esc(e.cues)}</textarea></div>
@@ -3382,7 +3331,7 @@ const actions = {
     }
     save(); render(); window.scrollTo(0, 0);
     // Your goals' lifts stay put, so a workout of only those can come back the same.
-    toast(res.blocks.map(b => b.exerciseId).join() === before ? 'Same again: your goals fill this one. Swap an exercise, or choose the mix.' : 'New take on today');
+    toast(res.blocks.map(b => b.exerciseId).join() === before ? 'Same again: your goals fill this one' : 'New take on today');
   },
 
   startPlan: d => {
@@ -3582,7 +3531,7 @@ const actions = {
   // Morning check
   mornSet: d => {
     const m = ui.morning ?? (ui.morning = { energy: null, pain: {} });
-    if (d.m === 'energy') m.energy = m.energy === Number(d.v) ? null : Number(d.v);
+    if (d.m === 'energy') { m.energy = m.energy === Number(d.v) ? null : Number(d.v); if (m.energy) ui.ci.fatigue = 6 - m.energy; }
     else m.pain[d.p] = m.pain[d.p] === Number(d.v) ? null : Number(d.v);
     render();
   },
@@ -3659,8 +3608,9 @@ const actions = {
     else fallback();
   },
 
+  bMore: d => { ui.bmore ??= new Set(); ui.bmore[ui.bmore.has(d.b) ? 'delete' : 'add'](d.b); render(); },
   laterDone: () => { const s = currentSession(); if (!s) return; resolveLater(s, true); save(); render(); toast('Kept as done'); },
-  laterPlanned: () => { const s = currentSession(); if (!s) return; resolveLater(s, false); save(); render(); toast('Unticked: they count once you log them'); },
+  laterPlanned: () => { const s = currentSession(); if (!s) return; resolveLater(s, false); save(); render(); toast('Unticked'); },
   ivPreset: d => {
     const p = (state.intervals?.presets ?? []).find(x => x.id === d.id);
     if (!p) return;
@@ -4651,7 +4601,7 @@ function obAdded(e) {
   save();
   ui.sheet = null;
   const missing = e.equipment.filter(eq => !d.locations.some(l => l.equipment.includes(eq)));
-  if (e.metric !== 'load_reps' || e.explosive) toast(`Added ${e.name} to your library. Heavy and support goals need a loaded lift that isn't explosive.`);
+  if (e.metric !== 'load_reps' || e.explosive) toast(`Added ${e.name}. T1/T2 goals need a loaded, non-explosive lift.`);
   else if (missing.length) toast(`Added ${e.name}, but none of your locations has ${missing.join(', ')}. Go back to Where you train to add it.`);
   else { d[kind][e.id] = 1; toast(`Added and picked ${e.name}`); }
   render();
@@ -4780,14 +4730,10 @@ document.addEventListener('change', e => {
     g[d.gdraft] = el.value || null;
     if (d.gdraft === 'familyId') g.exerciseId = null; // the old exercise belongs to the old family
     renderSheet();
-  } else if (el.hasAttribute('data-ci-split')) {
-    ui.ci.split = el.checked;
-  } else if (el.hasAttribute('data-ci-jumps')) {
-    ui.ci.jumps = el.checked;
-  } else if (el.hasAttribute('data-ci-cond')) {
-    ui.ci.cond = el.checked;
-  } else if (el.hasAttribute('data-ci-condpair')) {
-    ui.ci.condPair = el.checked;
+  } else if (['split', 'jumps', 'cond', 'condpair'].some(k => el.hasAttribute(`data-ci-${k}`))) {
+    const k = ['split', 'jumps', 'cond', 'condpair'].find(x => el.hasAttribute(`data-ci-${x}`));
+    ui.ci[k === 'condpair' ? 'condPair' : k] = el.checked;
+    el.closest('label.chip')?.classList.toggle('on', el.checked);
   } else if (el.hasAttribute('data-import')) {
     importFile(el.files[0]);
   } else if (el.hasAttribute('data-fnfile')) {

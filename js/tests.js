@@ -429,7 +429,7 @@ test('suggested goals: explosive first, GZCL tiers, about one heavy lift per wor
   eq([jumps.kind, jumps.priority, jumps.repMin, jumps.repMax], ['power', 3, 12, 20], 'jumps');
   eq(row('Squat pattern', 'T1')?.kind, 'strength', 'squats keep T1 (lower body first)');
   const dip = row('Dip', 'T2');
-  ok(dip && dip.kind === 'support' && /room for about 3 heavy/.test(dip.reason), 'dips move to T2 support: only 3 heavy slots');
+  ok(dip && dip.kind === 'support' && /room for 3 heavy/.test(dip.reason), 'dips move to T2 support: only 3 heavy slots');
   eq(row('Vertical pull', 'T2')?.kind, 'strength', 'moderate pull-ups stay T2');
   eq(row('Arms (pump)', 'T3')?.kind, 'accessory');
   const chest = g.rows.find(r => r.kind === 'press');
@@ -445,7 +445,7 @@ test('suggested goals: a crowded week drops accessories before anything else', (
   ok(on.reduce((t, r) => t + r.quota, 0) <= g.capacity, 'fits');
   ok(g.rows.filter(r => !r.include).every(r => r.kind === 'accessory'), 'only accessories unticked');
   ok(on.some(r => r.kind === 'power-lift') && on.some(r => r.kind === 'press'), 'explosive and chest stay');
-  ok(g.rows.filter(r => !r.include).every(r => /Left unticked/.test(r.reason)), 'says why');
+  ok(g.rows.filter(r => !r.include).every(r => /unticked/.test(r.reason)), 'says why');
 });
 test('suggested goals: not enough history gives no suggestions', () => {
   const s = seed();

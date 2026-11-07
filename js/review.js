@@ -204,9 +204,9 @@ function proposals(state, review) {
     if (g.reason === 'gear') {
       const here = loc => L.pickExercise(state, sl.familyId, loc, sl.tier, null);
       const swap = state.locations.map(here).find(Boolean);
-      if (swap && swap.id !== sl.exerciseId) offer({ id: `gear:${sl.id}`, kind: 'gear', slotId: sl.id, text: `${name}: no location has the gear. Switch it to ${swap.name}.`, change: { exerciseId: swap.id } });
-      else if (sl.tier !== 'T3' && doableAnywhere(state, sl, 'T3', null)) offer({ id: `gear:${sl.id}`, kind: 'gear', slotId: sl.id, text: `${name}: no location has the gear for it at ${sl.tier}. Make it a T3 ${L.byId(state.families, sl.familyId)?.name ?? ''} goal.`, change: { tier: 'T3', exerciseId: null } });
-      else offer({ id: `gear:${sl.id}`, kind: 'gear', slotId: sl.id, text: `${name}: no location has the gear for it. Remove the goal.`, change: { remove: true } });
+      if (swap && swap.id !== sl.exerciseId) offer({ id: `gear:${sl.id}`, kind: 'gear', slotId: sl.id, text: `${name}: no location has the gear · switch to ${swap.name}`, change: { exerciseId: swap.id } });
+      else if (sl.tier !== 'T3' && doableAnywhere(state, sl, 'T3', null)) offer({ id: `gear:${sl.id}`, kind: 'gear', slotId: sl.id, text: `${name}: no location has the gear at ${sl.tier} · make it T3`, change: { tier: 'T3', exerciseId: null } });
+      else offer({ id: `gear:${sl.id}`, kind: 'gear', slotId: sl.id, text: `${name}: no location has the gear · remove it`, change: { remove: true } });
       continue;
     }
     if (!review.finished) continue;
@@ -214,13 +214,13 @@ function proposals(state, review) {
       after.set(sl.id, g.quota - 1);
       room += tierCost(state, sl.tier);
       offer(g.quota > 1
-        ? { id: `ease:${sl.id}`, kind: 'ease', slotId: sl.id, text: `${name}: missed ${g.missed} weeks running. Ease off to ${g.quota - 1}× a week.`, change: { quota: g.quota - 1 } }
-        : { id: `ease:${sl.id}`, kind: 'ease', slotId: sl.id, text: `${name}: missed ${g.missed} weeks running. Pause it for now.`, change: { quota: 0 } });
+        ? { id: `ease:${sl.id}`, kind: 'ease', slotId: sl.id, text: `${name}: missed ${g.missed} weeks · ease to ${g.quota - 1}× a week`, change: { quota: g.quota - 1 } }
+        : { id: `ease:${sl.id}`, kind: 'ease', slotId: sl.id, text: `${name}: missed ${g.missed} weeks · pause it`, change: { quota: 0 } });
     } else if (g.met && g.metEarly && g.quota < 7) {
       const cost = tierCost(state, sl.tier);
       if (room >= cost) {
         room -= cost;
-        offer({ id: `step:${sl.id}`, kind: 'step', slotId: sl.id, text: `${name}: done by mid-week two weeks running. Step up to ${g.quota + 1}× a week.`, change: { quota: g.quota + 1 } });
+        offer({ id: `step:${sl.id}`, kind: 'step', slotId: sl.id, text: `${name}: done by mid-week twice · step up to ${g.quota + 1}× a week`, change: { quota: g.quota + 1 } });
       }
     }
   }
@@ -238,11 +238,11 @@ function proposals(state, review) {
     const trims = [...q].filter(([id, n]) => n !== after.get(id)).map(([slotId, quota]) => ({ slotId, quota }));
     if (trims.length) {
       const list = trims.map(t => `${slotName(state, L.byId(state.slots, t.slotId))} ${after.get(t.slotId)}→${t.quota}`).join(', ');
-      offer({ id: 'trim', kind: 'budget', slotId: null, text: `Your goals need about ${Math.round(budget.used)} minutes a week and you train about ${Math.round(budget.total)}. Trim T3 goals: ${list}.`, change: { trims } });
+      offer({ id: 'trim', kind: 'budget', slotId: null, text: `Goals need ~${Math.round(budget.used)} min a week, you train ~${Math.round(budget.total)} · trim ${list}`, change: { trims } });
     }
   }
   for (const l of review.lifts) if (l.trend === 'stalled') {
-    offer({ id: `stall:${l.exerciseId}|${l.tier}`, kind: 'stalled', slotId: null, text: `${l.tier} ${l.name} has been ${l.load} for 3 sessions running. Try a different scheme or rotate the lift.`, change: null });
+    offer({ id: `stall:${l.exerciseId}|${l.tier}`, kind: 'stalled', slotId: null, text: `${l.tier} ${l.name}: ${l.load} three sessions running · change the scheme or lift`, change: null });
   }
   return out;
 }
