@@ -1393,7 +1393,7 @@ step('categories: split Arms into Biceps and Triceps, add exercises, pick a cate
   check('and new ones, one per line (ones you already have are skipped)', made.length === 2 && st().exercises.filter(e => e.name === 'DB curl').length === 1);
   check('they count as Arms in the pickers', made.every(e => L.bodyPart(st(), e) === 'Arms') && t.defaultExerciseId != null);
   click('[data-act=catEdit][data-id=fam-arms]');
-  check('a category\'s ✎ opens it with its exercises', /Edit category/.test(sheet()) && q('#cat-name').value === 'Arms (pump)');
+  check('a category\'s ✎ opens it with its exercises', /Edit category/.test(sheet()) && q('#cat-name').value === 'Biceps (pump)');
   setVal(q('#cat-name'), 'Biceps', 'input');
   click('#sheet [data-act=catSave]');
   check('renaming it keeps its goals', fam('Biceps')?.id === 'fam-arms' && st().slots.some(sl => sl.familyId === 'fam-arms'));
