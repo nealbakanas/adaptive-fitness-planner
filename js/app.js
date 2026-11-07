@@ -2024,13 +2024,15 @@ function viewLibrary() {
   const archivedCount = state.exercises.filter(e => e.archived).length;
   let h = `<header class="top"><h1>Library</h1><button class="primary" data-act="quickAdd">+ Exercise</button></header>${libModeSeg()}
     <input class="search" id="libq" placeholder="Search exercises or families" value="${esc(ui.libQuery)}" data-libq>
+    ${partChips(state.exercises.filter(e => ui.showArchived || !e.archived), ui.libPart, 'libPart')}
     ${archivedCount ? `<button class="small quiet libarch" data-act="libArchived">${ui.showArchived ? 'Hide' : 'Show'} archived (${archivedCount})</button>` : ''}`;
   const fams = [...state.families].sort((a, b) => a.name.localeCompare(b.name));
   for (const f of fams) {
     const famMatch = f.name.toLowerCase().includes(q);
     const all = L.familyMembers(state, f.id);
-    const members = all.filter(e => (ui.showArchived || !e.archived) && (!q || famMatch || e.name.toLowerCase().includes(q)));
-    if (!members.length && (q || all.length)) continue; // nothing to show; truly empty families stay so you can add to them
+    const members = all.filter(e => (ui.showArchived || !e.archived) && (!q || famMatch || e.name.toLowerCase().includes(q))
+      && (!ui.libPart || L.bodyPart(state, e) === ui.libPart));
+    if (!members.length && (q || ui.libPart || all.length)) continue; // nothing to show; truly empty families stay so you can add to them
     h += `<div class="card"><h3>${esc(f.name)}</h3>${members.map(e => {
       const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
       const meta = [max ? `e1RM ${round(max)}` : '', e.equipment.join(', '), e.archived ? 'archived' : ''].filter(Boolean).join(' · ');
@@ -2635,30 +2637,64 @@ const TIER_DESC = {
   COND: 'Conditioning · bike EMOMs, in calories',
 };
 
-// Pick any exercise, from any family: mode 'add' adds a block, mode 'swap' replaces one.
+// Body-part chips: one at a time, tap again to clear. Only parts with something in `list` show.
+const partChips = (list, cur, act) => {
+  const have = new Set(list.map(e => L.bodyPart(state, e)));
+  return `<div class="chips partchips">${L.BODY_PARTS.filter(p => have.has(p)).map(p =>
+    `<button class="chip ${cur === p ? 'on' : ''}" data-act="${act}" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>`;
+};
+
+// Exercises you've logged, newest first (each once), out of `list`.
+function recentExercises(list, n = 8) {
+  const ok = new Set(list.map(e => e.id)), out = [];
+  for (const st of [...state.sets].filter(x => x.done && !x.warmup).sort((a, b) => (b.loggedAt ?? 0) - (a.loggedAt ?? 0))) {
+    if (ok.has(st.exerciseId) && !out.includes(st.exerciseId)) out.push(st.exerciseId);
+    if (out.length >= n) break;
+  }
+  return out.map(exOf);
+}
+
+// Pick any exercise, from any family: mode 'add' adds a block, mode 'swap' replaces one. Search looks everywhere;
+// otherwise a body part narrows the list, and with neither you see what you've done lately.
 function sheetAddEx(sh) {
   const past = sh.mode === 'histAdd' || sh.mode === 'histSwap'; // editing a past workout: any exercise, wherever it was done
   const s = past ? L.byId(state.sessions, sh.sessionId) : currentSession();
   const loc = past ? null : L.placeOf(state, s);
-  const q = (sh.q || '').trim().toLowerCase();
-  const matches = state.exercises.filter(e => !e.archived && (!q || e.name.toLowerCase().includes(q) || famOf(e.familyId)?.name.toLowerCase().includes(q)));
-  const here = past ? matches : matches.filter(e => L.isAvailable(e, loc));
-  const away = past ? 0 : matches.length - here.length;
-  const groups = new Map();
-  for (const e of here.sort((a, b) => a.rank - b.rank)) {
-    const f = famOf(e.familyId)?.name ?? '';
-    groups.set(f, [...(groups.get(f) || []), e]);
+  const live = state.exercises.filter(e => !e.archived);
+  const usable = past ? live : live.filter(e => L.isAvailable(e, loc));
+  // Swapping starts on the body part you're swapping from.
+  if (sh.part === undefined) {
+    const from = sh.mode === 'swap' ? exOf(findBlock(sh.blockId).b?.exerciseId) : sh.mode === 'histSwap' ? histGroups(s).find(g => g.key === sh.group)?.ex : null;
+    sh.part = from ? L.bodyPart(state, from) : null;
   }
+  const q = (sh.q || '').trim().toLowerCase();
+  const inPart = e => !sh.part || L.bodyPart(state, e) === sh.part;
+  const matches = q ? live.filter(e => e.name.toLowerCase().includes(q) || famOf(e.familyId)?.name.toLowerCase().includes(q)) : live.filter(inPart);
+  const here = past ? matches : matches.filter(e => L.isAvailable(e, loc));
+  const away = past || (!q && !sh.part) ? 0 : matches.length - here.length;
   const tier = sh.mode === 'swap' ? findBlock(sh.blockId).b.tier : sh.tier;
   const title = sh.mode === 'add' || sh.mode === 'histAdd' ? 'Add an exercise' : sh.mode === 'histSwap' ? 'Change to another exercise' : sh.mode === 'pair' ? `Superset with ${esc(exOf(findBlock(sh.blockId).b.exerciseId)?.name)}` : 'Swap to any exercise';
-  const rows = [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([f, list]) =>
-    `<div class="label">${esc(f)}</div>${list.map(e => `<button class="row" data-act="addExPick" data-id="${e.id}"><span>${esc(e.name)}</span>
-      <span class="meta">${(tier === 'T1' || tier === 'T2') && e.metric !== 'load_reps' && !e.explosive ? 'reps only' : ''}</span></button>`).join('')}`).join('');
+  const row = e => `<button class="row" data-act="addExPick" data-id="${e.id}"><span>${esc(e.name)}</span>
+      <span class="meta">${(tier === 'T1' || tier === 'T2') && e.metric !== 'load_reps' && !e.explosive ? 'reps only' : ''}</span></button>`;
+  let rows;
+  if (q || sh.part) {
+    const groups = new Map();
+    for (const e of here.sort((a, b) => a.rank - b.rank)) {
+      const f = famOf(e.familyId)?.name ?? '';
+      groups.set(f, [...(groups.get(f) || []), e]);
+    }
+    rows = [...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([f, list]) => `<div class="label">${esc(f)}</div>${list.map(row).join('')}`).join('')
+      || '<p class="muted">No matches here.</p>';
+  } else {
+    const recent = recentExercises(usable);
+    rows = recent.length ? `<div class="label">Recent</div>${recent.map(row).join('')}` : '<p class="muted">Pick a body part or search.</p>';
+  }
   const raw = (sh.q || '').trim();
   return `<h3>${title}</h3>
     ${sh.mode !== 'swap' && sh.mode !== 'histSwap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>` : ''}
     <input class="search" id="sheetq" data-sheetq value="${esc(sh.q || '')}" placeholder="Search, or type a new name" autocomplete="off">
-    <div class="list">${rows || '<p class="muted">No matches here.</p>'}
+    ${q ? '' : partChips(usable, sh.part, 'addExPart')}
+    <div class="list">${rows}
       <button class="row add" data-act="addExCreate">+ ${raw ? `Create “${esc(raw)}”` : 'New exercise'}</button></div>
     ${away ? `<p class="meta">${away} more need gear that isn't at ${esc(loc?.name)}</p>` : ''}`;
 }
@@ -2687,6 +2723,7 @@ function sheetGoal(sh) {
       <p class="meta">${TIER_DESC[g.tier]}</p></div>
     <div class="field"><label>Family</label><select data-gdraft="familyId">${opts(famOpts, g.familyId)}</select></div>
     <div class="field"><label>Exercise</label><select data-gdraft="exerciseId">${opts([['', `Any${usual ? ` (usually ${usual})` : ''}`], ...members.map(e => [e.id, e.name])], g.exerciseId ?? '')}</select></div>
+    ${goalMaxField(g)}
     <div class="field"><label>Times per week</label><div class="stepper">
       <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota || 'Paused'}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div></div>
     <div class="field"><label>Reps per session <span class="hint">optional</span></label>
@@ -2694,6 +2731,15 @@ function sheetGoal(sh) {
     <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${g.priority === v ? 'on' : ''}" data-act="goalSet" data-k="priority" data-v="${v}">${t}</button>`).join('')}</div></div>
     <div class="actions">${sh.isNew ? '' : '<button class="danger" data-act="goalDelete">Delete</button>'}
       <button class="primary" data-act="goalSave">${sh.isNew ? 'Add goal' : 'Save'}</button></div>`;
+}
+
+// The goal's lift (its exercise, else the family's usual one) and its 1-rep max, which you can set right here.
+function goalMaxField(g) {
+  const lift = exOf(g.exerciseId) ?? exOf(famOf(g.familyId)?.defaultExerciseId);
+  if (!lift || lift.metric !== 'load_reps' || !['T1', 'T2', 'TECH'].includes(g.tier)) return '';
+  return `<div class="field"><label>1-rep max${g.exerciseId ? '' : ` · ${esc(lift.name)}`}${lift.bodyweight ? ' <span class="hint">added load</span>' : ''}</label>
+    <div class="maxrow"><input class="num" inputmode="decimal" data-max="${lift.id}" value="${esc(lift.testedMax?.load ?? '')}" placeholder="1RM" aria-label="Tested 1-rep max, ${esc(lift.name)}">
+      <span class="meta">${esc(L.maxSource(state, lift.id) === 'tested' && lift.testedMax?.at ? `tested ${shortDay(lift.testedMax.at)}` : maxLine(lift) || 'No max yet')}</span></div></div>`;
 }
 
 function sheetScheme(sh) {
@@ -4091,6 +4137,8 @@ const actions = {
   addEx: () => openSheet({ type: 'addEx', mode: 'add', tier: 'T3', q: '' }),
   swapAny: () => openSheet({ type: 'addEx', mode: 'swap', blockId: ui.sheet.blockId, reason: ui.sheet.reason, q: '' }),
   addExTier: d => { ui.sheet.tier = d.t; renderSheet(); },
+  addExPart: d => { ui.sheet.part = ui.sheet.part === d.v ? null : d.v; renderSheet(); },
+  libPart: d => { ui.libPart = ui.libPart === d.v ? null : d.v; render(); },
   addExPick: d => {
     const sh = ui.sheet;
     if (sh.mode === 'histSwap' || sh.mode === 'histAdd') return histPick(d.id);
@@ -4689,6 +4737,7 @@ document.addEventListener('change', e => {
       save();
     }
   } else if (d.max) {
+    if (ui.sheet?.type === 'goal') readGoalReps(); // keep what's typed in the goal sheet across the redraw
     setTestedMax(exOf(d.max), el.value);
     save(); render();
   } else if (d.progweek) {

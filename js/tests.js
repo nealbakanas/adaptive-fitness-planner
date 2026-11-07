@@ -2824,6 +2824,25 @@ test('charts: round ticks, one point per x, empty data draws nothing', () => {
   ok(!/<script|<x /i.test(CH.lineChart('<x onload=1>', '<script>', [{ t: 0, v: 1, tip: {} }]).svg), 'escaped');
 });
 
+// ---------- body parts ----------
+test('body parts: every library exercise gets one, from its family, else its movement', () => {
+  const s = seed();
+  const part = id => L.bodyPart(s, L.byId(s.exercises, id));
+  eq(['ex-power-clean', 'ex-back-squat', 'gs-romanian-deadlift', 'ex-wpullup', 'ex-db-curl', 'gs-z-press', 'ex-wdip', 'gs-bench-press', 'ex-calf-raise', 'ex-ghd-situp', 'ex-broad-jump', 'ex-assault-bike'].map(part),
+    ['Olympic', 'Legs', 'Hips & hamstrings', 'Back', 'Arms', 'Shoulders', 'Chest', 'Chest', 'Calves', 'Core', 'Jumps', 'Cardio']);
+  const none = s.exercises.filter(e => !e.archived && !L.bodyPart(s, e)).map(e => e.name);
+  eq(none, [], 'nothing left out');
+  ok(s.exercises.every(e => !L.bodyPart(s, e) || L.BODY_PARTS.includes(L.bodyPart(s, e))));
+  // A family you made: its name, else the exercise's movement.
+  s.families.push({ id: 'fam-mine', name: 'My stuff' });
+  const mk = (id, name) => { const e = { ...L.byId(s.exercises, 'ex-db-curl'), id, name, familyId: 'fam-mine' }; s.exercises.push(e); return e; };
+  eq([mk('m1', 'Cable tricep pushdown'), mk('m2', 'Landmine press'), mk('m3', 'Seal row'), mk('m4', 'Hammer curl'), mk('m5', 'Glute bridge')].map(e => L.bodyPart(s, e)),
+    ['Arms', 'Shoulders', 'Back', 'Arms', 'Hips & hamstrings']);
+  // Set by hand where the rules get it wrong.
+  L.byId(s.exercises, 'm3').part = 'Shoulders';
+  eq(part('m3'), 'Shoulders');
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

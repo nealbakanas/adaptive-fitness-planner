@@ -855,6 +855,46 @@ export function movementPattern(state, e) {
   return PATTERNS.find(([, re]) => re.test(text))?.[0] ?? null;
 }
 const PATTERN_REGION = { push: 'upper', pull: 'upper', knee: 'lower', hinge: 'lower', calf: 'lower', core: 'core', full: 'full' };
+
+// ---------- body parts (the filter chips in the exercise pickers) ----------
+
+export const BODY_PARTS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Hips & hamstrings', 'Calves', 'Core', 'Olympic', 'Jumps', 'Cardio'];
+// A family's name says it best (library families are named for what they train); first match wins.
+const FAMILY_PARTS = [
+  ['Olympic', /clean|snatch|jerk/i],
+  ['Arms', /\barms?\b|bicep|tricep|forearm|grip/i],
+  ['Shoulders', /overhead|shoulder|delt/i],
+  ['Chest', /bench|chest|push[- ]?ups?|\bdips?\b|incline|\bfly\b|pec/i],
+  ['Back', /upper back|vertical pull|\brows?\b|pull[- ]?ups?|chin[- ]?ups?|\blats?\b|\btraps?\b/i],
+  ['Calves', /\bcalf|calves|tibialis|ankle/i],
+  ['Core', /\bcore\b|\babs?\b|oblique/i],
+  ['Hips & hamstrings', /hamstring|hinge|\bhips?\b|glute|deadlift/i],
+  ['Legs', /\bquads?\b|squat|\blegs?\b|lunge/i],
+];
+// Otherwise the movement pattern, split by the exercise's name where a pattern covers two parts.
+function partFromPattern(state, e) {
+  const p = movementPattern(state, e), name = e.name ?? '';
+  if (p === 'full') return 'Olympic';
+  if (p === 'calf') return 'Calves';
+  if (p === 'core') return 'Core';
+  if (p === 'hinge') return 'Hips & hamstrings';
+  if (p === 'knee') return 'Legs';
+  if (p === 'pull') return /curl|forearm|grip|wrist|pinch|clamp/i.test(name) ? 'Arms' : 'Back';
+  if (p === 'push') {
+    if (/tricep|skull|push ?down|french|telle|\bextension/i.test(name)) return 'Arms';
+    return /overhead|military|\bz[- ]press|shoulder|raise|delt|push press|t-press|arnold|landmine/i.test(name) ? 'Shoulders' : 'Chest';
+  }
+  return null;
+}
+// One of BODY_PARTS, or null when nothing says (then only search finds it). Jumps and conditioning are their own.
+export function bodyPart(state, e) {
+  if (!e) return null;
+  if (e.part && BODY_PARTS.includes(e.part)) return e.part; // set by hand where the rules get it wrong
+  if (isConditioning(state, e)) return 'Cardio';
+  if (isJump(e)) return 'Jumps';
+  const fam = byId(state.families, e.familyId)?.name ?? '';
+  return FAMILY_PARTS.find(([, re]) => re.test(fam))?.[0] ?? partFromPattern(state, e);
+}
 const OPPOSITE = { push: 'pull', pull: 'push', knee: 'hinge', hinge: 'knee' };
 
 // How well e fits in mainEx's rest, 0 (don't) .. 3 (best). Upper body: antagonists (push with pull).

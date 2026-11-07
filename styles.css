@@ -534,3 +534,8 @@ details.plannote p { font-size: 14px; color: var(--muted); margin: 6px 2px; }
 details.card > summary { cursor: pointer; padding: 2px 0; }
 details.card[open] > summary { margin-bottom: 8px; }
 details.setsweek .dayhead { margin-top: 10px; }
+
+/* Body-part chips in exercise pickers; the 1RM row in the goal sheet */
+.chips.partchips { margin: 8px 0 4px; }
+.maxrow { display: flex; align-items: center; gap: 10px; }
+.maxrow .num { flex: 0 0 96px; }
