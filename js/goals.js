@@ -69,12 +69,14 @@ export function weekBudget(state, now = Date.now()) {
   const wk = usualWeek(state, now);
   const total = wk.workouts * wk.minutes;
   const cost = Object.fromEntries(L.TIERS.map(t => [t, tierCost(state, t)]));
-  const count = Object.fromEntries(L.TIERS.map(t => [t, state.slots.filter(sl => sl.tier === t).reduce((n, sl) => n + (sl.quota || 0), 0)]));
+  // T3 areas have no count: they use the time the counted goals leave (areas: how many there are).
+  const count = Object.fromEntries(L.TIERS.map(t => [t, state.slots.filter(sl => sl.tier === t && L.counted(state, sl)).reduce((n, sl) => n + sl.quota, 0)]));
+  const areas = state.slots.filter(sl => sl.quota > 0 && L.isArea(state, sl)).length;
   const used = L.TIERS.reduce((m, t) => m + count[t] * cost[t], 0);
   const room = total - used;
   const w = wk.workouts;
   const guide = { T1: [Math.min(2, Math.ceil(w)), Math.ceil(w)], T2: [Math.round(w), Math.round(2 * w)], T3: [Math.round(2 * w), Math.round(4 * w)] };
-  return { ...wk, total, cost, count, used, room, addT2: Math.max(0, Math.floor(room / cost.T2)), addT3: Math.max(0, Math.floor(room / cost.T3)), guide };
+  return { ...wk, total, cost, count, areas, used, room, addT2: Math.max(0, Math.floor(room / cost.T2)), addT3: Math.max(0, Math.floor(room / cost.T3)), guide };
 }
 
 const mostUsed = (state, f) => L.byId(state.exercises, [...f.uses].sort((a, b) => b[1].size - a[1].size)[0][0]);
@@ -173,9 +175,10 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
     r.reason = `Heavy in ${r.heavyDays}/${r.days} workouts, mostly ${r.top}`;
   }
 
-  // Fit the week: trim accessories first, explosive lifts last.
-  let total = rows.reduce((t, r) => t + r.quota, 0);
-  for (const r of [...rows].sort((a, b) => TRIM_ORDER.indexOf(a.kind) - TRIM_ORDER.indexOf(b.kind) || a.days - b.days)) {
+  // Fit the week: trim accessories first, explosive lifts last. T3 areas have no count, so they take none of the room.
+  const counts = r => !(r.tier === 'T3' && L.t3AsAreas(state));
+  let total = rows.filter(counts).reduce((t, r) => t + r.quota, 0);
+  for (const r of [...rows].filter(counts).sort((a, b) => TRIM_ORDER.indexOf(a.kind) - TRIM_ORDER.indexOf(b.kind) || a.days - b.days)) {
     while (total > capacity && r.quota > 1) { r.quota--; total--; }
     if (total > capacity) {
       r.include = false;

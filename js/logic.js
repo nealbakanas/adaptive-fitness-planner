@@ -503,6 +503,25 @@ export function slotForSet(state, s) {
 
 // Weekly quota progress. A slot gets one exposure per day whose counted sets meet the dose,
 // so chunks spread across a day add up.
+// T3 as areas (Settings → T3 as areas): a T3 goal names a body part to work, with no weekly count. It's never done for the
+// week: suggestions pick from it whenever it suits the day. Whatever counts goal sessions (the Week tab's pips, reviews, the
+// budget, goals hit) leaves areas out; `counted` says which goals count.
+export const t3AsAreas = state => state.settings?.t3Areas === true;
+export const isArea = (state, sl) => sl?.tier === 'T3' && t3AsAreas(state);
+export const counted = (state, sl) => sl.quota > 0 && !isArea(state, sl);
+
+// When each family and exercise was last trained (a working set done), before `t`.
+function lastTrained(state, t) {
+  const fam = new Map(), ex = new Map();
+  for (const s of state.sets) {
+    if (!s.done || s.warmup || !(s.loggedAt < t)) continue;
+    const f = byId(state.exercises, s.exerciseId)?.familyId;
+    if (f && !(fam.get(f) >= s.loggedAt)) fam.set(f, s.loggedAt);
+    if (!(ex.get(s.exerciseId) >= s.loggedAt)) ex.set(s.exerciseId, s.loggedAt);
+  }
+  return { fam, ex };
+}
+
 export function creditWeek(state, t = Date.now()) {
   const { start, end } = weekBounds(state, t);
   const today = dayKey(t);
@@ -606,19 +625,31 @@ export function scoreSlots(state, ci, t = Date.now()) {
   const daysLeft = daysLeftInWeek(state, t);
   const loaded = state.settings.recovery?.t1AfterT1 !== false ? recentLoadedRegions(state, t) : new Map();
   const owned = ownedSlotIds(state, t); // a program block has these (js/block.js): paused while it runs
+  const last = t3AsAreas(state) ? lastTrained(state, t) : null;
   const out = [];
   for (const sl of state.slots) {
     const r = credit.slots.get(sl.id);
-    const remaining = sl.quota - r.filled;
-    if (remaining <= 0 || r.todayMet || ci.skip?.includes(sl.familyId) || owned.has(sl.id)) continue;
+    const area = isArea(state, sl);
+    // An area is open every day it hasn't been done; a counted goal until its weekly count is met.
+    const remaining = area ? 1 : sl.quota - r.filled;
+    if ((area ? !(sl.quota > 0) : remaining <= 0) || r.todayMet || ci.skip?.includes(sl.familyId) || owned.has(sl.id)) continue;
     const picked = pickExerciseWhy(state, sl.familyId, loc, sl.tier, sl.exerciseId);
     if (!picked) continue;
-    const exercise = picked.exercise;
+    const exercise = area ? areaExercise(state, ci, sl, picked.exercise) : picked.exercise;
 
     const why = [];
     if (picked.note) why.push(picked.note);
-    let score = (sl.priority || 1) * remaining / daysLeft;
-    why.push(`priority ${sl.priority} × ${remaining} left ÷ ${daysLeft}d`);
+    let score;
+    if (area) {
+      // Areas: the longer since you worked it, the sooner it comes up (a week or more counts the same).
+      const at = sl.exerciseId ? last.ex.get(sl.exerciseId) : last.fam.get(sl.familyId);
+      const days = at == null ? 7 : Math.min(7, Math.max(0, Math.round((startOfDay(t) - startOfDay(at)) / DAY)));
+      score = (sl.priority || 1) * (0.5 + days / 7);
+      why.push(`area, ${at == null ? 'not done yet' : `${days}d since`}`);
+    } else {
+      score = (sl.priority || 1) * remaining / daysLeft;
+      why.push(`priority ${sl.priority} × ${remaining} left ÷ ${daysLeft}d`);
+    }
     const im = INTENT[ci.intent || 'auto'][sl.tier];
     if (im !== 1) { score *= im; why.push(`${ci.intent} ×${im}`); }
     const power = !!exercise.explosive && isStrength(sl.tier);
@@ -649,7 +680,7 @@ export function scoreSlots(state, ci, t = Date.now()) {
     else if (half) { score *= 0.5; why.push(`leaning ${lean} ×0.5`); }
     // A short pocket of time, or a day you'll split up: favor things you can do right now with no setup.
     if ((ci.split || ci.minutes <= 20) && exercise.anytime) { score *= 1.5; why.push('can do anywhere ×1.5'); }
-    out.push({ slot: sl, exercise, score, why, waits, remaining, daysLeft });
+    out.push({ slot: sl, exercise, score, why, waits, remaining, daysLeft, ...(area ? { area: true } : {}) });
   }
   return out.sort((a, b) => b.score - a.score);
 }
@@ -730,12 +761,36 @@ const blockRank = (state, b) => {
 // of open goals still changes. Goals that name an exercise, and T1/T2 lifts, stay as they are.
 function variedAccessory(state, ci, c) {
   if (!ci.variant || c.slot.exerciseId) return c.exercise;
-  const loc = placeOf(state, ci);
+  // An area's exercise is already an accessory (areaExercise); a counted goal keeps its own pick first.
+  const opts = (c.area ? accessoryOptions(state, ci, c.exercise) : [c.exercise, ...accessoryOptions(state, ci, c.exercise).filter(e => e !== c.exercise)]).slice(0, 3);
+  return opts[ci.variant % opts.length] ?? c.exercise;
+}
+// A family's accessories you can do here, closest to `ex` first (ex itself when it is one): never a main lift (your T1/T2 goals'
+// lifts), nothing explosive or on a dip belt, only exercises whose role is accessory.
+function accessoryOptions(state, ci, ex) {
   const main = new Set(state.slots.filter(sl => isStrength(sl.tier)).map(sl => sl.exerciseId ?? byId(state.families, sl.familyId)?.defaultExerciseId));
   const tr = tasteFor(state);
   const ok = e => !e.explosive && !main.has(e.id) && !isExcluded(tr, e.id) && !(e.equipment || []).includes('dip-belt') && (e.role ?? guessRole(e.name, e.metric, e.explosive)) === 'accessory';
-  const opts = [c.exercise, ...alternatives(state, c.exercise, loc).filter(ok)].slice(0, 3);
-  return opts[ci.variant % opts.length];
+  return [ex, ...alternatives(state, ex, placeOf(state, ci))].filter(ok);
+}
+// What an area is worked with today: the goal's exercise if it names one, else an accessory from the family (not the family's
+// main lift: Hamstrings means curls and perturbations here, not deficit RDLs), else whatever the family has.
+const areaExercise = (state, ci, sl, picked) => (sl.exerciseId ? picked : accessoryOptions(state, ci, picked)[0] ?? picked);
+
+// T3 areas complement the day's main work: an area whose exercise pairs well with a T1/T2 lift already in the workout
+// (pairScore: pulling with pressing, hips with squats, core with anything) moves up, by a quarter per point of fit.
+function complementAreas(state, cands, blocks) {
+  const mains = blocks.filter(b => isStrength(b.tier) || b.tier === 'TECH').map(b => byId(state.exercises, b.exerciseId)).filter(Boolean);
+  if (!mains.length) return;
+  for (const c of cands) {
+    if (!c.area) continue;
+    let best = 0, with_ = null;
+    for (const m of mains) { const f = pairScore(state, m, c.exercise); if (f > best) { best = f; with_ = m; } }
+    if (!best) continue;
+    c.score *= 1 + 0.25 * best;
+    c.why.push(`goes with ${with_.name} ×${1 + 0.25 * best}`);
+  }
+  cands.sort((a, b) => b.score - a.score);
 }
 
 // Why a goal wasn't picked: `note` for people (Why this session), `hold` for code (the weekly review's reasons):
@@ -773,6 +828,7 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
     // Regenerate (ci.variant) takes the tier's open goals in turn: the top three that could go in today rotate, so
     // power cleans one time and snatches the next.
     let cands = scored.filter(x => x.slot.tier === tier);
+    if (tier === 'T3') complementAreas(state, cands, blocks);
     if (ci.variant) {
       const ready = cands.filter(x => !x.waits).slice(0, 3);
       const k = ci.variant % Math.max(1, ready.length);
@@ -790,10 +846,11 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
       // Wrecked (energy 1-2): one T2 at most, the rest of the time goes to T3s.
       if (count[tier] >= (tier === 'T2' && energy(ci) <= 2.5 ? 1 : TIER_CAP[tier])) { hold(c, 'others', `${tier} cap reached`); continue; }
       if (famUsed.has(c.slot.familyId)) { hold(c, 'family', 'same family already in this session'); continue; }
-      if (!requestOf(tier) && c.score < 0.25 * top) { hold(c, 'others', 'score too low vs. top pick'); continue; }
+      // Areas aren't measured against the main lifts: they fill the time the main work leaves, best fit first.
+      if (!requestOf(tier) && !c.area && c.score < 0.25 * top) { hold(c, 'others', 'score too low vs. top pick'); continue; }
       // A tier the chosen intent pushes down must be nearly as urgent as the top pick, otherwise
       // tier order would still fill the session with it (sweat day, 5x5 squats).
-      if (!requestOf(tier) && INTENT[ci.intent || 'auto'][tier] < 1 && c.score < 0.6 * top) { hold(c, 'others', `${ci.intent} intent favors other work`); continue; }
+      if (!requestOf(tier) && !c.area && INTENT[ci.intent || 'auto'][tier] < 1 && c.score < 0.6 * top) { hold(c, 'others', `${ci.intent} intent favors other work`); continue; }
       const exercise = tier === 'T3' ? variedAccessory(state, ci, c) : c.exercise;
       const sc = pickScheme(state, tier, exercise, schemeRoom(state, tier, budget, exercise.id), ci, slotDose(state, c.slot));
       if (!sc) { hold(c, 'time', 'no scheme fits remaining time'); continue; }
@@ -855,6 +912,46 @@ export function movementPattern(state, e) {
   return PATTERNS.find(([, re]) => re.test(text))?.[0] ?? null;
 }
 const PATTERN_REGION = { push: 'upper', pull: 'upper', knee: 'lower', hinge: 'lower', calf: 'lower', core: 'core', full: 'full' };
+
+// ---------- body parts (the filter chips in the exercise pickers) ----------
+
+export const BODY_PARTS = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Hips & hamstrings', 'Calves', 'Core', 'Olympic', 'Jumps', 'Cardio'];
+// A family's name says it best (library families are named for what they train); first match wins.
+const FAMILY_PARTS = [
+  ['Olympic', /clean|snatch|jerk/i],
+  ['Arms', /\barms?\b|bicep|tricep|forearm|grip/i],
+  ['Shoulders', /overhead|shoulder|delt/i],
+  ['Chest', /bench|chest|push[- ]?ups?|\bdips?\b|incline|\bfly\b|pec/i],
+  ['Back', /upper back|vertical pull|\brows?\b|pull[- ]?ups?|chin[- ]?ups?|\blats?\b|\btraps?\b/i],
+  ['Calves', /\bcalf|calves|tibialis|ankle/i],
+  ['Core', /\bcore\b|\babs?\b|oblique/i],
+  ['Hips & hamstrings', /hamstring|hinge|\bhips?\b|glute|deadlift/i],
+  ['Legs', /\bquads?\b|squat|\blegs?\b|lunge/i],
+];
+// Otherwise the movement pattern, split by the exercise's name where a pattern covers two parts.
+function partFromPattern(state, e) {
+  const p = movementPattern(state, e), name = e.name ?? '';
+  if (p === 'full') return 'Olympic';
+  if (p === 'calf') return 'Calves';
+  if (p === 'core') return 'Core';
+  if (p === 'hinge') return 'Hips & hamstrings';
+  if (p === 'knee') return 'Legs';
+  if (p === 'pull') return /curl|forearm|grip|wrist|pinch|clamp/i.test(name) ? 'Arms' : 'Back';
+  if (p === 'push') {
+    if (/tricep|skull|push ?down|french|telle|\bextension/i.test(name)) return 'Arms';
+    return /overhead|military|\bz[- ]press|shoulder|raise|delt|push press|t-press|arnold|landmine/i.test(name) ? 'Shoulders' : 'Chest';
+  }
+  return null;
+}
+// One of BODY_PARTS, or null when nothing says (then only search finds it). Jumps and conditioning are their own.
+export function bodyPart(state, e) {
+  if (!e) return null;
+  if (e.part && BODY_PARTS.includes(e.part)) return e.part; // set by hand where the rules get it wrong
+  if (isConditioning(state, e)) return 'Cardio';
+  if (isJump(e)) return 'Jumps';
+  const fam = byId(state.families, e.familyId)?.name ?? '';
+  return FAMILY_PARTS.find(([, re]) => re.test(fam))?.[0] ?? partFromPattern(state, e);
+}
 const OPPOSITE = { push: 'pull', pull: 'push', knee: 'hinge', hinge: 'knee' };
 
 // How well e fits in mainEx's rest, 0 (don't) .. 3 (best). Upper body: antagonists (push with pull).
@@ -939,7 +1036,7 @@ export function suggestPair(state, ci, mainEx, { excludeFamilies = [], credit = 
     if (!fit) continue;
     const slot = slotFor(state, e, 'T3');
     const r = slot && credit.slots.get(slot.id);
-    const open = r && r.filled < slot.quota && !r.todayMet;
+    const open = r && !r.todayMet && (isArea(state, slot) ? slot.quota > 0 : r.filled < slot.quota);
     let score = fit * 2;
     if (open) score += 2 + (slot.priority || 1);
     if (recent.has(e.id)) score += 1.5; // something you actually do beats filler

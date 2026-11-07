@@ -227,7 +227,7 @@ export function seed() {
   ];
 
   return {
-    version: 29,
+    version: 30,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -236,6 +236,7 @@ export function seed() {
       increment: 5,
       kettlebells: [30, 40, 45, 53], // loads for kettlebell exercises snap to these
       recovery: { t1AfterT1: true, powerWhenTired: true }, // powerWhenTired off: a low-energy day makes power work technique
+      t3Areas: false, // T3 goals as areas with no weekly count (logic.js isArea): off for new installs
       week: { workouts: null, minutes: null }, // your usual week for the goal budget; null = from your recent check-ins
       onboarded: false, // a new install starts with the setup (js/onboard.js)
       learnTaste: true,  // suggestions follow your swaps, removals and favorites (js/taste.js)

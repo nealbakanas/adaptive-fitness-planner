@@ -20,6 +20,19 @@ const onlyAt = id => {
   for (const b of qa('[data-act=ciLoc].on')) if (b.dataset.v !== id) b.click();
 };
 const step = (name, fn) => { try { fn(); } catch (e) { out.push(['FAIL', `${name} — ${e.message}`]); } };
+// The add-exercise sheet opens on your recent exercises: an exercise that isn't there is found by searching its name.
+const pickEx = id => {
+  let b = q(`#sheet [data-act=addExPick][data-id="${id}"]`);
+  if (!b) {
+    const input = q('#sheetq');
+    if (!input) throw new Error('no exercise sheet open');
+    input.value = store.state.exercises.find(e => e.id === id)?.name ?? id;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    b = q(`#sheet [data-act=addExPick][data-id="${id}"]`);
+  }
+  if (!b) throw new Error(`missing exercise ${id} in the sheet`);
+  b.click();
+};
 
 const KEY = globalThis.AFP_STORAGE_KEY;
 const wipe = () => Object.keys(localStorage).filter(k => k === KEY || k.startsWith(`${KEY}.`)).forEach(k => localStorage.removeItem(k));
@@ -82,7 +95,7 @@ step('tired check-in gives technique', () => {
 step('power block while tired offers one-tap technique', () => {
   click('[data-act=addEx]');
   click('[data-act=addExTier][data-t=T2]');
-  click('[data-act=addExPick][data-id=ex-broad-jump]');
+  pickEx('ex-broad-jump');
   const warn = qa('.dose.warn').find(d => /Not fresh/.test(d.innerText));
   check('banner offered', !!warn);
   click('[data-act=toTech]');
@@ -128,7 +141,7 @@ step('choose the mix, then regenerate it', () => {
       && notCore.has(chip(x))).at(-1);
     click(t3b.querySelector('[data-act=swapEx]'));
     click('#sheet [data-act=swapAny]');
-    click('#sheet [data-act=addExPick][data-id=ex-dead-bug]');
+    pickEx('ex-dead-bug');
     const db = qa('section.block').find(x => chip(x) === 'Dead bug');
     check('a swapped-in T3 counts toward its own goal', !!db && /Core · \d+\/30 reps/.test(db.innerText), db?.innerText.slice(0, 200));
   }
@@ -171,7 +184,7 @@ step('supersets, real rest, pause and resume, more time', () => {
   check('resume brings the same workout back', qa('section.block').length === blocksBefore && !!q('section.block.paired'));
   click('[data-act=addEx]');
   click('[data-act=addExTier][data-t=T3]');
-  click('[data-act=addExPick][data-id=ex-dead-bug]');
+  pickEx('ex-dead-bug');
   check('a T3 added by hand joins a superset', qa('section.block.paired').some(b => /Dead bug/.test(b.innerText)));
   // AMRAP last set on a loaded T1/T2 lift: one tap, the last set is marked, and it sticks to the last set.
   const lift = () => qa('section.block').find(x => x.querySelector('[data-act=amrapToggle]'));
@@ -199,7 +212,7 @@ step('supersets, real rest, pause and resume, more time', () => {
   click('#sheet [data-act=sheetClose]');
   click('[data-act=addEx]');
   click('[data-act=addExTier][data-t=T3]');
-  click('[data-act=addExPick][data-id=ex-ring-curl]');
+  pickEx('ex-ring-curl');
   check('two T3s added by hand superset each other', /alternate sets|Giant set/.test(qa('.sslabel').map(x => x.innerText).join(' ')), qa('.sslabel').map(x => x.innerText).join(' | '));
   const lead = qa('section.block.haspair').find(b => /^T3/.test(b.querySelector('.tier').innerText));
 check('a T3-led group exists', !!lead);
@@ -371,7 +384,7 @@ step('warm-ups are optional, only for T1/T2, and never fill the working sets', (
   if (!q('[data-act=addEx]')) { onlyAt('loc-basement'); click('[data-act=suggest]'); }
   click('[data-act=addEx]');
   click('[data-act=addExTier][data-t=T2]');
-  click('[data-act=addExPick][data-id=ex-deficit-rdl]');
+  pickEx('ex-deficit-rdl');
   const blk = () => qa('section.block').find(b => /Deficit Romanian deadlift/.test(b.innerText));
   check('no warm-ups until asked', !blk().querySelector('.set.warm'));
   const work = () => state.sets.filter(x => x.blockId === blk().querySelector('[data-act=addWarm]').dataset.b && !x.warmup);
@@ -469,7 +482,7 @@ step('hold timer logs a timed set and starts the rest', () => {
   click('[data-act=nav][data-tab=today]');
   if (!q('[data-act=addEx]')) { onlyAt('loc-basement'); click('[data-act=suggest]'); }
   click('[data-act=addEx]');
-  click('[data-act=addExPick][data-id=ex-sorensen]');
+  pickEx('ex-sorensen');
   // Do it on its own: an added T3 can join a superset, and then the rest waits for the end of the round.
   const ses = state.sessions.at(-1), sor = ses.blocks.find(b => b.exerciseId === 'ex-sorensen');
   for (const b of ses.blocks.filter(x => x === sor ? x.pairOf : x.pairOf === sor.id)) click(`[data-act=pairUnlink][data-b="${b.id}"]`);
@@ -705,9 +718,9 @@ step('editing a past workout from History', () => {
   check('changing the tier changes its sets', mine().some(x => x.tier === other) && qa('.histedit select[data-hgtier]').some(x => x.value === other));
   // Another exercise, from the whole library.
   click('[data-act=histAddEx]');
-  check('adding offers the whole library', /Add an exercise/.test(sheet()) && !!q('#sheet [data-act=addExPick][data-id=ex-dead-bug]'));
+  check('adding offers body parts and search', /Add an exercise/.test(sheet()) && qa('#sheet [data-act=addExPart]').length >= 5 && !!q('#sheetq'));
   const groups0 = qa('.histedit').length;
-  click('#sheet [data-act=addExPick][data-id=ex-dead-bug]');
+  pickEx('ex-dead-bug');
   check('the new exercise has a set to fill in', qa('.histedit').length === groups0 + 1 && mine().some(x => x.exerciseId === 'ex-dead-bug'));
   // Another day (keeping the time of day).
   const t0 = sess().firstSetAt ?? sess().checkinAt;
@@ -987,7 +1000,7 @@ step('the bike added by hand is conditioning, during a workout and in History', 
   const sess = st().sessions.filter(x => x.status === 'open').at(-1);
   click('[data-act=addEx]');
   check('the add sheet starts at T3', q('#sheet [data-act=addExTier].on')?.dataset.t === 'T3');
-  click('#sheet [data-act=addExPick][data-id=ex-assault-bike]');
+  pickEx('ex-assault-bike');
   const b = sess.blocks.find(x => x.exerciseId === 'ex-assault-bike');
   check('added as COND, toward the conditioning goal', b?.tier === 'COND' && !!b.slotId && st().slots.find(sl => sl.id === b.slotId)?.tier === 'COND', JSON.stringify(b));
   for (const x of st().sets.filter(y => y.blockId === b.id)) { x.done = true; x.loggedAt = Date.now(); }
@@ -999,7 +1012,7 @@ step('the bike added by hand is conditioning, during a workout and in History', 
   click('[data-act=histOpen]');
   click(qa('[data-act=histEdit]').find(x => x.dataset.id === sess.id));
   click('[data-act=histAddEx]');
-  click('#sheet [data-act=addExPick][data-id=ex-assault-bike]');
+  pickEx('ex-assault-bike');
   const added = sess.blocks.filter(x => x.exerciseId === 'ex-assault-bike').at(-1);
   check('History adds it as COND too', added?.tier === 'COND' && st().sets.filter(x => x.blockId === added.id).every(x => x.tier === 'COND'));
   click('[data-act=histEditDone]');
@@ -1064,7 +1077,7 @@ step('sets added in History, then Continue: asks whether they were done, and mer
     click(qa('[data-act=histEdit]').find(x => x.dataset.id === sess.id));
     click('[data-act=histAddEx]');
     click(`#sheet [data-act=addExTier][data-t="${later.tier}"]`);
-    click(`#sheet [data-act=addExPick][data-id="${later.exerciseId}"]`);
+    pickEx(later.exerciseId);
     for (let i = 0; i < 2; i++) click(qa('.histedit [data-act=histAddSet]').at(-1));
     const added = () => st().sets.filter(x => x.sessionId === sess.id && x.exerciseId === later.exerciseId && x.tier === later.tier);
     check(`(${answer}) History logged 3 sets as done`, added().filter(x => x.done).length === 3);
@@ -1278,6 +1291,86 @@ step('History → Progress: tiles, charts, a readout on tap, and tables', () => 
   click('[data-act=sheetClose]');
   st().sets = st().sets.filter(x => !x.id.startsWith('pg'));
   click('[data-act=histClose]');
+});
+
+step('a weekly goal shows its lift\'s 1-rep max, and sets it', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=goalEdit][data-id=sl-t1-squat]');
+  const lift = L.byId(st().exercises, L.byId(st().families, 'fam-squat').defaultExerciseId);
+  const input = q(`#sheet [data-max="${lift.id}"]`);
+  check('the goal sheet has the 1RM of the family\'s usual lift', !!input && q('#sheet').textContent.includes(`1-rep max · ${lift.name}`), q('#sheet').textContent.slice(0, 300));
+  setVal(q('#g-reps'), '12', 'input');
+  setVal(input, '333');
+  check('typing a 1RM saves it as tested today', lift.testedMax?.load === 333 && Date.now() - lift.testedMax.at < 60e3);
+  check('and the sheet stays open, with what you typed', !q('#sheet').hidden && q('#g-reps')?.value === '12' && q(`#sheet [data-max="${lift.id}"]`)?.value === '333' && /tested /.test(sheet()), sheet().slice(0, 300));
+  setVal(q(`#sheet [data-max="${lift.id}"]`), '');
+  check('clearing it goes back to your sets', lift.testedMax == null);
+  click('[data-act=sheetClose]');
+  click('[data-act=goalEdit][data-id=sl-t2-hams]');
+  check('a goal on one exercise shows that exercise\'s max', !!q('#sheet [data-max=ex-deficit-rdl]'));
+  click('[data-act=sheetClose]');
+});
+
+step('picking an exercise: recent first, body-part chips, search looks everywhere', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  onlyAt('loc-basement');
+  click('[data-act=suggest]');
+  click('[data-act=addEx]');
+  check('opens on your recent exercises, not the whole library', /recent/i.test(sheet()) && qa('#sheet [data-act=addExPick]').length <= 8, sheet().slice(0, 300));
+  click('#sheet [data-act=addExPart][data-v="Legs"]');
+  const picks = qa('#sheet [data-act=addExPick]').map(b => L.byId(st().exercises, b.dataset.id));
+  check('a body part narrows the list to it', picks.length > 3 && picks.every(e => L.bodyPart(st(), e) === 'Legs'), picks.map(e => e.name).join());
+  click('#sheet [data-act=addExPart][data-v="Legs"]');
+  check('tapping it again clears it', /recent/i.test(sheet()) && !q('#sheet [data-act=addExPart].on'));
+  setVal(q('#sheetq'), 'curl', 'input');
+  check('search ignores the chips and finds across parts', qa('#sheet [data-act=addExPick]').some(b => /curl/i.test(b.innerText)) && !q('#sheet [data-act=addExPart]'));
+  click('[data-act=sheetClose]');
+  const b = st().sessions.filter(x => x.status === 'open').at(-1).blocks.find(x => L.byId(st().exercises, x.exerciseId)?.metric === 'load_reps');
+  click(`[data-act=swapEx][data-b="${b.id}"]`);
+  click('#sheet [data-act=swapAny]');
+  const want = L.bodyPart(st(), L.byId(st().exercises, b.exerciseId));
+  check('swapping starts on the body part you swap from', q(`#sheet [data-act=addExPart][data-v="${want}"]`)?.classList.contains('on'), want);
+  click('[data-act=sheetClose]');
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  click('[data-act=nav][data-tab=library]');
+  click('[data-act=libPart][data-v="Calves"]');
+  const shown = qa('[data-act=libEdit]').map(x => L.byId(st().exercises, x.dataset.id));
+  check('the Library filters by body part too', shown.length > 0 && shown.every(e => L.bodyPart(st(), e) === 'Calves'), shown.map(e => e.name).join());
+  click('[data-act=libPart][data-v="Calves"]');
+  click('[data-act=nav][data-tab=today]');
+});
+
+step('T3 as areas: a switch in Settings; areas have no weekly count on the Week tab', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=more]');
+  click('[data-act=setPage][data-p=you]');
+  const sw = q('[data-bind="settings.t3Areas"]');
+  check('the switch is there, off for a new install', !!sw && !sw.checked && st().settings.t3Areas === false);
+  sw.checked = true; fire(sw, 'change');
+  check('turning it on saves it', st().settings.t3Areas === true);
+  click('[data-act=nav][data-tab=week]');
+  const row = q('[data-act=goalEdit][data-id=sl-t3-core]');
+  check('T3 rows lose their pips', !!row && !row.querySelector('.pip'), row?.innerHTML.slice(0, 200));
+  check('other tiers keep theirs', !!q('[data-act=goalEdit][data-id=sl-t1-squat] .pip'));
+  click('[data-act=goalEdit][data-id=sl-t3-core]');
+  check('the goal sheet calls it an area: Active or Paused, no times a week', /no weekly count/.test(q('#sheet').textContent) && !!q('#sheet [data-act=goalActive][data-v="0"]') && !q('#sheet [data-act=goalStep]'));
+  const quota = L.byId(st().slots, 'sl-t3-core').quota;
+  click('#sheet [data-act=goalActive][data-v="0"]');
+  click('#sheet [data-act=goalSave]');
+  check('pausing an area saves it as paused', L.byId(st().slots, 'sl-t3-core').quota === 0);
+  click('[data-act=goalEdit][data-id=sl-t3-core]');
+  click('#sheet [data-act=goalActive][data-v="1"]');
+  click('#sheet [data-act=goalSave]');
+  check('and on again', L.byId(st().slots, 'sl-t3-core').quota >= 1);
+  L.byId(st().slots, 'sl-t3-core').quota = quota;
+  click('[data-act=nav][data-tab=more]');
+  click('[data-act=setPage][data-p=you]');
+  const sw2 = q('[data-bind="settings.t3Areas"]'); sw2.checked = false; fire(sw2, 'change');
+  check('and off again: counts are back', st().settings.t3Areas === false);
+  click('[data-act=nav][data-tab=today]');
 });
 
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------

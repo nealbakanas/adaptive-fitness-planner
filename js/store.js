@@ -45,6 +45,8 @@ function load() {
 export function migrate(s) {
   const base = seed();
   s.version ??= 1; // before the defaults below, or a backup without a version would skip every upgrade
+  // Settings the data had before the defaults fill in (a new setting whose upgrade isn't the default needs to know).
+  const had = new Set(Object.keys(s.settings ?? {}));
   for (const k of Object.keys(base)) if (s[k] === undefined) s[k] = base[k];
   s.settings = { ...base.settings, ...s.settings };
   // Equipment list: anything a location or exercise uses, plus whatever you've added.
@@ -348,6 +350,12 @@ export function migrate(s) {
     s.block ??= null;
     s.blocks ??= [];
     s.version = 29;
+  }
+  if (s.version < 30) {
+    // v30: T3 as areas (logic.js isArea): T3 goals become areas to work, with no weekly count. On for data from before it
+    // (it was asked for); new installs start with weekly counts. Settings → You and training switches it.
+    if (!had.has('t3Areas')) s.settings.t3Areas = true;
+    s.version = 30;
   }
   return s;
 }
