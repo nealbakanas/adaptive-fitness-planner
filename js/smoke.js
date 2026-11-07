@@ -48,7 +48,7 @@ step('fresh suggestion', () => {
   onlyAt('loc-basement');
   click('[data-act=suggest]');
   check('session shows blocks', qa('section.block').length > 0);
-  check('readiness line shown', /Fresh for power work/.test(text()), text().slice(0, 200));
+  check('a fresh day needs no readiness line', !q('.sub.ready'), text().slice(0, 200));
   check('explosive block first', /Block|Power clean|Broad jump|Box jump|Depth jump|Jump/i.test(qa('section.block')[0].innerText), qa('section.block')[0].innerText.slice(0, 80));
   click('[data-act=finish]');
 });
@@ -130,7 +130,7 @@ step('choose the mix, then regenerate it', () => {
     click('#sheet [data-act=swapAny]');
     click('#sheet [data-act=addExPick][data-id=ex-dead-bug]');
     const db = qa('section.block').find(x => chip(x) === 'Dead bug');
-    check('a swapped-in T3 counts toward its own goal', !!db && /Toward T3 Core/.test(db.innerText), db?.innerText.slice(0, 200));
+    check('a swapped-in T3 counts toward its own goal', !!db && /Core · \d+\/30 reps/.test(db.innerText), db?.innerText.slice(0, 200));
   }
   click('[data-act=recheck]');
   const j2 = q('[data-ci-jumps]');
@@ -161,7 +161,7 @@ step('supersets, real rest, pause and resume, more time', () => {
   const first = state.sets.find(x => x.blockId === state.timer.blockId && x.done);
   first.loggedAt -= 150000; // as if the set was 2.5 minutes ago
   click(main().querySelectorAll('[data-act=check]')[1]);
-  check('real rest shown for the block and the session', /real rest 2:\d\d avg/.test(main().innerText) && /real rest/.test(q('header.top').innerText), main().innerText.slice(0, 200));
+  check('real rest shown for the block and the session', /rest 2:\d\d avg/.test(main().innerText) && /rest \d:\d\d avg/.test(q('header.top').innerText), main().innerText.slice(0, 200));
   const blocksBefore = qa('section.block').length;
   click('[data-act=finish]');
   check('finishing with sets left offers pause', /not logged yet/.test(sheet()));
@@ -221,7 +221,7 @@ check('a T3-led group exists', !!lead);
   check('more time adds exercises', qa('section.block').length > blocksBefore, `${blocksBefore} -> ${qa('section.block').length}`);
   click('[data-act=finish]');
   click('#sheet [data-act=finishNow]');
-  check('done today shows real rest', /Done today: .*real rest/.test(text()), text().slice(0, 300));
+  check('done today offers to continue', /Done today · \d+ sets/.test(text()) && !!q('[data-act=sessionContinue]'), text().slice(0, 300));
 });
 
 step('video links must be web links', () => {
@@ -235,7 +235,7 @@ step('video links must be web links', () => {
 
 step('mobility: routine session, body-part picks, mobility in a workout, library and routines', () => {
   click('[data-act=nav][data-tab=today]');
-  check('check-in no longer lists mobility', !q('[data-act=mobStart]') && /under Plans/.test(text()));
+  check('check-in no longer lists mobility', !q('[data-act=mobStart]'));
   click('[data-act=nav][data-tab=plans]');
   check('Plans lists your mobility routines', /Day 1: Long & Strong/.test(text()) && qa('[data-act=mobStart]').length === 5 && /McGill Big 3/.test(text()));
   click('[data-act=mobStart][data-id=mobr-day1]');
@@ -257,7 +257,7 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
   check('finish saves only what was logged', state.mobility.sessions.at(-1).status === 'done' && state.mobility.sessions.at(-1).items.length === 1
     && state.mobility.sessions.at(-1).items[0].note === 'left side tight');
   click('[data-act=nav][data-tab=plans]');
-  check('routine shows when it was last done', /Day 1: Long & Strong\s*4 exercises · last today/.test(text()), text().slice(0, 600));
+  check('routine shows when it was last done', /Day 1: Long & Strong\s*4 exercises · today/.test(text()), text().slice(0, 600));
   click('[data-act=nav][data-tab=today]');
 
   onlyAt('loc-basement');
@@ -287,7 +287,7 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
   click('[data-act=libMode][data-v=strength]');
 
   click('[data-act=nav][data-tab=plans]');
-  check('plans tab lists the mobility routines', /Mobility routines/.test(text()) && /Day 4: Primal Roots/.test(text()));
+  check('plans tab lists the mobility routines', /Mobility/.test(text()) && /Day 4: Primal Roots/.test(text()) && !!q('[data-act=mobRoutineEdit]'));
   click('[data-act=mobRoutineNew]');
   setVal(q('#mr-name'), 'Hips before volleyball', 'input');
   click('[data-act=mobPick][data-mode=routine]');
@@ -296,12 +296,12 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
   click('[data-act=mobRoutineSave]');
   check('new routine saved', state.mobility.routines.some(r => r.name === 'Hips before volleyball' && r.items.length >= 1));
   click('[data-act=nav][data-tab=week]');
-  check('week tab shows mobility and body parts covered', /Mobility this week/.test(text()) && /2 sessions/.test(text()), text().slice(-400));
+  check('week tab shows mobility and body parts covered', /Mobility\s*2 sessions · /.test(text()), text().slice(-400));
 });
 
-step('library shows region + explosive, edit sheet has the controls', () => {
+step('library rows stay short, edit sheet has the region and explosive controls', () => {
   click('[data-act=nav][data-tab=library]');
-  check('library lists explosive tag', /explosive/.test(text()));
+  check('library rows show gear, not a list of tags', /barbell/.test(text()) && !/Load × reps · /.test(text()));
   click('[data-act=libEdit][data-id=ex-broad-jump]');
   check('region select is lower', q('#ee-region').value === 'lower');
   check('explosive ticked', q('#ee-expl').checked);
@@ -405,7 +405,7 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
   onlyAt('loc-basement');
   click('[data-k=minutes][data-v="60"]');
   click('[data-act=focus][data-r=lower][data-x="1"]');
-  check('focused lower + explosive workout', /Lower body \+ explosive/i.test(q('.badge')?.innerText) && qa('section.block').length >= 4, text().slice(0, 300));
+  check('focused lower + explosive workout', /Lower body \+ explosive/i.test(q('header.top .sub')?.innerText) && qa('section.block').length >= 4, text().slice(0, 300));
   check('explains how it was built', /How this was built/.test(text()));
   click('[data-act=recheck]');
   // Short on goals: an incline-only goal list leaves most of the hour empty.
@@ -418,10 +418,10 @@ step('focused workouts from check-in and when a suggestion is thin', () => {
   click('[data-act=suggest]');
   check('thin suggestion offers a focused workout', !!q('.focusoffer [data-act=focus]'), text().slice(0, 300));
   check('the offer leads with the lean too', q('.focusoffer [data-act=focus]').dataset.r === 'lower' && q('.focusoffer [data-act=focus]').classList.contains('lean'));
-  check('and fills the hour from the library anyway', qa('section.block').length >= 5 && Number(/est (\d+) min/.exec(text())?.[1]) >= 50 && /leaning lower/.test(text()), text().slice(0, 300));
+  check('and fills the hour from the library anyway', qa('section.block').length >= 5 && Number(/est (\d+)/.exec(text())?.[1]) >= 50 && /lower lean/.test(text()), text().slice(0, 300));
   check('says how the rest was filled', qa('details.why').some(d => /rest is from your library, leaning lower-body/.test(d.textContent)));
   click('.focusoffer [data-act=focus][data-r=upper]');
-  check('replaced with an upper workout', /Upper body/i.test(q('.badge')?.innerText) && qa('section.block').length >= 4 && !q('.focusoffer'));
+  check('replaced with an upper workout', /Upper body/i.test(q('header.top .sub')?.innerText) && qa('section.block').length >= 4 && !q('.focusoffer'));
   click('[data-act=moreTime]');
   click('[data-act=addTime][data-v="15"]');
   check('+ Time adds accessories to a focused workout', qa('section.block').length >= 5);
@@ -450,9 +450,9 @@ step('Air Alert 2: optional, started from Plans, one day per finished session', 
   check('finishing moves to day 2', state.programs.aa2.week === 1 && state.programs.aa2.day === 2, JSON.stringify(state.programs.aa2));
   check('check-in shows done today', /Done today/.test(text()), text().slice(0, 500));
   click('[data-act=nav][data-tab=plans]');
-  check('the Plans card shows the next day', /week 1 of 12, day 2 of 5/.test(text()) && /Done today ✓/.test(text()), text().slice(0, 500));
+  check('the Plans card shows the next day', /week 1\/12, day 2\/5/.test(text()) && /Done today ✓/.test(text()), text().slice(0, 500));
   click('[data-act=nav][data-tab=week]');
-  check('week tab shows program days, not as mobility', /Air Alert 2/.test(text()) && /1 of 5 days this week/.test(text()));
+  check('week tab shows program days, not as mobility', /Air Alert 2/.test(text()) && /1\/5 days/.test(text()));
   click('[data-act=histOpen]');
   check('history lists it', /Air Alert 2 · week 1, day 1/.test(text()) && /Leap ups/.test(text()));
   click('[data-act=nav][data-tab=plans]');
@@ -771,7 +771,7 @@ step('taste: Learn from my swaps, Forget, favorites, Never suggest, and your usu
   store.save();
   click(`[data-act=swapEx][data-b="${block.id}"]`);
   const first = q('#sheet [data-act=pickEx]');
-  check('your usual replacement is listed first, marked', first?.dataset.id === usual.id && /your usual \(2×\)/.test(first.innerText), first?.innerText);
+  check('your usual replacement is listed first, marked', first?.dataset.id === usual.id && /your usual/.test(first.innerText), first?.innerText);
   click(`#sheet [data-act=tastePref][data-id="${cur.id}"]`);
   check('Never suggest the exercise you are swapping away from', st().exercises.find(e => e.id === cur.id).pref === 'never');
   check('and the sheet offers to undo it', new RegExp(`Suggest ${cur.name.replace(/[()+.]/g, '.')} again`).test(sheet()));
@@ -808,9 +808,9 @@ step('pace: History shows planned and actual minutes; Settings shows the learned
   store.save();
   click('[data-act=nav][data-tab=week]');
   click('[data-act=histOpen]');
-  check('a finished workout shows planned and actual minutes', /planned 45 · took 38 min/.test(text()), text().slice(0, 500));
+  check('a finished workout shows how long it took', /· 38 min/.test(text()), text().slice(0, 500));
   click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=you]');
-  check('Settings shows the learned changeover', /Basement[\s\S]*4\.0 min changeover, from 3 workouts/.test(text()), text().slice(text().indexOf('Pace'), text().indexOf('Pace') + 300));
+  check('Settings shows the learned changeover', /Basement[\s\S]*4\.0 min changeover/.test(text()), text().slice(text().indexOf('Pace'), text().indexOf('Pace') + 300));
   const sw = q('input[data-bind="settings.learnPace"]');
   check('Use my pace is on by default', sw?.checked && st().settings.learnPace !== false);
   sw.checked = false; fire(sw, 'change');
@@ -823,7 +823,8 @@ step('pace: History shows planned and actual minutes; Settings shows the learned
   click('[data-act=nav][data-tab=today]');
   onlyAt('loc-basement');
   click('[data-act=suggest]');
-  check('the session estimate says it used your pace', /est \d+ min \(your pace\)/.test(text()), text().slice(0, 300));
+  const paced = st().sessions.filter(x => x.status === 'open').at(-1);
+  check('the session estimate uses your pace', /est \d+/.test(text()) && !!L.pacedBlocks(st(), paced.blocks, paced.locationId ?? null), text().slice(0, 300));
   click('[data-act=finish]');
   if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
   st().sessions = st().sessions.filter(x => !added.includes(x.id));
@@ -910,7 +911,7 @@ step('skip a category today: nothing from it is suggested', () => {
   click('[data-act=suggest]');
   const sess = st().sessions.filter(x => x.status === 'open').at(-1);
   check('no block from it', !sess.blocks.some(b => st().exercises.find(e => e.id === b.exerciseId)?.familyId === fam));
-  check('the header says what is skipped', /Skipping today:/.test(text()));
+  check('the header says what is skipped', /Skipping /.test(q('header.top').innerText));
   click('[data-act=moreTime]');
   if (q('#sheet [data-act=moreTimeGo]')) click('#sheet [data-act=moreTimeGo]');
   check('+ Time keeps skipping it', !sess.blocks.some(b => st().exercises.find(e => e.id === b.exerciseId)?.familyId === fam));
@@ -960,7 +961,7 @@ step('conditioning supersets: the bike is the superset idea for the first T1 and
   const ideaFor = b => [...document.querySelectorAll('.pairidea')].find(x => x.querySelector(`[data-act=pairAdd][data-b="${b.id}"]`));
   const t1 = sess.blocks.find(b => b.tier === 'T1'), t2s = sess.blocks.filter(b => b.tier === 'T2' && !sess.blocks.some(x => x.pairOf === b.id));
   check('the workout has a T1 and a T2', !!t1 && t2s.length > 0, sess.blocks.map(b => b.tier).join());
-  check('the first T1 gets the bike', /Assault bike/.test(ideaFor(t1)?.innerText ?? '') && /COND/.test(ideaFor(t1).innerText), ideaFor(t1)?.innerText);
+  check('the first T1 gets the bike', /Assault bike/.test(ideaFor(t1)?.innerText ?? '') && /8 cal each rest/.test(ideaFor(t1).innerText), ideaFor(t1)?.innerText);
   const order = [...document.querySelectorAll('[data-act=pairAdd]')].map(x => x.dataset.b);
   const firstT2 = sess.blocks.filter(b => b.tier === 'T2').sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).find(b => ideaFor(b));
   check('the first T2 gets the bike', firstT2 && /Assault bike/.test(ideaFor(firstT2).innerText));
@@ -1162,7 +1163,7 @@ step('the THP-style jump plan in Plans: start a day, see its notes, sets count a
   check('and the daily isos routine', /THP daily isos/.test(text()));
   click('.plangroup [data-act=startPlan][data-id=plan-thp-high-a]');
   const sess = st().sessions.filter(x => x.status === 'open').at(-1);
-  check('Start opens it on Today with its notes', sess?.planId === 'plan-thp-high-a' && /Today/.test(q('#app h1').innerText) && /pause doubles/.test(q('.plannote')?.innerText ?? ''));
+  check('Start opens it on Today with its notes', sess?.planId === 'plan-thp-high-a' && /Today/.test(q('#app h1').innerText) && /pause doubles/.test(q('.plannote')?.textContent ?? ''));
   check('with its exercises: power clean, broad jumps, back squat, hip thrust', ['ex-power-clean', 'ex-broad-jump', 'ex-back-squat', 'ex-hip-thrust'].every(id => sess.blocks.some(b => b.exerciseId === id)));
   click('[data-act=finish]');
   if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
@@ -1181,7 +1182,7 @@ step('the morning check: energy and pain, then no jumps on a sore morning', () =
   click('[data-act=mornSave]');
   const e = st().morning.log[0];
   check('saved for today', e?.energy === 4 && e.pain.Knee === 6 && e.day === L.dayKey());
-  check('one line, with what it changes', /Morning: Energy 4 · Knee 6/.test(text()) && /no jumps today/.test(text()), text().slice(0, 300));
+  check('one line, with what it changes', /Morning · Energy 4 · Knee 6/.test(text()) && /No jumps today/.test(text()), text().slice(0, 300));
   check('and the check-in energy follows it', q('[data-act=ci][data-k=energy][data-v="4"]')?.classList.contains('on'));
   onlyAt('loc-basement');
   const jumps = q('[data-ci-jumps]'); if (!jumps.checked) { jumps.checked = true; fire(jumps, 'change'); }
@@ -1224,15 +1225,15 @@ step('program blocks: set up THP as a block, run a program day, see it in Week, 
   click('[data-act=nav][data-tab=plans]');
   click('[data-act=blockSetup]');
   check('setup prefilled from the plans', /Run THP-style jump plan/.test(text()) && q('[data-bsched="1"]').value === 'plan-thp-high-a' && q('[data-bsched="2"]').value === 'plan-thp-general' && q('[data-act=bOwnHalf][data-v=lower]').classList.contains('on') && q('[data-act=bOwnTier][data-v=JUMP]').classList.contains('on'), text().slice(0, 400));
-  check('it lists the goals that will pause', /These goals pause until it ends/.test(text()));
+  check('it lists the goals that will pause', /Pauses T1 /.test(text()), text().slice(-300));
   // Today gets a session, whatever day the test runs.
   const wd = new Date().getDay();
   setVal(q(`[data-bsched="${wd}"]`), 'plan-thp-high-a');
   click('[data-act=bStart][data-v=today]');
   click('[data-act=blockGo]');
-  check('the block runs', !!st().block && /Running as a block: week 1 of 4/.test(text()), text().slice(0, 300));
+  check('the block runs', !!st().block && /Running as a block · week 1 of 4/.test(text()), text().slice(0, 300));
   click('[data-act=nav][data-tab=today]');
-  check('Today offers the program session', /THP-style jump plan · Week 1 of 4/.test(text()) && !!q('[data-act=blockStart]'), text().slice(0, 400));
+  check('Today offers the program session', /THP-style jump plan · Week 1\/4/.test(text()) && !!q('[data-act=blockStart]'), text().slice(0, 400));
   click('[data-act=blockStart]');
   const sess = st().sessions.filter(x => x.status === 'open').at(-1);
   check('it opens with its banner, the plan, and T3s for the time left', sess?.blockRun === st().block.id && /Week 1 of 4/.test(q('.banner.program')?.innerText ?? '') && sess.planItems.length > 0
@@ -1241,9 +1242,9 @@ step('program blocks: set up THP as a block, run a program day, see it in Week, 
   for (const x of st().sets.filter(y => y.sessionId === sess.id)) { x.done = true; x.loggedAt = Date.now(); }
   click('[data-act=finish]');
   if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
-  check('after it, a day off the program', /Program session done today/.test(text()), text().slice(0, 300));
+  check('after it, a day off the program', /done today/.test(q('.card.program')?.innerText ?? ''), text().slice(0, 300));
   click('[data-act=nav][data-tab=week]');
-  check('Week shows the block and its paused goals', /Week 1 of 4 · 1 of \d sessions/.test(text()) && /Paused while THP-style jump plan runs/.test(text()), text().slice(0, 500));
+  check('Week shows the block and its paused goals', /Week 1\/4 · 1\/\d sessions/.test(text()) && /paused for THP-style jump plan/.test(text()), text().slice(0, 500));
   click('[data-act=nav][data-tab=plans]');
   click('[data-act=blockEnd]');
   click('#sheet [data-act=confirmYes]');
@@ -1266,7 +1267,7 @@ step('History → Progress: tiles, charts, a readout on tap, and tables', () => 
   const tip = svg.parentElement.querySelector('.charttip');
   check('a tap shows the nearest point', !tip.hidden && /lb/.test(tip.textContent) && /best set 220 × 3/.test(tip.textContent), tip.textContent);
   click('[data-act=progRange][data-v="4w"]');
-  check('ranges re-scope the page', q('[data-act=progRange][data-v="4w"]').classList.contains('on') && /vs previous 4 wk/.test(text()), text().slice(0, 400));
+  check('ranges re-scope the page', q('[data-act=progRange][data-v="4w"]').classList.contains('on') && !!q('svg[data-chart=e1rm] path'), text().slice(0, 400));
   check('each chart has a table view', qa('details.charttable').length >= 4);
   click('[data-act=histMode][data-v=workouts]');
   check('and back to the workout list', !!q('#histq'));

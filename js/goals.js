@@ -109,25 +109,25 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
     const explosive = f.explosive.size * 2 >= n;
     const loaded = f.loaded.size * 2 >= n;
     const base = { familyId, exerciseId: null, repMin: null, repMax: null, days: n, top: top?.name, region: top?.region ?? 'full', include: true };
-    const where = `${n} of your last ${st.workouts} workouts, mostly ${top?.name}`;
+    const where = `${n}/${st.workouts} workouts, mostly ${top?.name}`;
     if (explosive && loaded) {
       rows.push({ ...base, kind: 'power-lift', tier: 'T1', quota: quotaOf(n), priority: 3,
-        reason: `Explosive lift in ${where}. Heavy sets of 1–3 when you're fresh.` });
+        reason: `Explosive lift · ${where}` });
     } else if (explosive) {
       // About 12 contacts is a solid power dose (4×3); more than that and the reps stop being fast.
       const repMin = Math.min(12, Math.max(6, Math.round(L.median([...f.reps.values()]))));
       // Jumps are their own category (JUMP); other explosive moves (throws) are T2 power work.
       rows.push({ ...base, kind: 'power', tier: L.isJump(top) ? 'JUMP' : 'T2', quota: quotaOf(n), priority: base.region === 'upper' ? 2 : 3, repMin, repMax: Math.max(repMin, 20),
-        reason: `Explosive work in ${where}: about ${repMin} reps a session.` });
+        reason: `Explosive · ${where} · ~${repMin} reps` });
     } else if (isPress) {
       rows.push({ ...base, kind: 'press', tier: 'T2', quota: 1, priority: 1,
-        reason: `${CHEST.test(fam.name) ? 'Chest' : 'Shoulders'}: kept in at low priority, as you asked. In ${where}.` });
+        reason: `${CHEST.test(fam.name) ? 'Chest' : 'Shoulders'}, kept at low priority · ${where}` });
     } else if (loaded && (f.tiers.T1.size || f.tiers.T2.size)) {
       const tier = f.tiers.T1.size >= f.tiers.T2.size ? 'T1' : 'T2';
       rows.push({ ...base, kind: 'strength', tier, quota: quotaOf(n), priority: 2, heavyDays: f.tiers.T1.size,
-        reason: tier === 'T1' ? `Heavy sets of 1–3 in ${f.tiers.T1.size} of ${n} workouts, mostly ${top?.name}.` : `Moderate sets in ${where}.` });
+        reason: tier === 'T1' ? `Heavy in ${f.tiers.T1.size}/${n} workouts, mostly ${top?.name}` : `Moderate · ${where}` });
     } else {
-      rows.push({ ...base, kind: 'accessory', tier: 'T3', quota: quotaOf(n), priority: 1, reason: `Accessory work in ${where}.` });
+      rows.push({ ...base, kind: 'accessory', tier: 'T3', quota: quotaOf(n), priority: 1, reason: where });
     }
   }
 
@@ -135,7 +135,7 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
   const mainLift = rows.filter(r => r.kind === 'power-lift').sort((a, b) => b.days - a.days)[0];
   if (mainLift && state.tiers.TECH) {
     rows.push({ ...mainLift, kind: 'technique', tier: 'TECH', quota: 1, priority: 1,
-      reason: `Lighter ${L.byId(state.families, mainLift.familyId).name.toLowerCase()} for days you're tired or after heavy work. Counts separately from the heavy goal.` });
+      reason: `Lighter ${L.byId(state.families, mainLift.familyId).name.toLowerCase()} for tired days` });
   }
 
   // Chest and shoulders stay in even when they haven't been trained lately (low priority, once a week).
@@ -148,7 +148,7 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
     const n = year.get(fam.id)?.days.size ?? 0;
     rows.push({ familyId: fam.id, exerciseId: null, repMin: null, repMax: null, days: 0, region: 'upper', include: true,
       kind: 'press', tier: 'T2', quota: 1, priority: 1,
-      reason: `${label}: kept in at low priority, as you asked${n ? `. ${n} workouts in the last year` : ''}.` });
+      reason: `${label}, kept at low priority${n ? ` · ${n} workouts this year` : ''}` });
   }
 
   // One heavy lift per workout: explosive lifts first, then lower body (it carries over to jumping).
@@ -161,7 +161,7 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
     if (r.kind === 'power-lift' && heavy < heavyCap) { r.quota = heavyCap - heavy; heavy = heavyCap; continue; }
     r.kind = 'support';
     r.tier = 'T2';
-    r.reason += ` There's room for about ${heavyCap} heavy lift${heavyCap === 1 ? '' : 's'} a week, so this is T2 support work, which GZCL pairs with the heavy lifts.`;
+    r.reason += ` · T2: room for ${heavyCap} heavy a week`;
   }
 
   // Room left for heavy work: lifts you've done heavy in at least 3 workouts (and a third of them) become T1, lower body first.
@@ -170,7 +170,7 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
     if (heavy + r.quota > heavyCap) continue;
     heavy += r.quota;
     r.tier = 'T1';
-    r.reason = `Heavy sets of 1–3 in ${r.heavyDays} of ${r.days} workouts, mostly ${r.top}. A main lift: T1.`;
+    r.reason = `Heavy in ${r.heavyDays}/${r.days} workouts, mostly ${r.top}`;
   }
 
   // Fit the week: trim accessories first, explosive lifts last.
@@ -180,7 +180,7 @@ export function suggestGoals(state, { now = Date.now() } = {}) {
     if (total > capacity) {
       r.include = false;
       total -= r.quota;
-      r.reason += ` Left unticked so the week fits about ${perWeek.toFixed(1)} workouts.`;
+      r.reason += ` · unticked to fit ${perWeek.toFixed(1)} workouts a week`;
     }
   }
 

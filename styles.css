@@ -98,7 +98,7 @@ header.top { display: flex; align-items: center; justify-content: space-between;
 
 .field { margin-bottom: 16px; }
 .field > label, .label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.field > label .hint { text-transform: none; letter-spacing: 0; }
+.field > label .hint, .label .hint { text-transform: none; letter-spacing: 0; }
 
 .seg { display: flex; gap: 5px; }
 .seg button { flex: 1 1 0; min-width: 0; padding: 10px 2px; }
@@ -128,9 +128,6 @@ label.chip input { display: none; }
 .row.dim { opacity: 0.55; }
 .row.add { color: var(--accent); justify-content: flex-start; }
 
-.badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--card2); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.badge.swapped { color: var(--warn); }
-.badge.custom { color: var(--t2); }
 
 .tier { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px; color: #111; }
 .tier.T1 { background: var(--t1); }
@@ -398,7 +395,6 @@ label.btn.fnpick { width: 100%; min-height: 56px; font-size: 18px; margin-top: 1
 .addrow { display: flex; gap: 8px; }
 .addrow .addblock { flex: 1; }
 .libmode { margin-bottom: 10px; }
-.badge.mobility { background: #7fd1c2; color: #111; }
 
 /* ---------- hold timer ---------- */
 .set .go {
@@ -431,7 +427,6 @@ label.btn.fnpick { width: 100%; min-height: 56px; font-size: 18px; margin-top: 1
 .focusgrid button.lean { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .focusoffer { border-color: var(--accent); }
 .focusoffer .focusgrid { margin-top: 10px; }
-.badge.focus { color: var(--accent); }
 
 /* ---------- programs (Air Alert) ---------- */
 .card.prog { border-color: var(--t3); display: flex; flex-direction: column; gap: 6px; }
@@ -527,3 +522,15 @@ details.owned summary { color: var(--muted); padding: 4px 2px; }
 .charttable summary { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .charttable table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .charttable th, .charttable td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+
+/* Quieter workout blocks: secondary actions behind ⋯ */
+.bmorerow[hidden] { display: none; }
+.bmorerow { margin-top: 6px; }
+.bmorerow .cuesline { flex-basis: 100%; margin: 2px 0 0; }
+details.plannote { margin: 0 0 10px; }
+details.plannote > summary { color: var(--muted); font-size: 14px; padding: 4px 2px; }
+details.plannote p { font-size: 14px; color: var(--muted); margin: 6px 2px; }
+.chips.extras { margin: 2px 0 12px; }
+details.card > summary { cursor: pointer; padding: 2px 0; }
+details.card[open] > summary { margin-bottom: 8px; }
+details.setsweek .dayhead { margin-top: 10px; }
