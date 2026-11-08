@@ -143,7 +143,7 @@ step('choose the mix, then regenerate it', () => {
     click('#sheet [data-act=swapAny]');
     pickEx('ex-dead-bug');
     const db = qa('section.block').find(x => chip(x) === 'Dead bug');
-    check('a swapped-in T3 counts toward its own goal', !!db && /Core · \d+\/30 reps/.test(db.innerText), db?.innerText.slice(0, 200));
+    check('a swapped-in T3 counts toward its own goal', !!db && /Core · \d+\/30 reps|✓ Core goal done/.test(db.innerText), db?.innerText.slice(0, 200));
   }
   click('[data-act=recheck]');
   const j2 = q('[data-ci-jumps]');
@@ -200,7 +200,8 @@ step('supersets, real rest, pause and resume, more time', () => {
   const ringBlocks = () => qa('section.block').length;
   check('remove is in the header, away from the set buttons', !!q('section.block .bhead [data-act=removeBlock]') && !q('section.block .brow [data-act=removeBlock]'));
   const nBefore = ringBlocks();
-  const dead = qa('section.block').find(b => /Dead bug/.test(b.innerText));
+  // The Dead bug just added (nothing logged), so removing it takes the whole block out.
+  const dead = qa('section.block').find(b => /Dead bug/.test(b.querySelector('[data-act=swapEx]')?.innerText ?? '') && !b.querySelector('.set.done'));
   click(dead.querySelector('[data-act=removeBlock]'));
   check('remove takes it out', ringBlocks() === nBefore - 1);
   const undoBtn = [...document.querySelectorAll('.toast button')].find(x => x.textContent === 'Undo');

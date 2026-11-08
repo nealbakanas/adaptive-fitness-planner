@@ -3003,10 +3003,11 @@ test('a set planned for a goal counts toward it under the intensity floor; one l
   eq(squatGoal(low).exposures, 0, 'by hand: 135 is under the floor');
 });
 
-test('every prescribed set done fills the goal even with reps missed; fewer sets and too few reps do not', () => {
-  eq(squatGoal(plannedT1([3, 2, 2, 1, 1])).exposures, 1, '9 reps, but all 5 sets');
-  eq(squatGoal(plannedT1([3, 3, 3], { sets: 3 })).exposures, 0, '3 of 5 sets, 9 reps');
-  eq(squatGoal(plannedT1([4, 3, 3], { sets: 3 })).exposures, 1, '3 sets, but 10 reps: the dose');
+test('the scheme is a suggestion: any sets logged for a planned goal fill it for the day', () => {
+  eq(squatGoal(plannedT1([3, 2, 2, 1, 1])).exposures, 1, '9 reps over all 5 sets');
+  eq(squatGoal(plannedT1([3, 3, 5], { sets: 3 })).exposures, 1, '3 of 5 sets');
+  eq(squatGoal(plannedT1([2], { sets: 1 })).exposures, 1, 'one set');
+  eq(squatGoal(plannedT1([3, 3, 3], { sets: 3, planned: false })).exposures, 0, 'not planned for the goal: 9 reps is under the dose');
 });
 
 test('after a miss: the same load when a few reps short, one step down when more than a quarter short', () => {
