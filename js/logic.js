@@ -575,18 +575,19 @@ export function creditWeek(state, t = Date.now()) {
       planned.set(s.blockId, p);
     }
   }
-  // Every prescribed set of a goal's block done (40% fewer on a program deload) fills the goal that day, reps missed or not.
+  // Every prescribed set of a goal's block done (40% fewer on a program deload) fills the goal that day, reps missed or not;
+  // so does any set of a block you've ticked "Count it" on (block.countGoal), whatever the sets, reps or load. A missed
+  // scheme otherwise only changes the next suggestion (progression).
   for (const [blockId, p] of planned) {
     const { block, session } = idx.get(blockId);
     const sc = byId(state.schemes, block.schemeId);
-    if (!sc || sc.manualOnly) continue;
-    const need = session.deload ? deloadSets(sc.sets) : sc.sets;
-    if (p.done >= need) slots.get(p.slotId).days.get(p.day).allSets = true;
+    const need = sc && !sc.manualOnly ? (session.deload ? deloadSets(sc.sets) : sc.sets) : Infinity;
+    if (block.countGoal || p.done >= need) slots.get(p.slotId).days.get(p.day).attempted = true;
   }
   for (const r of slots.values()) {
     const cfg = { ...state.tiers[r.slot.tier], ...slotDose(state, r.slot) };
     for (const [k, agg] of r.days) {
-      agg.met = doseMet(cfg, r.slot.tier, agg) || !!agg.allSets;
+      agg.met = doseMet(cfg, r.slot.tier, agg) || !!agg.attempted;
       if (agg.met) {
         r.exposures++;
         if (k === today) r.todayMet = true;

@@ -143,7 +143,16 @@ step('choose the mix, then regenerate it', () => {
     click('#sheet [data-act=swapAny]');
     pickEx('ex-dead-bug');
     const db = qa('section.block').find(x => chip(x) === 'Dead bug');
-    check('a swapped-in T3 counts toward its own goal', !!db && /Core · \d+\/30 reps/.test(db.innerText), db?.innerText.slice(0, 200));
+    check('a swapped-in T3 counts toward its own goal', !!db && /Core · \d+\/30 reps|✓ Core goal done/.test(db.innerText), db?.innerText.slice(0, 200));
+    // Count it: one set logged, ticked, and the goal is done for today whatever the reps.
+    const box = db.querySelector('[data-countgoal]');
+    if (box && !box.checked) {
+      const goalId = state.sessions.filter(x => x.status === 'open').at(-1).blocks.find(b => b.id === box.dataset.countgoal).slotId;
+      click(db.querySelector('[data-act=check]'));
+      const box2 = qa('section.block').find(x => chip(x) === 'Dead bug').querySelector('[data-countgoal]');
+      box2.checked = true; fire(box2, 'change');
+      check('Count it fills the goal for today', L.creditWeek(state).slots.get(goalId).todayMet && qa('section.block').find(x => chip(x) === 'Dead bug').querySelector('[data-countgoal]').checked);
+    }
   }
   click('[data-act=recheck]');
   const j2 = q('[data-ci-jumps]');
@@ -200,7 +209,8 @@ step('supersets, real rest, pause and resume, more time', () => {
   const ringBlocks = () => qa('section.block').length;
   check('remove is in the header, away from the set buttons', !!q('section.block .bhead [data-act=removeBlock]') && !q('section.block .brow [data-act=removeBlock]'));
   const nBefore = ringBlocks();
-  const dead = qa('section.block').find(b => /Dead bug/.test(b.innerText));
+  // The Dead bug just added (nothing logged), so removing it takes the whole block out.
+  const dead = qa('section.block').find(b => /Dead bug/.test(b.querySelector('[data-act=swapEx]')?.innerText ?? '') && !b.querySelector('.set.done'));
   click(dead.querySelector('[data-act=removeBlock]'));
   check('remove takes it out', ringBlocks() === nBefore - 1);
   const undoBtn = [...document.querySelectorAll('.toast button')].find(x => x.textContent === 'Undo');
@@ -1421,6 +1431,30 @@ step('categories: split Arms into Biceps and Triceps, add exercises, pick a cate
   click('#sheet [data-act=catDelete]');
   check('one with exercises can\'t, until they move', !!fam('Neck') && !/Delete Neck/.test(sheet()));
   click('[data-act=sheetClose]');
+  click('[data-act=nav][data-tab=today]');
+});
+
+step('Count it in History: a finished workout\'s exercise fills its goal', () => {
+  const st = () => store.state;
+  const at = Date.now() - 3600e3;
+  // Its own exercise and goal, so nothing logged earlier today fills it first.
+  st().exercises.push({ ...L.byId(st().exercises, 'ex-incline-bench'), id: 'ex-ci', name: 'Count-it press' });
+  st().slots.push({ id: 'sl-ci', familyId: 'fam-incline', exerciseId: 'ex-ci', tier: 'T2', quota: 1, priority: 1 });
+  const block = { id: 'cib', tier: 'T2', slotId: 'sl-ci', exerciseId: 'ex-ci', schemeId: 's-t2-4x6', swaps: [] };
+  st().sessions.push({ id: 'cis', day: L.dayKey(at), status: 'done', source: 'suggested', checkinAt: at - 60e3, firstSetAt: at, blocks: [block] });
+  st().sets.push(...[3, 3, 5].map((r, i) => ({ id: `ci${i}`, sessionId: 'cis', blockId: 'cib', exerciseId: 'ex-ci', tier: 'T2', schemeId: 's-t2-4x6', load: 135, reps: r, done: true, loggedAt: at + i * 60e3 })));
+  const met = () => L.creditWeek(st()).slots.get('sl-ci').todayMet;
+  const before = met();
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  click('[data-act=histEdit][data-id=cis]');
+  const box = q('[data-countgoal=cib]');
+  check('History offers Count it on a goal exercise', !!box && /Count it toward T2/.test(box.parentElement.innerText), text().slice(0, 300));
+  box.checked = true; fire(box, 'change');
+  check('ticking it fills the goal that day (11 reps, 3 of 4 sets)', !before && met());
+  st().sessions = st().sessions.filter(x => x.id !== 'cis'); st().sets = st().sets.filter(x => x.sessionId !== 'cis');
+  st().slots = st().slots.filter(x => x.id !== 'sl-ci'); st().exercises = st().exercises.filter(x => x.id !== 'ex-ci');
+  click('[data-act=histEditDone]'); click('[data-act=histClose]');
   click('[data-act=nav][data-tab=today]');
 });
 

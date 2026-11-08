@@ -544,3 +544,8 @@ details.setsweek .dayhead { margin-top: 10px; }
 h3.cathead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 h3.cathead .icon { min-height: 32px; padding: 4px 10px; }
 .hbtns.inline { flex-direction: row; align-items: center; gap: 8px; }
+
+/* "Count it" on a goal line */
+.dose { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.countit { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.countit input { width: 18px; height: 18px; min-height: 0; }
