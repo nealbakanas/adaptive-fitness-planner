@@ -3,7 +3,7 @@
 
 import { taste, tasteOf, isExcluded, usualReplacement } from './taste.js';
 import { pace, pacedKey } from './pace.js';
-import { ownedSlotIds, blockAt } from './block.js';
+import { ownedSlotIds, blockAt, deloadSets } from './block.js';
 import { jumpPain } from './morning.js';
 
 // The taste and pace pictures for the build in progress (computed once per build; the pickers run thousands of times),
@@ -575,9 +575,15 @@ export function creditWeek(state, t = Date.now()) {
       planned.set(s.blockId, p);
     }
   }
-  // The scheme is a suggestion: any set logged for the goal a block was planned for fills that goal for the day, whatever the
-  // sets, reps or load. Missing the scheme only changes the next suggestion (progression).
-  for (const p of planned.values()) slots.get(p.slotId).days.get(p.day).attempted = true;
+  // Every prescribed set of a goal's block done (40% fewer on a program deload) fills the goal that day, reps missed or not;
+  // so does any set of a block you've ticked "Count it" on (block.countGoal), whatever the sets, reps or load. A missed
+  // scheme otherwise only changes the next suggestion (progression).
+  for (const [blockId, p] of planned) {
+    const { block, session } = idx.get(blockId);
+    const sc = byId(state.schemes, block.schemeId);
+    const need = sc && !sc.manualOnly ? (session.deload ? deloadSets(sc.sets) : sc.sets) : Infinity;
+    if (block.countGoal || p.done >= need) slots.get(p.slotId).days.get(p.day).attempted = true;
+  }
   for (const r of slots.values()) {
     const cfg = { ...state.tiers[r.slot.tier], ...slotDose(state, r.slot) };
     for (const [k, agg] of r.days) {

@@ -1310,7 +1310,9 @@ function viewBlock(s, b, credit, idea = null) {
     const orSets = L.TIER[b.tier]?.orSets;
     const prog = orSets ? `${agg.reps}/${need} ${L.repUnit(b.tier)} or ${agg.sets}/${cfg.setMin || orSets} ${L.setUnit(b.tier)}` : `${agg.reps}/${need} ${L.repUnit(b.tier)}`;
     const goal = esc(exOf(slot.exerciseId)?.name ?? famOf(slot.familyId)?.name ?? '');
-    dose = `<div class="dose ${r?.todayMet ? 'met' : ''}">${r?.todayMet ? `✓ ${goal} goal done` : `${goal} · ${prog}`}</div>`;
+    // "Count it": this exercise fills its goal today whatever the sets or reps (shown while it isn't already done, or once ticked).
+    const box = b.countGoal || !r?.todayMet ? `<label class="countit"><input type="checkbox" data-countgoal="${b.id}" ${b.countGoal ? 'checked' : ''}> Count it</label>` : '';
+    dose = `<div class="dose ${r?.todayMet ? 'met' : ''}"><span>${r?.todayMet ? `✓ ${goal} goal done` : `${goal} · ${prog}`}</span>${box}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
     dose += `<div class="dose warn">Reps only: won't count toward a ${b.tier} goal</div>`;
@@ -1839,12 +1841,15 @@ function viewHistoryEdit(hs) {
   };
   const groups = histGroups(s).map(g => {
     let n = 0;
+    // Count it, as in a live workout: the exercise's block fills its goal that day whatever the sets or reps.
+    const blk = s.blocks.find(x => x.id === g.sets[0]?.blockId && x.slotId && L.byId(state.slots, x.slotId));
+    const count = blk ? `<label class="countit"><input type="checkbox" data-countgoal="${blk.id}" data-hist="${s.id}" ${blk.countGoal ? 'checked' : ''}> Count it toward ${esc(slotLabel(L.byId(state.slots, blk.slotId)))}</label>` : '';
     return `<section class="card histedit">
       <div class="bhead"><select class="tierpick ${g.tier}" data-hgtier="${esc(g.key)}" aria-label="Tier">${L.TIERS.map(t => `<option value="${t}" ${t === g.tier ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button class="chip" data-act="histSwap" data-g="${esc(g.key)}">${esc(g.ex?.name ?? '?')} ▾</button>
         <button class="icon bremove" data-act="histDelGroup" data-g="${esc(g.key)}" aria-label="Remove ${esc(g.ex?.name ?? 'exercise')} from this workout" title="Remove exercise">✕</button></div>
       <div class="sets">${g.sets.map(st => setRow(g, st, st.warmup ? 0 : n++)).join('')}</div>
-      <div class="brow"><button class="small" data-act="histAddSet" data-g="${esc(g.key)}">+ set</button></div></section>`;
+      <div class="brow"><button class="small" data-act="histAddSet" data-g="${esc(g.key)}">+ set</button>${count}</div></section>`;
   }).join('');
   return `<header class="top sub"><button class="back" data-act="histEditDone">‹ History</button></header><h1 class="pagetitle">Edit workout</h1>
     <div class="card"><div class="field"><label for="hist-date">Date</label><input id="hist-date" type="date" data-hdate max="${L.dayKey()}" value="${L.dayKey(when)}"></div>
@@ -4783,6 +4788,9 @@ document.addEventListener('change', e => {
   } else if (d.hgtier !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit), g = s && histGroups(s).find(x => x.key === d.hgtier);
     if (g) { for (const st of g.sets) st.tier = el.value; tidyBlocks(s); save(); render(); }
+  } else if (d.countgoal !== undefined) {
+    const b = d.hist ? L.byId(state.sessions, d.hist)?.blocks.find(x => x.id === d.countgoal) : findBlock(d.countgoal).b;
+    if (b) { if (el.checked) b.countGoal = true; else delete b.countGoal; save(); render(); }
   } else if (d.qafam !== undefined) {
     const input = sheetEl.querySelector('#qa-fam');
     input.hidden = el.value !== '__new';
