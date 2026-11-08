@@ -3,7 +3,7 @@
 
 import { taste, tasteOf, isExcluded, usualReplacement } from './taste.js';
 import { pace, pacedKey } from './pace.js';
-import { ownedSlotIds, blockAt } from './block.js';
+import { ownedSlotIds, blockAt, deloadSets } from './block.js';
 import { jumpPain } from './morning.js';
 
 // The taste and pace pictures for the build in progress (computed once per build; the pickers run thousands of times),
@@ -422,13 +422,19 @@ export function progression(state, ex, tier, scheme, before = Infinity) {
   const last = lastOutcome(state, ex.id, tier, before);
   // Last time was more than 8 weeks ago: start again from your max.
   if (!last || last.scheme.reps !== scheme.reps || (before === Infinity ? Date.now() : before) - last.at > PROGRESSION_WEEKS * 7 * DAY) return null;
-  if (!last.complete) return { load: last.load, up: false, steps: 0, last };
-  const steps = last.amrap != null && last.amrap > 2 * last.scheme.reps ? 2 : 1;
   const bells = state.settings.kettlebells || [];
   const kb = ex.equipment?.includes('kettlebell') && !ex.equipment.includes('barbell') && bells.length;
+  const inc = state.settings.increment || 5;
+  if (!last.complete) {
+    // Short of the reps: the same load again, or one step down when more than a quarter of them were missed.
+    if (last.short * 4 <= last.scheme.sets * last.scheme.reps) return { load: last.load, up: false, down: false, steps: 0, last };
+    const load = kb ? ([...bells].sort((a, b) => b - a).find(b => b < last.load) ?? last.load) : Math.max(0, last.load - inc);
+    return { load, up: false, down: load < last.load, steps: load < last.load ? -1 : 0, last };
+  }
+  const steps = last.amrap != null && last.amrap > 2 * last.scheme.reps ? 2 : 1;
   let load = last.load;
   if (kb) { const up = [...bells].sort((a, b) => a - b).filter(b => b > last.load); load = up[Math.min(steps, up.length) - 1] ?? last.load; }
-  else load += steps * (state.settings.increment || 5);
+  else load += steps * inc;
   return { load, up: true, steps, last };
 }
 
@@ -483,22 +489,43 @@ export function slotFor(state, ex, tier) {
   return cands.find(sl => sl.exerciseId === ex.id) || cands.find(sl => !sl.exerciseId) || null;
 }
 
-export function autoSlotFor(state, s) {
+// Every workout block by id, with its session: { block, session }. Build once for a loop over sets.
+export function blockIndex(state) {
+  const m = new Map();
+  for (const session of state.sessions) for (const block of session.blocks || []) m.set(block.id, { block, session });
+  return m;
+}
+// The goal a set's block was planned for, while it still fits the set (same tier; the goal's exercise, or its family).
+function plannedSlot(state, s, ex, idx) {
+  const b = idx.get(s.blockId)?.block;
+  if (!b?.slotId || b.tier !== s.tier) return null;
+  const sl = byId(state.slots, b.slotId);
+  if (!sl || sl.tier !== s.tier || (sl.exerciseId ? sl.exerciseId !== ex.id : sl.familyId !== ex.familyId)) return null;
+  return sl.id;
+}
+
+// A set the app planned for a goal counts toward it whatever the load: missing the weight or the reps is a reason to
+// adjust next time (progression), not to lose the session. Anything else (logged by hand, from History, imported) needs
+// the tier's intensity floor to count toward a T1/T2 goal.
+export function autoSlotFor(state, s, idx = null) {
   const ex = byId(state.exercises, s.exerciseId);
   if (!ex || s.warmup) return null;
   const slot = slotFor(state, ex, s.tier);
   if (!slot) return null;
   if (!isStrength(s.tier)) return slot.id;
+  const planned = plannedSlot(state, s, ex, idx ?? blockIndex(state));
+  if (planned) return planned;
   if (ex.metric !== 'load_reps') return ex.explosive ? slot.id : null; // jumps count by reps
   const total = setTotalLoad(state, s);
   const ref = s.refMax || dayBest(state, s);
   if (total == null || !ref) return null;
-  return total >= state.tiers[s.tier].intMin * ref - 0.01 ? slot.id : null;
+  // Within half a plate step of the floor counts: loads round to your increment (140 for 85% of 165).
+  return total >= state.tiers[s.tier].intMin * ref - (state.settings.increment || 5) / 2 ? slot.id : null;
 }
 
-export function slotForSet(state, s) {
+export function slotForSet(state, s, idx = null) {
   if (s.countsManual) return s.countsToward ?? null;
-  return autoSlotFor(state, s);
+  return autoSlotFor(state, s, idx);
 }
 
 // Weekly quota progress. A slot gets one exposure per day whose counted sets meet the dose,
@@ -529,9 +556,11 @@ export function creditWeek(state, t = Date.now()) {
   const today = dayKey(t);
   const slots = new Map(state.slots.map(sl => [sl.id, { slot: sl, days: new Map(), exposures: 0, filled: 0, todayMet: false }]));
   const assign = new Map();
+  const idx = blockIndex(state);
+  const planned = new Map(); // blockId -> { slotId, day, done }: goal blocks worked this week
   for (const s of state.sets) {
     if (!s.done || s.warmup || s.loggedAt < start || s.loggedAt >= end) continue;
-    const slotId = slotForSet(state, s);
+    const slotId = slotForSet(state, s, idx);
     assign.set(s.id, slotId);
     const r = slotId && slots.get(slotId);
     if (!r) continue;
@@ -540,11 +569,24 @@ export function creditWeek(state, t = Date.now()) {
     agg.reps += Number(s.reps) > 0 ? Number(s.reps) : (s.time > 0 || s.distance > 0 ? 1 : 0); // a timed or distance set counts as one
     agg.sets += 1;
     r.days.set(k, agg);
+    if (idx.get(s.blockId)?.block.slotId === slotId) {
+      const p = planned.get(s.blockId) ?? { slotId, day: k, done: 0 };
+      p.done++;
+      planned.set(s.blockId, p);
+    }
+  }
+  // Every prescribed set of a goal's block done (40% fewer on a program deload) fills the goal that day, reps missed or not.
+  for (const [blockId, p] of planned) {
+    const { block, session } = idx.get(blockId);
+    const sc = byId(state.schemes, block.schemeId);
+    if (!sc || sc.manualOnly) continue;
+    const need = session.deload ? deloadSets(sc.sets) : sc.sets;
+    if (p.done >= need) slots.get(p.slotId).days.get(p.day).allSets = true;
   }
   for (const r of slots.values()) {
     const cfg = { ...state.tiers[r.slot.tier], ...slotDose(state, r.slot) };
     for (const [k, agg] of r.days) {
-      agg.met = doseMet(cfg, r.slot.tier, agg);
+      agg.met = doseMet(cfg, r.slot.tier, agg) || !!agg.allSets;
       if (agg.met) {
         r.exposures++;
         if (k === today) r.todayMet = true;

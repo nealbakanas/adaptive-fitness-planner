@@ -2982,6 +2982,44 @@ test('v31: your library splits once; your own names and categories are left alon
   eq(L.byId(migrate(g).slots, 'sl-x').familyId, 'fam-triceps');
 });
 
+// ---------- planned sets count, misses adapt the next load ----------
+// A Z-press-style T1 session: a block planned for the T1 squat goal, `reps` per set, at 140 against a 165 max (84.8%: under
+// the 85% floor once loads round to 5 lb).
+const plannedT1 = (reps, { sets = 5, planned = true, daysAgo = 0 } = {}) => {
+  const s = seed();
+  const at = NOON(daysAgo);
+  const block = { id: 'pb', tier: 'T1', slotId: planned ? 'sl-t1-squat' : null, exerciseId: 'ex-back-squat', schemeId: 's-t1-5x3', swaps: [] };
+  s.sessions.push({ id: 'ps', day: L.dayKey(at), status: 'done', source: 'suggested', checkinAt: at - 60e3, firstSetAt: at, blocks: [block] });
+  reps.slice(0, sets).forEach((r, i) => s.sets.push({ id: `p${i}`, sessionId: 'ps', blockId: 'pb', exerciseId: 'ex-back-squat', tier: 'T1', schemeId: 's-t1-5x3', load: 140, reps: r, done: true, loggedAt: at + i * 60e3, refMax: 165 }));
+  return s;
+};
+const squatGoal = s => L.creditWeek(s).slots.get('sl-t1-squat');
+
+test('a set planned for a goal counts toward it under the intensity floor; one logged by hand needs the floor, give or take half a plate', () => {
+  eq(squatGoal(plannedT1([3, 3, 3, 3, 3])).exposures, 1, 'planned: 140 of 165 counts');
+  eq(squatGoal(plannedT1([3, 3, 3, 3, 3], { planned: false })).exposures, 1, 'by hand: 140 is within half a plate step of 85%');
+  const low = plannedT1([3, 3, 3, 3, 3], { planned: false });
+  for (const x of low.sets) x.load = 135;
+  eq(squatGoal(low).exposures, 0, 'by hand: 135 is under the floor');
+});
+
+test('every prescribed set done fills the goal even with reps missed; fewer sets and too few reps do not', () => {
+  eq(squatGoal(plannedT1([3, 2, 2, 1, 1])).exposures, 1, '9 reps, but all 5 sets');
+  eq(squatGoal(plannedT1([3, 3, 3], { sets: 3 })).exposures, 0, '3 of 5 sets, 9 reps');
+  eq(squatGoal(plannedT1([4, 3, 3], { sets: 3 })).exposures, 1, '3 sets, but 10 reps: the dose');
+});
+
+test('after a miss: the same load when a few reps short, one step down when more than a quarter short', () => {
+  const sc = s => L.byId(s.schemes, 's-t1-5x3'), ex = s => L.byId(s.exercises, 'ex-back-squat');
+  const a = plannedT1([3, 3, 3, 2, 2], { daysAgo: 1 }); // 2 short of 15
+  const pa = L.progression(a, ex(a), 'T1', sc(a));
+  eq([pa.load, pa.up, pa.down], [140, false, false]);
+  const b = plannedT1([3, 2, 2, 1, 1], { daysAgo: 1 }); // 6 short of 15
+  const pb = L.progression(b, ex(b), 'T1', sc(b));
+  eq([pb.load, pb.up, pb.down], [135, false, true]);
+  eq(L.targetLoad(b, ex(b), 'T1', sc(b)), 135, 'and that is the load suggested');
+});
+
 await queue;
 const fails = results.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${results.length - fails} passed, ${fails} failed`;

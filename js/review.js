@@ -68,7 +68,8 @@ function slipReason(state, sl, r, wk) {
 // Last time a set counted toward the goal, before `end`.
 function lastDone(state, sl, end) {
   let at = null;
-  for (const s of state.sets) if (s.done && !s.warmup && s.loggedAt < end && (!at || s.loggedAt > at) && L.slotForSet(state, s) === sl.id) at = s.loggedAt;
+  const idx = L.blockIndex(state);
+  for (const s of state.sets) if (s.done && !s.warmup && s.loggedAt < end && (!at || s.loggedAt > at) && L.slotForSet(state, s, idx) === sl.id) at = s.loggedAt;
   return at;
 }
 

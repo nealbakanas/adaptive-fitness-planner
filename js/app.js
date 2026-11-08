@@ -1295,7 +1295,7 @@ function viewBlock(s, b, credit, idea = null) {
   else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`<button class="link" data-act="maxSet" data-id="${ex.id}">Set 1RM</button>`);
   const progLine = !prog ? '' : prog.up
     ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} · every rep at ${prog.last.load} last time${prog.last.amrap != null ? `, ${prog.last.amrap} on the AMRAP` : ''}</div>`
-    : `<div class="dose prog">= ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} again · ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short last time</div>`;
+    : `<div class="dose prog">${prog.down ? '↓' : '='} ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()}${prog.down ? '' : ' again'} · ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short last time</div>`;
   const emom = sc.emom && b.restSec == null;
   const restBtn = emom
     ? `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ every ${clock(sc.emom)}</button>${blockSets(b).some(x => x.done) || b.emomStart ? '' : ` <button class="restchip go-emom" data-act="emomStart" data-b="${b.id}">▶ Start EMOM</button>`}`
@@ -1604,11 +1604,12 @@ function viewWeek() {
     // What each set counts toward, to fix by hand: folded away.
     const byDay = new Map();
     for (const s of sets) { const k = L.dayKey(s.loggedAt); byDay.set(k, [...(byDay.get(k) || []), s]); }
+    const blocksById = L.blockIndex(state);
     h += `<details class="card setsweek"><summary><b>Sets this week</b> <span class="meta">${sets.length}</span></summary>`;
     for (const [k, list] of byDay) {
       h += `<div class="dayhead">${dayName(k)}</div>${list.map(s => {
         const ex = exOf(s.exerciseId);
-        const auto = L.autoSlotFor(state, s);
+        const auto = L.autoSlotFor(state, s, blocksById);
         const autoLbl = auto ? slotLabel(L.byId(state.slots, auto)) : 'none';
         const val = s.countsManual ? (s.countsToward ?? 'none') : 'auto';
         return `<div class="setlog"><div class="grow"><span class="tier ${s.tier}">${s.tier}</span> ${esc(ex?.name ?? '?')} <span class="meta">${esc(setAmount(ex, s))}</span></div>
