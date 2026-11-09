@@ -734,6 +734,7 @@ function banners() {
 
 function viewToday() {
   if (B.settle(state)) save(); // a block past its end finishes now; its report waits below
+  if (ui.tomorrow) return viewTomorrow(ui.tomorrow);
   const s = currentSession(), m = currentMobility();
   if (m && !(s && ui.showWorkout)) return banners() + viewMobSession(m, !!s);
   const back = m ? `<div class="banner">Mobility still open · <button class="link" data-act="showMobility">Switch to it</button></div>` : '';
@@ -983,8 +984,8 @@ function viewCheckin() {
   if (ci.skip?.length && ci.skipDay !== L.dayKey()) { ci.skip = []; delete ci.skipDay; } // a skip is for the day
   const doneToday = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'done');
   const paused = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'paused');
-  let h = `<header class="top"><h1>Check in</h1></header>`;
-  h += blockReportCard() + morningCard() + programDayCard();
+  let h = `<header class="top"><h1>Check in</h1><button class="small" data-act="tomorrowOpen">Plan tomorrow ›</button></header>`;
+  h += blockReportCard() + plannedCard() + morningCard() + programDayCard();
   for (const p of paused) {
     const left = state.sets.filter(x => x.sessionId === p.id && !x.done && !x.warmup).length;
     const at = new Date(p.pausedAt ?? p.checkinAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -1019,6 +1020,54 @@ function viewCheckin() {
       `<button class="row" data-act="startPlan" data-id="${p.id}"><span>${esc(p.name)}</span></button>`).join('')}</div></div>`;
   }
   return h;
+}
+
+// ---------- plan tomorrow ----------
+// What the suggestion would be tomorrow morning: the same rules, run as of 7am tomorrow (that week's goals, today's training
+// as yesterday for recovery), with the check-in you choose here. Saved, it waits on tomorrow's check-in to start as is.
+
+const tomorrowAt = () => L.startOfDay() + 864e5 + 7 * 3600e3;
+const dayLong = t => new Date(t).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+
+function tomorrowBuild(d) {
+  const t = tomorrowAt();
+  const ci = { ...d.ci, variant: d.variant || 0 };
+  return { t, ci, res: L.buildSuggestion(state, ci, t), program: B.today(state, t) };
+}
+
+function viewTomorrow(d) {
+  const { t, ci, res, program } = tomorrowBuild(d);
+  const where = ci.locationIds?.length ? ci.locationIds : [ci.locationId];
+  const credit = L.creditWeek(state, t);
+  const rows = res.blocks.map(b => {
+    const ex = exOf(b.exerciseId), sc = schOf(b.schemeId);
+    const load = ex && sc ? L.targetLoad(state, ex, b.tier, sc, t) : null;
+    const partner = b.pairOf ? '↔ ' : '';
+    return `<div class="slotrow"><span class="tier ${b.tier}">${b.tier}</span><span class="grow"><span class="name">${partner}${esc(ex?.name ?? '?')}</span>
+      <span class="meta">${esc(sc?.name ?? '')}${load != null ? ` · ${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : ''}</span></span></div>`;
+  }).join('');
+  const left = [...credit.slots.values()].filter(r => L.counted(state, r.slot) && r.filled < r.slot.quota).length;
+  return `<header class="top sub"><button class="back" data-act="tomorrowClose">‹ Check in</button></header>
+    <h1 class="pagetitle">${esc(dayLong(t))}</h1>
+    <p class="meta pad">${left} goal${left === 1 ? '' : 's'} open that week · energy ${6 - ci.fatigue} assumed</p>
+    ${program?.due ? `<div class="card program"><div class="meta">${esc(program.block.group)} · Week ${program.week}/${program.block.weeks}</div><b>${esc(shortPlan(program.due.planId))}</b> is due that day</div>` : ''}
+    ${state.locations.length > 1 ? `<div class="field"><label>Where</label><div class="seg">${state.locations.map(l =>
+      `<button data-act="tomorrowSet" data-k="loc" data-v="${l.id}" class="${where.includes(l.id) ? 'on' : ''}">${esc(l.name)}</button>`).join('')}</div></div>` : ''}
+    <div class="field"><label>Minutes</label><div class="seg">${TIMES.map(m => `<button data-act="tomorrowSet" data-k="minutes" data-v="${m}" class="${ci.minutes === m ? 'on' : ''}">${m}</button>`).join('')}</div></div>
+    <div class="field"><label>Lean</label><div class="seg">${LEANS.map(([v, n]) => `<button data-act="tomorrowSet" data-k="lean" data-v="${v}" class="${(ci.lean ?? 'either') === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+    <div class="card flush">${rows || '<p class="muted pad">Nothing from your goals fits.</p>'}</div>
+    <p class="meta pad">About ${res.minutesUsed} min${res.ready && readyText(res.ready) ? ` · ${esc(readyText(res.ready))}` : ''}</p>
+    <div class="actions"><button data-act="tomorrowRegen">Regenerate</button><button class="primary" data-act="tomorrowSave">Save for ${esc(new Date(t).toLocaleDateString(undefined, { weekday: 'long' }))}</button></div>`;
+}
+
+// Check-in: the workout you planned the night before, ready to start.
+function plannedCard() {
+  const p = state.planned;
+  if (!p || p.day !== L.dayKey()) return '';
+  const names = p.blocks.map(b => exOf(b.exerciseId)?.name).filter(Boolean);
+  return `<div class="card program due"><div class="meta">Planned last night · ${p.ci.minutes} min</div>
+    <p>${esc(names.join(' · '))}</p>
+    <div class="brow"><button class="primary" data-act="plannedStart">Start it</button><button class="small" data-act="plannedDrop">Discard</button></div></div>`;
 }
 
 // ---------- morning check ----------
@@ -3640,6 +3689,40 @@ const actions = {
     if (s.day === L.dayKey()) return go();
     askConfirm('Continue this workout today?', 'It opens again with its unlogged sets. It stays under its own date in History; the sets you log now count for today.', 'Continue', go);
   },
+  // Plan tomorrow
+  tomorrowOpen: () => {
+    const { locationId, locationIds, minutes, fatigue, intent, lean, jumps, cond, condPair, split } = ui.ci;
+    ui.tomorrow = { variant: 0, ci: { locationId, locationIds: [...(locationIds || [locationId])], minutes, fatigue: Mo.entryFor(state) ? fatigue : 2, sleep: null, intent, lean, jumps, cond, condPair, split, skip: [] } };
+    render(); window.scrollTo(0, 0);
+  },
+  tomorrowClose: () => { ui.tomorrow = null; render(); window.scrollTo(0, 0); },
+  tomorrowSet: d => {
+    const c = ui.tomorrow.ci;
+    if (d.k === 'minutes') c.minutes = Number(d.v);
+    else if (d.k === 'lean') c.lean = d.v;
+    else if (d.k === 'loc') { const ids = c.locationIds.includes(d.v) ? (c.locationIds.length > 1 ? c.locationIds.filter(x => x !== d.v) : c.locationIds) : [...c.locationIds, d.v]; c.locationIds = ids; c.locationId = ids[0]; }
+    render();
+  },
+  tomorrowRegen: () => { ui.tomorrow.variant++; render(); },
+  tomorrowSave: () => {
+    const { t, ci, res } = tomorrowBuild(ui.tomorrow);
+    state.planned = { day: L.dayKey(t), savedAt: Date.now(), ci: { ...ci, variant: 0 }, blocks: structuredClone(res.blocks), notes: res.notes, goalMinutes: res.goalMinutes };
+    ui.tomorrow = null;
+    save(); render(); window.scrollTo(0, 0);
+    toast(`Saved for ${new Date(t).toLocaleDateString(undefined, { weekday: 'long' })}`);
+  },
+  plannedStart: () => {
+    const p = state.planned;
+    ui.ci = { ...ui.ci, ...p.ci, fatigue: ui.ci.fatigue }; // today's energy, the plan's place and time
+    // Fresh ids, so the plan can't collide with anything; superset links follow.
+    const ids = new Map(p.blocks.map(b => [b.id, L.uid()]));
+    const blocks = p.blocks.filter(b => exOf(b.exerciseId) && schOf(b.schemeId)).map(b => ({ ...structuredClone(b), id: ids.get(b.id), ...(b.pairOf ? { pairOf: ids.get(b.pairOf) } : {}) }));
+    createSession(blocks, 'suggested', { planned: true, focusNotes: p.notes, goalMinutes: p.goalMinutes });
+    delete state.planned;
+    save(); render(); window.scrollTo(0, 0);
+  },
+  plannedDrop: () => { delete state.planned; save(); render(); },
+
   // Morning check
   mornSet: d => {
     const m = ui.morning ?? (ui.morning = { energy: null, pain: {} });

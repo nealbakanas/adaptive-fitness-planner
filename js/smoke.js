@@ -1458,6 +1458,30 @@ step('Count it in History: a finished workout\'s exercise fills its goal', () =>
   click('[data-act=nav][data-tab=today]');
 });
 
+step('plan tomorrow: preview tomorrow\'s workout, save it, start it the next day', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=today]');
+  check('check-in has Plan tomorrow', !!q('[data-act=tomorrowOpen]'));
+  click('[data-act=tomorrowOpen]');
+  const day = new Date(L.startOfDay() + 864e5 + 7 * 3600e3).toLocaleDateString(undefined, { weekday: 'long' });
+  check('it shows tomorrow\'s suggested workout', new RegExp(day).test(text()) && qa('.slotrow').length >= 2, text().slice(0, 300));
+  click('[data-act=tomorrowSet][data-k=minutes][data-v="30"]');
+  const short = qa('.slotrow').length;
+  click('[data-act=tomorrowSet][data-k=minutes][data-v="90"]');
+  check('more time, more exercises', qa('.slotrow').length > short);
+  click('[data-act=tomorrowSave]');
+  check('saved for tomorrow', st().planned?.day === L.dayKey(L.startOfDay() + 864e5 + 3600e3) && st().planned.ci.minutes === 90 && /Check in/.test(text()));
+  const want = st().planned.blocks.map(b => b.exerciseId);
+  st().planned.day = L.dayKey(); // as if it were tomorrow
+  click('[data-act=nav][data-tab=week]'); click('[data-act=nav][data-tab=today]');
+  check('the next day the check-in offers it', /Planned last night/.test(text()) && !!q('[data-act=plannedStart]'));
+  click('[data-act=plannedStart]');
+  const sess = st().sessions.filter(x => x.status === 'open').at(-1);
+  check('Start it opens that workout', !!sess && JSON.stringify(sess.blocks.map(b => b.exerciseId)) === JSON.stringify(want) && sess.minutes === 90 && !st().planned);
+  click('[data-act=finish]');
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+});
+
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
 const V = await import('./vault.js');
