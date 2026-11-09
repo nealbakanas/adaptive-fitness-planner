@@ -1419,7 +1419,7 @@ function viewBlock(s, b, credit, idea = null) {
     ${pairHead}
     <div class="bhead"><button class="tier ${b.tier}" data-act="tierEdit" data-b="${b.id}" aria-label="Change tier">${b.tier} ▾</button>
       <button class="chip" data-act="swapEx" data-b="${b.id}">${esc(ex.name)} ▾</button>
-      <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${round(L.schemeTime(state, b.tier, b.exerciseId, sc, !!b.pairOf || s.blocks.some(x => x.pairOf === b.id)))}m ▾</button>
+      <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${b.pairOf ? '+' : ''}${round(L.setsMinutes(state, b, s.blocks))}m ▾</button>
       <button class="icon bremove" data-act="removeBlock" data-b="${b.id}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
     <div class="meta">${info.join(' · ')} ${restBtn}</div>
     ${progLine}${dose}
@@ -2865,7 +2865,7 @@ function sheetSwapScheme(sh) {
   const { s, b } = findBlock(sh.blockId);
   const ex = exOf(b.exerciseId);
   const budget = sessionBudget(s, b) - L.overhead(state, b.tier, b.exerciseId, s.locationId ?? null);
-  const time = sc => round(L.schemeTime(state, b.tier, b.exerciseId, sc, !!b.pairOf || s.blocks.some(x => x.pairOf === b.id)));
+  const time = sc => round(L.setsMinutes(state, b, s.blocks, sc));
   return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${b.tier} · ${round(budget)} min left</div>
     <div class="label">Why? <span class="hint">optional</span></div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {

@@ -97,6 +97,23 @@ export function schemeTime(state, tier, exerciseId, sc, paired = false) {
   const learned = paceFor(state)?.perSet.get(pacedKey(exerciseId, tier, paired));
   return learned ? learned.minutes * sc.sets : sc.minutes;
 }
+// A superset partner's sets go in the rest of the block it's paired with: each costs about half a minute (the set, less
+// the rest it replaces), plus whatever its sets run past the other block's. Two 6-minute accessories make about 7½ minutes,
+// not 12. With your pace learned for supersets, your own time counts instead.
+export const SUPERSET_SET = 0.5;
+export function setsMinutes(state, b, blocks = null, sc = byId(state.schemes, b.schemeId)) {
+  if (!sc) return 0;
+  const paired = !!b.pairOf || !!blocks?.some(x => x.pairOf === b.id);
+  const own = schemeTime(state, b.tier, b.exerciseId, sc, paired);
+  if (!b.pairOf || paceFor(state)?.perSet.has(pacedKey(b.exerciseId, b.tier, true))) return own;
+  const lead = blocks && byId(blocks, b.pairOf), lsc = lead && byId(state.schemes, lead.schemeId);
+  const leadTime = lsc ? schemeTime(state, lead.tier, lead.exerciseId, lsc, true) : own;
+  return Math.min(own, sc.sets * SUPERSET_SET + Math.max(0, own - leadTime));
+}
+// What a pick takes from the time left as a workout is built: every second T3 (`partner`) goes in a superset.
+const pickCost = (state, tier, e, sc, partner = false) => !takesTime(tier) ? 0 : partner
+  ? (paceFor(state)?.perSet.has(pacedKey(e.id, tier, true)) ? schemeTime(state, tier, e.id, sc, true) : sc.sets * SUPERSET_SET) + overhead(state, tier, e.id) / 2
+  : schemeTime(state, tier, e.id, sc) + overhead(state, tier, e.id);
 export const EST_MAX_REP_CAP = 10;             // sets above this rep count don't feed estimated max
 const DAY = 864e5;
 
@@ -855,7 +872,8 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
   const scored = scoreSlots(state, ci, t);
   const sore = jumpPain(state, t);
   // Jumps are only in when you ask for them, and then whatever the scores say: they don't set the bar for other goals.
-  const top = Math.max(0, ...scored.filter(c => !requestOf(c.slot.tier)).map(c => c.score));
+  // Areas don't set it either: they only fill the time the counted goals leave.
+  const top = Math.max(0, ...scored.filter(c => !requestOf(c.slot.tier) && !c.area).map(c => c.score));
   let budget = ci.minutes;
   const blocks = [];
   const count = Object.fromEntries(TIERS.map(t => [t, 0]));
@@ -905,7 +923,7 @@ function buildSuggestionIn(state, ci, t, { excludeFamilies = [], fill = true, se
       blocks.push({ id: uid(), tier, slotId: c.slot.id, exerciseId: exercise.id, schemeId: sc.id, swaps: [] });
       c.picked = true;
       famUsed.add(c.slot.familyId);
-      if (takesTime(tier)) budget -= schemeTime(state, tier, exercise.id, sc) + overhead(state, tier, exercise.id);
+      budget -= pickCost(state, tier, exercise, sc, tier === 'T3' && count.T3 % 2 === 1);
       count[tier]++;
     }
   }
@@ -1123,24 +1141,21 @@ const tierOrder = tier => BUILD_ORDER.indexOf(tier);
 const sortBlocks = (state, blocks) => blocks.sort((a, b) => blockRank(state, a) - blockRank(state, b)
   || (blockRank(state, a) === 2 ? tierOrder(a.tier) - tierOrder(b.tier) : 0));
 
-// Minutes a block takes from the workout: scheme, warm-up and changeover, a superset partner at half (its sets fit in the other's
-// rest). Jumps take none: they're done during the warm-up.
+// Minutes a block takes from the workout: scheme, warm-up and changeover; a superset partner's sets fit in the other's rest
+// (setsMinutes). Jumps take none: they're done during the warm-up.
 // With pace learned, the sets take your per-set time (for a superset, your time for the group split between its
-// blocks, so a partner's sets aren't halved again). `blocks`: the workout, to tell a superset's leader; `loc`: where.
+// blocks). `blocks`: the workout, to find a superset's leader; `loc`: where.
 // Rest changed today (⏱) moves the estimate by the difference, for that workout only.
 export function blockMinutes(state, b, { blocks = null, loc } = {}) {
   if (!takesTime(b.tier)) return 0;
   const sc = byId(state.schemes, b.schemeId);
-  const share = b.pairOf ? 0.5 : 1;
-  const paired = !!b.pairOf || !!blocks?.some(x => x.pairOf === b.id);
-  const learned = sc && paceFor(state)?.perSet.get(pacedKey(b.exerciseId, b.tier, paired));
   let rest = 0;
   if (sc && b.restSec != null) {
     const ex = byId(state.exercises, b.exerciseId);
     rest = (b.restSec - (ex?.restSec ?? sc.restSec ?? 90)) / 60 * sc.sets;
   }
-  const oh = overhead(state, b.tier, b.exerciseId, loc);
-  return learned ? Math.max(0, learned.minutes * sc.sets + rest) + oh * share : Math.max(0, (sc?.minutes || 0) + rest + oh) * share;
+  // A partner is set up alongside the block it's paired with: half the warm-up and changeover.
+  return Math.max(0, setsMinutes(state, b, blocks, sc) + rest) + overhead(state, b.tier, b.exerciseId, loc) * (b.pairOf ? 0.5 : 1);
 }
 export const blocksMinutes = (state, blocks, loc) => blocks.reduce((m, b) => m + blockMinutes(state, b, { blocks, loc }), 0);
 // Whether any of your learned numbers went into the workout's estimate ("your pace").
@@ -1278,13 +1293,13 @@ function libraryKit(state, ci, t, minutes, excludeFamilies, present = [], taken 
       const slot = slotFor(state, e, tier);
       const sc = pickScheme(state, tier, e, schemeRoom(state, tier, k.budget, e.id), ci, dose ?? slotDose(state, slot, tier));
       if (!sc) return false;
-      // T3s go in supersets, and a partner's sets fit in the other's rest: every second one costs half.
-      const share = tier === 'T3' && k.count('T3') % 2 === 1 ? 0.5 : 1;
+      // T3s go in supersets, and a partner's sets fit in the other's rest: every second one costs little.
+      const partner = tier === 'T3' && k.count('T3') % 2 === 1;
       k.blocks.push({ id: uid(), tier, slotId: slot?.id ?? null, exerciseId: e.id, schemeId: sc.id, swaps: [] });
       famUsed.add(e.familyId);
       famPatterns.set(e.familyId, (famPatterns.get(e.familyId) ?? new Set()).add(pattern(e)));
       if (isStrength(tier) && !e.explosive) k.present.add(pattern(e));
-      if (takesTime(tier)) k.budget -= (schemeTime(state, tier, e.id, sc) + overhead(state, tier, e.id)) * share;
+      k.budget -= pickCost(state, tier, e, sc, partner);
       const liked = e.pref === 'fav' ? ' · a favorite' : tv(e) >= 1 ? ' · you like it' : '';
       k.notes.push(`${tier} ${e.name}: ${why}${liked}`);
       return true;
@@ -1478,7 +1493,7 @@ function buildMixIn(state, ci, asked, t, { excludeFamilies = [], sessionBlocks =
       if (!sc) continue;
       blocks.push({ id: uid(), tier, slotId: c.slot.id, exerciseId: c.exercise.id, schemeId: sc.id, swaps: [] });
       famUsed.add(c.slot.familyId);
-      budget -= schemeTime(state, tier, c.exercise.id, sc) + overhead(state, tier, c.exercise.id);
+      budget -= pickCost(state, tier, c.exercise, sc, tier === 'T3' && n % 2 === 1);
       notes.push(`${tier} ${c.exercise.name}: open goal`);
       n++;
     }

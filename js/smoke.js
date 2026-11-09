@@ -149,9 +149,12 @@ step('choose the mix, then regenerate it', () => {
     if (box && !box.checked) {
       const goalId = state.sessions.filter(x => x.status === 'open').at(-1).blocks.find(b => b.id === box.dataset.countgoal).slotId;
       click(db.querySelector('[data-act=check]'));
+      // (Another core block in the mix may already have met the goal: then there's nothing to tick.)
       const box2 = qa('section.block').find(x => chip(x) === 'Dead bug').querySelector('[data-countgoal]');
-      box2.checked = true; fire(box2, 'change');
-      check('Count it fills the goal for today', L.creditWeek(state).slots.get(goalId).todayMet && qa('section.block').find(x => chip(x) === 'Dead bug').querySelector('[data-countgoal]').checked);
+      if (box2) {
+        box2.checked = true; fire(box2, 'change');
+        check('Count it fills the goal for today', L.creditWeek(state).slots.get(goalId).todayMet && qa('section.block').find(x => chip(x) === 'Dead bug').querySelector('[data-countgoal]').checked);
+      }
     }
   }
   click('[data-act=recheck]');

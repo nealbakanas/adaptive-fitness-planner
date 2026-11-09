@@ -1189,7 +1189,8 @@ test('workout time counts warm-ups and the changeover to each exercise (Settings
   const sc = id => s.schemes.find(x => x.id === id).minutes;
   eq(L.blockMinutes(s, { tier: 'T1', schemeId: 's-t1-5x3' }), sc('s-t1-5x3') + 5 + 2, 'heavy: ramp-up and changeover');
   eq(L.blockMinutes(s, { tier: 'T2', schemeId: 's-t2-3x8' }), sc('s-t2-3x8') + 2 + 2);
-  eq(L.blockMinutes(s, { tier: 'T3', schemeId: 's-t3-3x15', pairOf: 'x' }), (sc('s-t3-3x15') + 2) / 2, 'a superset partner at half');
+  // A superset partner's sets go in the other's rest: half a minute a set, half the changeover.
+  eq(L.blockMinutes(s, { tier: 'T3', schemeId: 's-t3-3x15', pairOf: 'x' }), 3 * L.SUPERSET_SET + 2 / 2, 'a superset partner');
   eq(L.blockMinutes(s, { tier: 'JUMP', schemeId: 's-j-4x3' }), 0);
   // 45 minutes, lower, energy 4, jumps: the jumps plus three or four exercises, not six.
   const r = L.buildSuggestion(s, ci({ minutes: 45, fatigue: 2, lean: 'lower', jumps: true }));
@@ -2857,7 +2858,7 @@ const areaWeek = () => {
 
 test('T3 as areas: an area done twice this week still comes up on an upper day; a counted goal does not', () => {
   const { s, t } = areaWeek();
-  const c = ci({ minutes: 60, fatigue: 2, lean: 'upper' });
+  const c = ci({ minutes: 90, fatigue: 2, lean: 'upper' });
   ok(L.creditWeek(s, t).slots.get('sl-t3-upperback').filled >= 2, 'count met');
   ok(!L.scoreSlots(s, c, t).some(x => x.slot.id === 'sl-t3-upperback'), 'counts: out for the week');
   s.settings.t3Areas = true;
@@ -2868,6 +2869,31 @@ test('T3 as areas: an area done twice this week still comes up on an upper day; 
   // Done today: not again today.
   s.sets.push(...[0, 1, 2].map(i => ({ id: L.uid(), sessionId: 'today', blockId: 'today', exerciseId: 'ex-band-pullapart', tier: 'T3', reps: 12, done: true, loggedAt: t - 3600e3 + i })));
   ok(!L.scoreSlots(s, c, t).some(x => x.slot.id === 'sl-t3-upperback'), 'not twice in a day');
+});
+
+test('T3 as areas set no bar for the strength goals: a high-priority area does not push a T2 out', () => {
+  const s = seed();
+  s.settings.bodyweight = 200; s.settings.t3Areas = true;
+  for (const sl of s.slots) if (sl.tier === 'T3') sl.priority = 3;
+  const t = L.weekBounds(s, Date.now()).start + 2 * DAY + 7 * 3600e3;
+  const r = L.buildSuggestion(s, ci({ minutes: 45, fatigue: 2, locationId: s.locations[0].id }), t);
+  const area = Math.max(...r.scored.filter(c => c.area).map(c => c.score));
+  const t2 = r.scored.find(c => c.slot.id === 'sl-t2-dip');
+  ok(t2 && t2.score < 0.25 * area, 'the area outscores the T2 by a lot');
+  ok(t2.picked, t2.note);
+});
+
+test('a T3 superset takes about one block\'s time: the partner\'s sets go in the other\'s rest', () => {
+  const s = seed();
+  const lead = { id: 'a', tier: 'T3', exerciseId: 'ex-band-pullapart', schemeId: 's-t3-3x15' };
+  const mate = { id: 'b', tier: 'T3', exerciseId: 'ex-dead-bug', schemeId: 's-t3-3x15', pairOf: 'a' };
+  const blocks = [lead, mate];
+  const sets = L.setsMinutes(s, lead, blocks) + L.setsMinutes(s, mate, blocks);
+  eq(sets, 6 + 3 * L.SUPERSET_SET, 'two 6-minute accessories: 7½ minutes of sets');
+  // A longer partner adds what runs past the leader.
+  const long = { ...mate, schemeId: 's-t3-5x10' };
+  eq(L.setsMinutes(s, long, [lead, long]), 5 * L.SUPERSET_SET + 1);
+  ok(L.blocksMinutes(s, blocks) < 2 * L.blockMinutes(s, { ...lead, id: 'c' }), 'the pair costs less than two blocks');
 });
 
 test('T3 as areas: the longer since an area was worked, the sooner it comes up; areas that suit the day move up', () => {
