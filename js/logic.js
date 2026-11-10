@@ -422,10 +422,11 @@ export function lastOutcome(state, exerciseId, tier, before = Infinity) {
   const scheme = latest && byId(state.schemes, latest.schemeId);
   if (!scheme) return null;
   const sets = state.sets.filter(s => loaded(s) && s.sessionId === latest.sessionId);
-  const want = scheme.sets * scheme.reps, repsDone = sets.reduce((n, s) => n + (Number(s.reps) || 0), 0);
+  const want = schemeReps(scheme), repsDone = sets.reduce((n, s) => n + (Number(s.reps) || 0), 0);
   return {
-    at: latest.loggedAt, scheme, sets, load: Math.min(...sets.map(s => Number(s.load))),
+    at: latest.loggedAt, scheme, sets, load: Math.min(...sets.map(s => Number(s.load))), want,
     complete: repsDone >= want,
+    strict: sets.length >= scheme.sets && sets.every(s => Number(s.reps) >= scheme.reps), // every set, as written
     short: Math.max(0, want - repsDone),
     amrap: sets.find(s => s.amrap)?.reps != null ? Number(sets.find(s => s.amrap).reps) : null, // reps on the AMRAP last set
   };
@@ -434,7 +435,7 @@ export function lastOutcome(state, exerciseId, tier, before = Infinity) {
 export const PROGRESSION_WEEKS = 8;
 // Next load for a T1/T2 lift from last time: { load, up, steps, last } (up: last time was complete), or null when there's
 // no like-for-like last time. An AMRAP last set with more than double the prescribed reps (7+ on a set of 3) is two
-// steps up (+10), else one (+5). Kettlebell moves go up a bell per step.
+// steps up (+10) when every set before it hit its reps too, else one (+5). Kettlebell moves go up a bell per step.
 export function progression(state, ex, tier, scheme, before = Infinity) {
   if (ex?.metric !== 'load_reps' || (tier !== 'T1' && tier !== 'T2') || !scheme) return null;
   const last = lastOutcome(state, ex.id, tier, before);
@@ -445,11 +446,12 @@ export function progression(state, ex, tier, scheme, before = Infinity) {
   const inc = state.settings.increment || 5;
   if (!last.complete) {
     // Short of the reps: the same load again, or one step down when more than a quarter of them were missed.
-    if (last.short * 4 <= last.scheme.sets * last.scheme.reps) return { load: last.load, up: false, down: false, steps: 0, last };
+    if (last.short * 4 <= last.want) return { load: last.load, up: false, down: false, steps: 0, last };
     const load = kb ? ([...bells].sort((a, b) => b - a).find(b => b < last.load) ?? last.load) : Math.max(0, last.load - inc);
     return { load, up: false, down: load < last.load, steps: load < last.load ? -1 : 0, last };
   }
-  const steps = last.amrap != null && last.amrap > 2 * last.scheme.reps ? 2 : 1;
+  // The double step is for a big AMRAP on top of a session done as written, not for one that made up for missed sets.
+  const steps = last.strict && last.amrap != null && last.amrap > 2 * last.scheme.reps ? 2 : 1;
   let load = last.load;
   if (kb) { const up = [...bells].sort((a, b) => a - b).filter(b => b > last.load); load = up[Math.min(steps, up.length) - 1] ?? last.load; }
   else load += steps * inc;

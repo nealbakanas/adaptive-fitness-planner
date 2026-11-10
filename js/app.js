@@ -2972,7 +2972,7 @@ function sheetExHist(sh) {
     const sc = schOf(work[0]?.schemeId);
     const best = Math.max(0, ...work.map(x => L.setE1rm(state, x) || 0));
     const hit = sc && ['T1', 'T2'].includes(g.tier) && ex.metric === 'load_reps'
-      ? (work.length >= sc.sets && work.every(x => Number(x.reps) >= sc.reps) ? ' · ✓ every rep' : ' · short') : '';
+      ? (work.reduce((n, x) => n + (Number(x.reps) || 0), 0) >= L.schemeReps(sc) ? ' · ✓ every rep' : ' · short') : ''; // in total, as progression counts them
     return `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(day(g.at))}${sc ? ` · ${esc(sc.name)}` : ''}</span>
       <span class="meta">${esc(histSets({ ex, sets: g.sets }))}${best ? ` · e1RM ${round(best)}` : ''}${hit}</span></span></div>`;
   };

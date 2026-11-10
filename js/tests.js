@@ -1220,6 +1220,11 @@ test('progression: every prescribed rep at a load last time means +increment nex
   const pc = L.lastOutcome(s, 'ex-power-clean', 'T2');
   eq([pc.complete, pc.short], [true, 0], '20 reps of 20');
   eq(L.targetLoad(s, ex('ex-power-clean'), 'T2', sc('s-t2-10x2')), 195, 'so up, not 190 again');
+  // A big AMRAP that only makes up for missed sets is one step, not two.
+  const s2 = seed();
+  [2, 2, 2, 2, 7].forEach((r, i) => s2.sets.push({ id: L.uid(), sessionId: 'am', blockId: 'am', exerciseId: 'ex-back-squat', tier: 'T1', schemeId: 's-t1-5x3',
+    load: 300, reps: r, done: true, loggedAt: NOON(3) + i, bw: 200, ...(i === 4 ? { amrap: true } : {}) }));
+  eq(L.progression(s2, s2.exercises.find(e => e.id === 'ex-back-squat'), 'T1', s2.schemes.find(x => x.id === 's-t1-5x3')).steps, 1, 'made-up reps: +5, not +10');
   // Today's own sets don't count as last time while you're doing it.
   log('ex-back-squat', 'T1', 's-t1-5x3', 305, [3, 3, 3, 3, 3], 0, 'today');
   eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3'), NOON(0) - 1), 305, 'during today: still 305');
