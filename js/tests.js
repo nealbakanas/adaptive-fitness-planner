@@ -1792,6 +1792,19 @@ test('cloud: coming back from the emailed link takes the session from the addres
   Cloud.reset();
   location.hash = before;
 });
+test('saved data stays small: finished workouts drop the builder\'s working, old ones the whole explanation', () => {
+  const s = seed(), now = Date.now();
+  const why = () => [{ slotId: 'sl-t1-squat', label: 'T1 Squat', score: 1.2, why: ['priority 2 × 1 left ÷ 3d'], picked: false, note: 'T1 cap reached', hold: 'others' }];
+  s.sessions.push({ id: 'new', status: 'done', firstSetAt: now - 7 * DAY, blocks: [{ id: 'b' }], why: why(), focusNotes: ['x'], ready: { fresh: true } },
+    { id: 'old', status: 'done', firstSetAt: now - 70 * DAY, blocks: [{ id: 'c' }], why: why(), focusNotes: ['x'], ready: { fresh: true }, goalMinutes: 40 },
+    { id: 'open', status: 'open', checkinAt: now - 70 * DAY, blocks: [], why: why() });
+  ok(Store.slimHistory(s, now), 'something to trim');
+  const get = id => s.sessions.find(x => x.id === id);
+  eq(get('new').why, [{ slotId: 'sl-t1-squat', label: 'T1 Squat', picked: false, note: 'T1 cap reached', hold: 'others' }], 'recent: what the review reads stays');
+  eq([get('new').focusNotes, get('old').why, get('old').focusNotes, get('old').ready, get('old').goalMinutes], [['x'], undefined, undefined, undefined, undefined]);
+  eq([get('old').blocks.length, get('open').why[0].score], [1, 1.2], 'blocks kept; an open workout is left alone');
+  ok(!Store.slimHistory(s, now), 'nothing more the second time');
+});
 atest('sync: the first upload, then nothing to do, then a change is pushed', async () => {
   const fake = globalThis.__fake = await signedInDevice();
   await withFake(async () => {
@@ -1820,6 +1833,22 @@ atest('sync: the other device saved and this one changed nothing: it is pulled, 
     eq(Cloud.record().baseRev, 2);
     ok((await V.list()).some(x => x.reason === 'before-sync'), 'what was here is kept');
     eq((await Sync.sync()).kind, 'none');
+  });
+});
+atest('sync: a set logged while the account\'s copy downloads is kept (merged, not overwritten)', async () => {
+  const fake = globalThis.__fake = await signedInDevice();
+  await withFake(async () => {
+    await Sync.sync();
+    const theirs = structuredClone(fake.row(EMAIL).data);
+    theirs.sessions.push({ id: 'phone-s', status: 'done', firstSetAt: Date.now(), blocks: [] }); theirs.savedAt = Date.now() + 5;
+    fake.putRow(EMAIL, theirs);
+    // This device has changed nothing when the sync starts (a pull), then a set is ticked mid-download.
+    fake.beforeData = () => { Store.state.sets.push({ id: 'mid-pull', sessionId: 'as', exerciseId: 'ex-back-squat', tier: 'T1', load: 200, reps: 3, done: true, loggedAt: Date.now() }); Store.save(); };
+    const r = await Sync.sync();
+    eq(r.kind, 'merged');
+    ok(Store.state.sets.some(x => x.id === 'mid-pull'), 'the set is still here');
+    ok(Store.state.sessions.some(x => x.id === 'phone-s'), 'with the other device\'s workout');
+    ok(fake.row(EMAIL).data.sets.some(x => x.id === 'mid-pull'), 'and the account has it too');
   });
 });
 atest('sync: both devices changed: merged, both kept as snapshots, and the account gets the merge', async () => {

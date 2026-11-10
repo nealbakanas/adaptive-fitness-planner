@@ -21,6 +21,7 @@ export function installFake() {
     offline: false,
     failNext: null,       // a status to answer the next REST call with
     beforePatch: null,    // a function to run once, just before the next PATCH is judged
+    beforeData: null,     // a function to run once, just before the next download of the data (you log a set meanwhile)
     expireTokens: false,  // make the next REST call answer 401 once (a stale access token)
     restore() { globalThis.fetch = real; },
     // Plays another device: replaces the account's row, bumping rev.
@@ -83,6 +84,7 @@ export function installFake() {
       const cur = fake.rows.get(id);
       if (method === 'GET') {
         const cols = (u.searchParams.get('select') ?? '').split(',');
+        if (cols.includes('data') && fake.beforeData) { const f = fake.beforeData; fake.beforeData = null; f(); }
         return json(200, mine && cur ? [Object.fromEntries(cols.filter(c => c in cur).map(c => [c, cur[c]]))] : []);
       }
       if (method === 'POST') {

@@ -1630,6 +1630,36 @@ try {
   fake.restore();
 }
 
+step('a workout still going at midnight carries on; one left open since the day before is closed', () => {
+  const realNow = Date.now, S = () => store.state;
+  try {
+    click('[data-act=nav][data-tab=today]');
+    if (q('[data-act=recheck]')) click('[data-act=recheck]');
+    onlyAt('loc-basement');
+    click('[data-act=suggest]');
+    click(q('section.block .set:not(.warm) [data-act=check]'));
+    const s = S().sessions.filter(x => x.status === 'open').at(-1), day0 = s.day;
+    // Five past midnight, an hour into the workout.
+    const shift = L.startOfDay(realNow()) + 864e5 + 5 * 60e3 - realNow();
+    Date.now = () => realNow() + shift;
+    s.checkinAt = Date.now() - 3600e3;
+    for (const x of S().sets) if (x.sessionId === s.id && x.done) x.loggedAt = Date.now() - 1800e3;
+    click('[data-act=nav][data-tab=today]');
+    check('past midnight the workout is still on Today', s.status === 'open' && s.day === L.dayKey() && s.day !== day0 && qa('section.block').length > 0, `${s.status} ${s.day} ${text().slice(0, 120)}`);
+    // The next day, nothing logged since: it's closed and kept in History.
+    Date.now = () => realNow() + shift + 864e5;
+    click('[data-act=nav][data-tab=today]');
+    check('a day later it is closed, with its logged set kept', s.status === 'done' && S().sets.some(x => x.sessionId === s.id && x.done) && !!q('[data-act=suggest]'), `${s.status} ${text().slice(0, 120)}`);
+    S().sessions = S().sessions.filter(x => x.id !== s.id);
+    S().sets = S().sets.filter(x => x.sessionId !== s.id);
+    S().timer = null;
+  } finally {
+    Date.now = realNow;
+    store.save();
+    click('[data-act=nav][data-tab=today]');
+  }
+});
+
 const fails = out.filter(r => r[0] === 'FAIL').length;
 document.getElementById('summary').textContent = `${out.filter(r => r[0] === 'PASS').length} passed, ${fails} failed`;
 document.title = fails ? 'FAIL' : 'PASS';

@@ -7,8 +7,11 @@ Done items move to the changelog in the PRs, not here.
 
 - **A workout went missing during an update (Oct 27).** Not reproduced. Two ways it can happen: a workout with no
   set ticked is dropped when the app closes it the next day, or another device chose "Keep this device's" and
-  overwrote the account. Waiting on: was anything else signed in, and is there a "before-sync" saved copy from that
+  overwrote the account. (A third way, a workout still open past midnight, now carries on instead.) Waiting on: was anything else signed in, and is there a "before-sync" saved copy from that
   morning (Settings → Backup and data)?
+- **Saved data grows about 8 KB a workout** against the browser's ~5 MB (a few years). Finished workouts are trimmed
+  (`slimHistory`, about 14% off), but logged sets are most of it. The lasting fix is a compressed saved copy, or
+  IndexedDB as the main copy: both change the save path, so they need their own careful pass.
 - **Second-device sync** hasn't been tried on a real second phone (only in tests).
 - **No password reset** for the cloud account.
 - **Mobility entries can't be edited in History** (strength sets can).
