@@ -1215,6 +1215,11 @@ test('progression: every prescribed rep at a load last time means +increment nex
   log('ex-back-squat', 'T1', 's-t1-5x3', 305, [3, 3, 3, 2, 2], 3, 'b');
   eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3')), 305, 'two reps short at 305: 305 again');
   eq(L.lastOutcome(s, 'ex-back-squat', 'T1').short, 2);
+  // The reps count in total, however they're split: 8 doubles and a set of 4 is a full 10×2.
+  log('ex-power-clean', 'T2', 's-t2-10x2', 190, [2, 2, 2, 2, 2, 2, 2, 2, 4], 2, 'pc');
+  const pc = L.lastOutcome(s, 'ex-power-clean', 'T2');
+  eq([pc.complete, pc.short], [true, 0], '20 reps of 20');
+  eq(L.targetLoad(s, ex('ex-power-clean'), 'T2', sc('s-t2-10x2')), 195, 'so up, not 190 again');
   // Today's own sets don't count as last time while you're doing it.
   log('ex-back-squat', 'T1', 's-t1-5x3', 305, [3, 3, 3, 3, 3], 0, 'today');
   eq(L.targetLoad(s, squat, 'T1', sc('s-t1-5x3'), NOON(0) - 1), 305, 'during today: still 305');

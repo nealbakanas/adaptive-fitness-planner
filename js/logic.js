@@ -408,12 +408,13 @@ export function lastLoad(state, exerciseId) {
 }
 
 // ---------- progression ----------
-// GZCL-style: a T1/T2 lift you did every prescribed set and rep of last time goes up by your load increment the next
-// time you do it at that tier with the same reps per set; one you came up short on repeats the load. A different rep
+// GZCL-style: a T1/T2 lift you did all the prescribed reps of last time goes up by your load increment the next
+// time you do it at that tier with the same reps per set; one you came up short on repeats the load. The reps count in
+// total, however you split them: 8 sets of 2 and one of 4 is a full 10×2. A different rep
 // scheme (5×3 after 10×2), or a last time over 8 weeks ago, has no like-for-like last time: the load comes from your max.
 
 // The most recent session of an exercise at a tier before `before`: its loaded working sets, the scheme they were
-// prescribed with, the load (the lightest working set), and whether every prescribed set hit its reps. Null if none.
+// prescribed with, the load (the lightest working set), and whether the reps add up to the scheme's. Null if none.
 export function lastOutcome(state, exerciseId, tier, before = Infinity) {
   const loaded = s => s.done && !s.warmup && s.exerciseId === exerciseId && s.tier === tier && s.loggedAt < before && s.load != null && s.load !== '';
   let latest = null;
@@ -421,11 +422,11 @@ export function lastOutcome(state, exerciseId, tier, before = Infinity) {
   const scheme = latest && byId(state.schemes, latest.schemeId);
   if (!scheme) return null;
   const sets = state.sets.filter(s => loaded(s) && s.sessionId === latest.sessionId);
-  const repsDone = sets.reduce((n, s) => n + Math.min(Number(s.reps) || 0, scheme.reps), 0);
+  const want = scheme.sets * scheme.reps, repsDone = sets.reduce((n, s) => n + (Number(s.reps) || 0), 0);
   return {
     at: latest.loggedAt, scheme, sets, load: Math.min(...sets.map(s => Number(s.load))),
-    complete: sets.length >= scheme.sets && sets.every(s => Number(s.reps) >= scheme.reps),
-    short: Math.max(0, scheme.sets * scheme.reps - repsDone),
+    complete: repsDone >= want,
+    short: Math.max(0, want - repsDone),
     amrap: sets.find(s => s.amrap)?.reps != null ? Number(sets.find(s => s.amrap).reps) : null, // reps on the AMRAP last set
   };
 }
