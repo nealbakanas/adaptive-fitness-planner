@@ -502,6 +502,23 @@ export function resetState() {
   return save();
 }
 
+// Keeps the saved data small as workouts pile up (the browser allows about 5 MB). A finished workout doesn't need the
+// builder's working: the scores and reasons behind "Why this session" go at once (the labels, ticks and hold notes stay
+// for the weekly review), and after SLIM_AFTER_WEEKS the whole explanation goes. Sets, blocks and swaps are never touched.
+// Returns whether anything changed.
+export const SLIM_AFTER_WEEKS = 8;
+export function slimHistory(s, now = Date.now()) {
+  let changed = false;
+  const cutoff = now - SLIM_AFTER_WEEKS * 7 * 864e5;
+  for (const x of s.sessions || []) {
+    if (x.status !== 'done') continue;
+    if ((x.firstSetAt ?? x.checkinAt ?? 0) < cutoff) {
+      for (const k of ['why', 'focusNotes', 'ready', 'goalMinutes']) if (k in x) { delete x[k]; changed = true; }
+    } else for (const w of x.why || []) if ('score' in w || 'why' in w) { delete w.score; delete w.why; changed = true; }
+  }
+  return changed;
+}
+
 // Named side copies, e.g. a snapshot taken just before an import so it can be undone.
 const copyKey = name => `${KEY}.${name}`;
 export function keepCopy(name, data = state) {

@@ -106,7 +106,11 @@ async function once() {
     }
     case 'push': return push(local, head.rev);
     case 'pull': {
+      const before = fingerprint(local);
       const remote = await Cloud.getRemote({ withData: true });
+      // Something was logged here while the download ran: taking the account's copy now would drop it. Go round again;
+      // the next pass sees both sides changed and merges.
+      if (fingerprint(Store.state) !== before) return 'again';
       const theirs = stateOf(remote); checkVersion(theirs);
       const now = applyLocal(theirs);
       await recordBase(fingerprint(now), remote.rev);

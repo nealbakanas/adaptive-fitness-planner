@@ -408,12 +408,13 @@ export function lastLoad(state, exerciseId) {
 }
 
 // ---------- progression ----------
-// GZCL-style: a T1/T2 lift you did every prescribed set and rep of last time goes up by your load increment the next
-// time you do it at that tier with the same reps per set; one you came up short on repeats the load. A different rep
+// GZCL-style: a T1/T2 lift you did all the prescribed reps of last time goes up by your load increment the next
+// time you do it at that tier with the same reps per set; one you came up short on repeats the load. The reps count in
+// total, however you split them: 8 sets of 2 and one of 4 is a full 10×2. A different rep
 // scheme (5×3 after 10×2), or a last time over 8 weeks ago, has no like-for-like last time: the load comes from your max.
 
 // The most recent session of an exercise at a tier before `before`: its loaded working sets, the scheme they were
-// prescribed with, the load (the lightest working set), and whether every prescribed set hit its reps. Null if none.
+// prescribed with, the load (the lightest working set), and whether the reps add up to the scheme's. Null if none.
 export function lastOutcome(state, exerciseId, tier, before = Infinity) {
   const loaded = s => s.done && !s.warmup && s.exerciseId === exerciseId && s.tier === tier && s.loggedAt < before && s.load != null && s.load !== '';
   let latest = null;
@@ -421,11 +422,12 @@ export function lastOutcome(state, exerciseId, tier, before = Infinity) {
   const scheme = latest && byId(state.schemes, latest.schemeId);
   if (!scheme) return null;
   const sets = state.sets.filter(s => loaded(s) && s.sessionId === latest.sessionId);
-  const repsDone = sets.reduce((n, s) => n + Math.min(Number(s.reps) || 0, scheme.reps), 0);
+  const want = schemeReps(scheme), repsDone = sets.reduce((n, s) => n + (Number(s.reps) || 0), 0);
   return {
-    at: latest.loggedAt, scheme, sets, load: Math.min(...sets.map(s => Number(s.load))),
-    complete: sets.length >= scheme.sets && sets.every(s => Number(s.reps) >= scheme.reps),
-    short: Math.max(0, scheme.sets * scheme.reps - repsDone),
+    at: latest.loggedAt, scheme, sets, load: Math.min(...sets.map(s => Number(s.load))), want,
+    complete: repsDone >= want,
+    strict: sets.length >= scheme.sets && sets.every(s => Number(s.reps) >= scheme.reps), // every set, as written
+    short: Math.max(0, want - repsDone),
     amrap: sets.find(s => s.amrap)?.reps != null ? Number(sets.find(s => s.amrap).reps) : null, // reps on the AMRAP last set
   };
 }
@@ -433,7 +435,7 @@ export function lastOutcome(state, exerciseId, tier, before = Infinity) {
 export const PROGRESSION_WEEKS = 8;
 // Next load for a T1/T2 lift from last time: { load, up, steps, last } (up: last time was complete), or null when there's
 // no like-for-like last time. An AMRAP last set with more than double the prescribed reps (7+ on a set of 3) is two
-// steps up (+10), else one (+5). Kettlebell moves go up a bell per step.
+// steps up (+10) when every set before it hit its reps too, else one (+5). Kettlebell moves go up a bell per step.
 export function progression(state, ex, tier, scheme, before = Infinity) {
   if (ex?.metric !== 'load_reps' || (tier !== 'T1' && tier !== 'T2') || !scheme) return null;
   const last = lastOutcome(state, ex.id, tier, before);
@@ -444,11 +446,12 @@ export function progression(state, ex, tier, scheme, before = Infinity) {
   const inc = state.settings.increment || 5;
   if (!last.complete) {
     // Short of the reps: the same load again, or one step down when more than a quarter of them were missed.
-    if (last.short * 4 <= last.scheme.sets * last.scheme.reps) return { load: last.load, up: false, down: false, steps: 0, last };
+    if (last.short * 4 <= last.want) return { load: last.load, up: false, down: false, steps: 0, last };
     const load = kb ? ([...bells].sort((a, b) => b - a).find(b => b < last.load) ?? last.load) : Math.max(0, last.load - inc);
     return { load, up: false, down: load < last.load, steps: load < last.load ? -1 : 0, last };
   }
-  const steps = last.amrap != null && last.amrap > 2 * last.scheme.reps ? 2 : 1;
+  // The double step is for a big AMRAP on top of a session done as written, not for one that made up for missed sets.
+  const steps = last.strict && last.amrap != null && last.amrap > 2 * last.scheme.reps ? 2 : 1;
   let load = last.load;
   if (kb) { const up = [...bells].sort((a, b) => a - b).filter(b => b > last.load); load = up[Math.min(steps, up.length) - 1] ?? last.load; }
   else load += steps * inc;

@@ -1,5 +1,5 @@
 import { state, save, replaceState, resetState, loadProblem, lastSaveError, resolveLoadProblem, onSaveFail, keepCopy, readCopy, hasCopy, dropCopy,
-  recover, getRecoveryCopy, useRecoveryCopy, dismissRecoveryCopy, snapshotNow, requestPersist, flushVault } from './store.js';
+  recover, getRecoveryCopy, useRecoveryCopy, dismissRecoveryCopy, snapshotNow, requestPersist, flushVault, slimHistory } from './store.js';
 import * as Vault from './vault.js';
 import * as Cloud from './cloud.js';
 import * as Taste from './taste.js';
@@ -79,14 +79,31 @@ function removeSession(s) {
   state.sessions = state.sessions.filter(x => x.id !== s.id);
 }
 
-// Close anything left open from a previous day; drop sessions where nothing was logged.
+// Close anything left open from a previous day; drop sessions where nothing was logged. A workout you're still doing when
+// midnight passes (its last set, check-in or reopening was within LIVE_HOURS) carries on today instead, the way Continue
+// does: it stays under its own date in History, and what you log now counts for today. Returns whether anything changed.
+const LIVE_HOURS = 4;
+const lastActivity = s => state.sets.reduce((m, x) => (x.sessionId === s.id && x.done && x.loggedAt > m ? x.loggedAt : m), Math.max(s.checkinAt ?? 0, s.reopenedAt ?? 0, s.pausedAt ?? 0));
 function closeStale() {
-  const today = L.dayKey();
+  const today = L.dayKey(), now = Date.now();
+  let changed = false;
   for (const s of [...state.sessions]) {
     if ((s.status !== 'open' && s.status !== 'paused') || s.day === today) continue;
-    endSession(s);
+    if (now - lastActivity(s) < LIVE_HOURS * 3600e3) s.day = today;
+    else endSession(s);
+    changed = true;
   }
-  for (const m of [...state.mobility.sessions]) if (m.status === 'open' && m.day !== today) endMobility(m);
+  for (const m of [...state.mobility.sessions]) if (m.status === 'open' && m.day !== today) { endMobility(m); changed = true; }
+  return changed;
+}
+// The day changed while the app was open (it can sit open past midnight): look again at what's still going.
+let daySeen = L.dayKey();
+function rollDay() {
+  const d = L.dayKey();
+  if (d === daySeen) return false;
+  daySeen = d;
+  if (closeStale()) save();
+  return true;
 }
 
 function endSession(s) {
@@ -360,7 +377,8 @@ function reviewDecide(ids, status) {
   if (changed) toast(ids.length > 1 ? 'Goals changed' : 'Goal changed');
 }
 
-const whyRows = res => res.scored.map(c => ({ slotId: c.slot.id, label: slotLabel(c.slot), score: c.score, why: c.why, picked: !!c.picked, note: c.note, ...(c.hold ? { hold: c.hold } : {}) }));
+// (Only what's shown and what the weekly review reads: the scores and their working aren't kept.)
+const whyRows = res => res.scored.map(c => ({ slotId: c.slot.id, label: slotLabel(c.slot), picked: !!c.picked, ...(c.note ? { note: c.note } : {}), ...(c.hold ? { hold: c.hold } : {}) }));
 
 function createSession(blocks, source, extra = {}) {
   const s = {
@@ -636,7 +654,7 @@ function renderTimer() {
   const pct = over ? 100 : Math.min(100, 100 * (1 - rem / t.total));
   timerEl.hidden = false;
   timerEl.className = over ? 'over' : '';
-  timerEl.innerHTML = `<div class="fill" style="width:${pct}%"></div>
+  timerEl.innerHTML = `<div class="fill" style="width:${esc(pct)}%"></div>
     <div class="tbody"><div class="tmain"><span class="tclock">${over ? '+' + clock(-rem) : clock(rem)}</span>
       <span class="tlabel">${over ? 'Go' : 'Rest'}${t.next ? ` · next: ${esc(t.next)}` : ''}</span></div>
       <div class="tbtns">${over ? '' : `<button data-act="timerAdj" data-d="-15">−15</button><button data-act="timerAdj" data-d="15">+15</button>`}
@@ -649,7 +667,7 @@ function renderWork(t) {
   timerEl.hidden = false;
   timerEl.className = ph.p.hold ? 'work' : 'prep';
   const held = workHeld(t);
-  timerEl.innerHTML = `<div class="fill" style="width:${Math.min(100, ph.frac * 100)}%"></div>
+  timerEl.innerHTML = `<div class="fill" style="width:${esc(Math.min(100, ph.frac * 100))}%"></div>
     <div class="tbody"><div class="tmain"><span class="tclock">${clock(ph.rem)}</span>
       <span class="tlabel">${esc(ph.p.label)} · ${esc(t.name)}</span></div>
       <div class="tbtns"><button data-act="workAdd">+15</button>
@@ -667,6 +685,7 @@ document.addEventListener('visibilitychange', () => {
 // ---------- views ----------
 
 function render() {
+  rollDay();
   if (ui.onboard) {
     navEl.hidden = true;
     appEl.innerHTML = globalBanners() + viewOnboard(ui.onboard);
@@ -674,7 +693,7 @@ function render() {
     return;
   }
   navEl.hidden = false;
-  navEl.innerHTML = TABS.map(([k, t]) => `<button data-act="nav" data-tab="${k}" class="${ui.tab === k ? 'on' : ''} ${k === 'timer' && state.intervalRun ? 'live' : ''}" ${k === 'timer' && state.intervalRun ? 'aria-label="Timer, running"' : ''}>${t}</button>`).join('');
+  navEl.innerHTML = TABS.map(([k, t]) => `<button data-act="nav" data-tab="${esc(k)}" class="${esc(ui.tab === k ? 'on' : '')} ${esc(k === 'timer' && state.intervalRun ? 'live' : '')}" ${k === 'timer' && state.intervalRun ? 'aria-label="Timer, running"' : ''}>${t}</button>`).join('');
   const views = { today: viewToday, week: viewWeek, timer: viewTimer, library: viewLibrary, plans: viewPlans, more: viewSettings };
   appEl.innerHTML = globalBanners() + views[ui.tab]();
   renderSheet();
@@ -743,27 +762,27 @@ function viewToday() {
 
 function seg(key, items, cur) {
   return `<div class="seg">${items.map(([v, t]) =>
-    `<button data-act="ci" data-k="${key}" data-v="${v}" class="${String(cur) === String(v) ? 'on' : ''}">${t}</button>`).join('')}</div>`;
+    `<button data-act="ci" data-k="${esc(key)}" data-v="${esc(v)}" class="${esc(String(cur) === String(v) ? 'on' : '')}">${t}</button>`).join('')}</div>`;
 }
 
 // Upper/lower workouts from the whole library, for when the weekly goals are done.
 // With a lean, that half's two come first and stand out; the other half stays one tap away.
 const focusName = (r, x) => `${r === 'upper' ? 'Upper' : 'Lower'} body${x ? ' + explosive' : ''}`;
 const focusButtons = lean => `<div class="focusgrid">${[...L.FOCUS_REGIONS].sort((a, b) => (b === lean) - (a === lean)).flatMap(r => [false, true].map(x =>
-  `<button data-act="focus" data-r="${r}" ${x ? 'data-x="1"' : ''} class="${r === lean ? 'lean' : ''}">${focusName(r, x)}</button>`)).join('')}</div>`;
+  `<button data-act="focus" data-r="${esc(r)}" ${x ? 'data-x="1"' : ''} class="${esc(r === lean ? 'lean' : '')}">${focusName(r, x)}</button>`)).join('')}</div>`;
 
 // Started programs: today's session and where you are. Programs not started are offered under Plans.
 function programCards() {
   const started = P.PROGRAMS.filter(d => P.progress(state, d.id));
   if (!started.length) {
     return `<div class="field"><label>Programs</label><div class="list">${P.PROGRAMS.map(d =>
-      `<button class="row" data-act="progOpen" data-id="${d.id}"><span>${esc(d.name)}</span><span class="meta">${P.weeksOf(d)} weeks ›</span></button>`).join('')}</div></div>`;
+      `<button class="row" data-act="progOpen" data-id="${esc(d.id)}"><span>${esc(d.name)}</span><span class="meta">${P.weeksOf(d)} weeks ›</span></button>`).join('')}</div></div>`;
   }
   return started.map(d => {
     const p = P.progress(state, d.id);
     if (p.finished) {
       return `<div class="card prog"><b>${esc(d.name)}: done</b>
-        <div class="brow"><button class="small" data-act="progOpen" data-id="${d.id}">Your progress</button></div></div>`;
+        <div class="brow"><button class="small" data-act="progOpen" data-id="${esc(d.id)}">Your progress</button></div></div>`;
     }
     const today = P.doneToday(state, d.id, L.dayKey());
     const last = P.lastSessionAt(state, d.id);
@@ -772,8 +791,8 @@ function programCards() {
     const dose = P.dayPlan(d, p.week).map(e => `${e.name} ${M.doseText(e)}`).join(' · ');
     return `<div class="card prog"><div><b>${esc(d.name)}</b> · week ${p.week}/${P.weeksOf(d)}, day ${p.day}/${d.days}</div>
       <div class="meta">${esc(dose)}</div>${hint ? `<div class="meta ${today ? 'good' : ''}">${esc(hint)}</div>` : ''}
-      <div class="brow"><button class="${today ? '' : 'primary'}" data-act="progSession" data-id="${d.id}">${today ? 'Start another' : 'Start'}</button>
-        <button data-act="progOpen" data-id="${d.id}">Program ›</button></div></div>`;
+      <div class="brow"><button class="${today ? '' : 'primary'}" data-act="progSession" data-id="${esc(d.id)}">${today ? 'Start another' : 'Start'}</button>
+        <button data-act="progOpen" data-id="${esc(d.id)}">Program ›</button></div></div>`;
   }).join('');
 }
 
@@ -806,12 +825,12 @@ function viewTimer() {
   if (ui.ivLog) return viewIntervalLog(ui.ivLog);
   const d = ivDraft();
   const presets = state.intervals?.presets ?? [];
-  const field = (k, label, val, hint = '') => `<div class="field"><label for="iv-${k}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
-    <input id="iv-${k}" class="num" inputmode="${k === 'rounds' || k === 'sets' ? 'numeric' : 'text'}" data-iv="${k}" value="${esc(val)}"></div>`;
-  const sets = Array.from({ length: d.sets }, (_, i) => `<div class="field"><label for="iv-ex-${i}">${d.sets > 1 ? `Set ${i + 1}` : 'Exercise'}</label>
-    <select id="iv-ex-${i}" data-ivex="${i}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`).join('');
+  const field = (k, label, val, hint = '') => `<div class="field"><label for="iv-${esc(k)}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
+    <input id="iv-${esc(k)}" class="num" inputmode="${esc(k === 'rounds' || k === 'sets' ? 'numeric' : 'text')}" data-iv="${esc(k)}" value="${esc(val)}"></div>`;
+  const sets = Array.from({ length: d.sets }, (_, i) => `<div class="field"><label for="iv-ex-${esc(i)}">${d.sets > 1 ? `Set ${i + 1}` : 'Exercise'}</label>
+    <select id="iv-ex-${esc(i)}" data-ivex="${esc(i)}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`).join('');
   return `<header class="top"><h1>Timer</h1></header>
-    <div class="chips">${presets.map(p => `<button class="chip ${d.presetId === p.id ? 'on' : ''}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
+    <div class="chips">${presets.map(p => `<button class="chip ${esc(d.presetId === p.id ? 'on' : '')}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
     <div class="card">
       <div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div>
       <div class="row2 fields">${field('work', 'Work', clock(d.work))}${field('rest', 'Rest', clock(d.rest), '0 = EMOM')}</div>
@@ -828,7 +847,7 @@ function viewTimer() {
 function viewIntervalRun(run) {
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
   return `<header class="top"><h1>${esc(run.cfg.name)}</h1></header>
-    <div class="ivrun ${at?.phase.kind ?? 'done'}" id="iv-run">${ivRunInner(run, list, at)}</div>
+    <div class="ivrun ${esc(at?.phase.kind ?? 'done')}" id="iv-run">${ivRunInner(run, list, at)}</div>
     <div class="brow ivbtns">${run.pausedAt ? '<button class="primary big" data-act="ivResume">Resume</button>' : '<button class="big" data-act="ivPause">Pause</button>'}
       <button class="big" data-act="ivSkip">Skip</button><button class="big danger" data-act="ivStop">Stop</button></div>`;
 }
@@ -839,7 +858,7 @@ function ivRunInner(run, list, at) {
   const c = run.cfg, p = at.phase;
   const ex = exOf(p.exerciseId)?.name ?? '';
   const next = at.next ? `Next: ${IV_LABEL[at.next.kind]}${at.next.kind === 'work' ? ` · ${esc(exOf(at.next.exerciseId)?.name ?? '')}` : ''}` : 'Last one';
-  return `<div class="ivfill" style="width:${Math.min(100, at.frac * 100)}%"></div>
+  return `<div class="ivfill" style="width:${esc(Math.min(100, at.frac * 100))}%"></div>
     <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}</div>
     <div class="ivclock">${clock(at.rem)}</div>
     <div class="ivsub">${p.kind === 'prep' ? esc(ex) : `${esc(ex)} · round ${p.round} of ${c.rounds}${c.sets > 1 ? ` · set ${p.set} of ${c.sets}` : ''}`}</div>
@@ -857,8 +876,8 @@ function viewIntervalLog(lg) {
     ${done.map(d => {
       const ex = exOf(d.exerciseId);
       const unitWord = ex?.repUnit ?? (ex?.metric === 'time' ? null : 'reps');
-      return `<div class="field"><label for="iv-total-${d.set}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')} · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}</label>
-        ${unitWord ? `<input id="iv-total-${d.set}" class="num" inputmode="numeric" data-ivtotal="${d.set}" value="${esc(lg.totals?.[d.set] ?? '')}" placeholder="total ${esc(unitWord)}">` : `<span class="meta">${lg.cfg.work}s a round</span>`}</div>`;
+      return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')} · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}</label>
+        ${unitWord ? `<input id="iv-total-${esc(d.set)}" class="num" inputmode="numeric" data-ivtotal="${esc(d.set)}" value="${esc(lg.totals?.[d.set] ?? '')}" placeholder="total ${esc(unitWord)}">` : `<span class="meta">${lg.cfg.work}s a round</span>`}</div>`;
     }).join('')}
     <div class="brow"><button class="primary big" data-act="ivLog">Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
 }
@@ -941,22 +960,22 @@ function viewProgram(id) {
   const names = d.exercises.map(e => e.short ?? e.name);
   const rows = d.chart.map((wk, i) => {
     const w = i + 1, cur = p && !p.finished && p.week === w;
-    return `<tr class="${cur ? 'cur' : ''} ${(done[w] || 0) >= d.days ? 'full' : ''}"><th>${w}</th>${wk.map(([sets, reps]) => `<td>${sets}×${reps}</td>`).join('')}
+    return `<tr class="${cur ? 'cur' : ''} ${esc((done[w] || 0) >= d.days ? 'full' : '')}"><th>${w}</th>${wk.map(([sets, reps]) => `<td>${sets}×${reps}</td>`).join('')}
       <td>${done[w] ? `${done[w]}/${d.days}` : ''}</td>
-      <td><input class="vert" inputmode="decimal" data-vert="${id}|${w}" value="${esc(vert[w] ?? '')}" aria-label="Vertical, week ${w}"></td></tr>`;
+      <td><input class="vert" inputmode="decimal" data-vert="${esc(id)}|${esc(w)}" value="${esc(vert[w] ?? '')}" aria-label="Vertical, week ${esc(w)}"></td></tr>`;
   }).join('');
   let h = `<header class="top sub"><button class="back" data-act="progClose">‹ Plans</button></header><h1 class="pagetitle">${esc(d.name)}</h1>
     <p class="meta pad">${P.weeksOf(d)} weeks · ${d.days} days a week · separate from your goals</p>`;
   if (!p) {
-    h += `<button class="primary big" data-act="progStart" data-id="${id}">Start at week 1</button>`;
+    h += `<button class="primary big" data-act="progStart" data-id="${esc(id)}">Start at week 1</button>`;
   } else if (p.finished) {
-    h += `<div class="card"><b>All ${P.weeksOf(d)} weeks done.</b> <button class="link" data-act="progStart" data-id="${id}">Start over</button></div>`;
+    h += `<div class="card"><b>All ${P.weeksOf(d)} weeks done.</b> <button class="link" data-act="progStart" data-id="${esc(id)}">Start over</button></div>`;
   } else {
     h += `<div class="card"><div><b>Week ${p.week}, day ${p.day} of ${d.days}</b></div>
-      <div class="brow"><button class="primary" data-act="progSession" data-id="${id}">Start</button>
-        ${p.day > 1 || p.week > 1 ? `<button data-act="progWeek" data-id="${id}" data-w="${p.week}">Restart week ${p.week}</button>` : ''}
-        <select data-progweek="${id}" aria-label="Go to week">${opts(d.chart.map((_, i) => [i + 1, `Go to week ${i + 1}`]), p.week)}</select>
-        <button class="quiet" data-act="progStop" data-id="${id}">Stop</button></div></div>`;
+      <div class="brow"><button class="primary" data-act="progSession" data-id="${esc(id)}">Start</button>
+        ${p.day > 1 || p.week > 1 ? `<button data-act="progWeek" data-id="${esc(id)}" data-w="${esc(p.week)}">Restart week ${p.week}</button>` : ''}
+        <select data-progweek="${esc(id)}" aria-label="Go to week">${opts(d.chart.map((_, i) => [i + 1, `Go to week ${i + 1}`]), p.week)}</select>
+        <button class="quiet" data-act="progStop" data-id="${esc(id)}">Stop</button></div></div>`;
   }
   h += `<div class="label">Chart <span class="hint">sets × reps · vertical in ${vu}</span></div>
     <div class="card flush tablewrap"><table class="progchart"><thead><tr><th>Wk</th>${names.map(n => `<th>${esc(n)}</th>`).join('')}<th>Days</th><th>Vert</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -972,7 +991,7 @@ function skipField(ci) {
   if (!fams.length) return '';
   const on = ci.skip || [];
   return `<details class="skip" ${on.length || ui.skipOpen ? 'open' : ''} data-skip><summary>Skip today${on.length ? `: ${esc(on.map(id => famOf(id)?.name).filter(Boolean).join(', '))}` : ''}</summary>
-    <div class="chips">${fams.map(f => `<button class="chip ${on.includes(f.id) ? 'on' : ''}" data-act="ciSkip" data-v="${f.id}">${esc(f.name)}</button>`).join('')}</div></details>`;
+    <div class="chips">${fams.map(f => `<button class="chip ${esc(on.includes(f.id) ? 'on' : '')}" data-act="ciSkip" data-v="${esc(f.id)}">${esc(f.name)}</button>`).join('')}</div></details>`;
 }
 
 // Morning check still to do today (its energy then stands in for the check-in's).
@@ -990,17 +1009,17 @@ function viewCheckin() {
     const left = state.sets.filter(x => x.sessionId === p.id && !x.done && !x.warmup).length;
     const at = new Date(p.pausedAt ?? p.checkinAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     h += `<div class="card resume"><div><b>Paused at ${at}</b><div class="meta">${left} set${left === 1 ? '' : 's'} left</div></div>
-      <button class="primary" data-act="resume" data-id="${p.id}">Resume</button></div>`;
+      <button class="primary" data-act="resume" data-id="${esc(p.id)}">Resume</button></div>`;
   }
   if (doneToday.length) {
     const sets = state.sets.filter(x => x.done && !x.warmup && doneToday.some(s => s.id === x.sessionId)).length;
     const last = [...doneToday].sort((a, b) => (b.endedAt ?? b.checkinAt) - (a.endedAt ?? a.checkinAt))[0];
-    h += `<div class="card muted">Done today · ${sets} sets <button class="link" data-act="sessionContinue" data-id="${last.id}">Continue</button></div>`;
+    h += `<div class="card muted">Done today · ${sets} sets <button class="link" data-act="sessionContinue" data-id="${esc(last.id)}">Continue</button></div>`;
   }
   const where = ci.locationIds?.length ? ci.locationIds : [ci.locationId];
   if (state.locations.length > 1) {
     h += `<div class="field"><label>Where</label><div class="seg">${state.locations.map(l =>
-      `<button data-act="ciLoc" data-v="${l.id}" class="${where.includes(l.id) ? 'on' : ''}">${esc(l.name)}</button>`).join('')}</div></div>`;
+      `<button data-act="ciLoc" data-v="${esc(l.id)}" class="${esc(where.includes(l.id) ? 'on' : '')}">${esc(l.name)}</button>`).join('')}</div></div>`;
   }
   h += `<div class="field"><label>Minutes</label>${seg('minutes', TIMES.map(t => [t, t]), ci.minutes)}</div>
     ${morningOpen() ? '' : `<div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${seg('energy', [1, 2, 3, 4, 5].map(n => [n, n]), 6 - ci.fatigue)}</div>`}
@@ -1011,13 +1030,13 @@ function viewCheckin() {
     ${skipField(ci)}
     <button class="primary big" data-act="suggest">Suggest a session</button>
     <details class="mixer" ${ui.mixOpen ? 'open' : ''} data-mix><summary>Choose the mix</summary>
-      ${['T1', 'T2', 'T3'].map(t => `<div class="row mixrow"><span>${t}</span><div class="stepper small"><button data-act="mixStep" data-t="${t}" data-d="-1" aria-label="Fewer ${t}">−</button><span>${ui.mix[t]}</span><button data-act="mixStep" data-t="${t}" data-d="1" aria-label="More ${t}">+</button></div></div>`).join('')}
+      ${['T1', 'T2', 'T3'].map(t => `<div class="row mixrow"><span>${t}</span><div class="stepper small"><button data-act="mixStep" data-t="${esc(t)}" data-d="-1" aria-label="Fewer ${esc(t)}">−</button><span>${ui.mix[t]}</span><button data-act="mixStep" data-t="${esc(t)}" data-d="1" aria-label="More ${esc(t)}">+</button></div></div>`).join('')}
       <button class="primary" data-act="mixBuild">Build this mix</button></details>
     <div class="field"><label>Focused workout</label>${focusButtons(L.leanOf(ci))}</div>`;
   const own = state.plans.filter(p => !p.group);
   if (own.length) {
     h += `<div class="field"><label>Saved plans</label><div class="list">${own.map(p =>
-      `<button class="row" data-act="startPlan" data-id="${p.id}"><span>${esc(p.name)}</span></button>`).join('')}</div></div>`;
+      `<button class="row" data-act="startPlan" data-id="${esc(p.id)}"><span>${esc(p.name)}</span></button>`).join('')}</div></div>`;
   }
   return h;
 }
@@ -1043,7 +1062,7 @@ function viewTomorrow(d) {
     const ex = exOf(b.exerciseId), sc = schOf(b.schemeId);
     const load = ex && sc ? L.targetLoad(state, ex, b.tier, sc, t) : null;
     const partner = b.pairOf ? '↔ ' : '';
-    return `<div class="slotrow"><span class="tier ${b.tier}">${b.tier}</span><span class="grow"><span class="name">${partner}${esc(ex?.name ?? '?')}</span>
+    return `<div class="slotrow"><span class="tier ${esc(b.tier)}">${esc(b.tier)}</span><span class="grow"><span class="name">${partner}${esc(ex?.name ?? '?')}</span>
       <span class="meta">${esc(sc?.name ?? '')}${load != null ? ` · ${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}` : ''}</span></span></div>`;
   }).join('');
   const left = [...credit.slots.values()].filter(r => L.counted(state, r.slot) && r.filled < r.slot.quota).length;
@@ -1052,9 +1071,9 @@ function viewTomorrow(d) {
     <p class="meta pad">${left} goal${left === 1 ? '' : 's'} open that week · energy ${6 - ci.fatigue} assumed</p>
     ${program?.due ? `<div class="card program"><div class="meta">${esc(program.block.group)} · Week ${program.week}/${program.block.weeks}</div><b>${esc(shortPlan(program.due.planId))}</b> is due that day</div>` : ''}
     ${state.locations.length > 1 ? `<div class="field"><label>Where</label><div class="seg">${state.locations.map(l =>
-      `<button data-act="tomorrowSet" data-k="loc" data-v="${l.id}" class="${where.includes(l.id) ? 'on' : ''}">${esc(l.name)}</button>`).join('')}</div></div>` : ''}
-    <div class="field"><label>Minutes</label><div class="seg">${TIMES.map(m => `<button data-act="tomorrowSet" data-k="minutes" data-v="${m}" class="${ci.minutes === m ? 'on' : ''}">${m}</button>`).join('')}</div></div>
-    <div class="field"><label>Lean</label><div class="seg">${LEANS.map(([v, n]) => `<button data-act="tomorrowSet" data-k="lean" data-v="${v}" class="${(ci.lean ?? 'either') === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+      `<button data-act="tomorrowSet" data-k="loc" data-v="${esc(l.id)}" class="${esc(where.includes(l.id) ? 'on' : '')}">${esc(l.name)}</button>`).join('')}</div></div>` : ''}
+    <div class="field"><label>Minutes</label><div class="seg">${TIMES.map(m => `<button data-act="tomorrowSet" data-k="minutes" data-v="${esc(m)}" class="${esc(ci.minutes === m ? 'on' : '')}">${m}</button>`).join('')}</div></div>
+    <div class="field"><label>Lean</label><div class="seg">${LEANS.map(([v, n]) => `<button data-act="tomorrowSet" data-k="lean" data-v="${esc(v)}" class="${esc((ci.lean ?? 'either') === v ? 'on' : '')}">${n}</button>`).join('')}</div></div>
     <div class="card flush">${rows || '<p class="muted pad">Nothing from your goals fits.</p>'}</div>
     <p class="meta pad">About ${res.minutesUsed} min${res.ready && readyText(res.ready) ? ` · ${esc(readyText(res.ready))}` : ''}</p>
     <div class="actions"><button data-act="tomorrowRegen">Regenerate</button><button class="primary" data-act="tomorrowSave">Save for ${esc(new Date(t).toLocaleDateString(undefined, { weekday: 'long' }))}</button></div>`;
@@ -1074,7 +1093,7 @@ function plannedCard() {
 
 const jumpWord = ex => (/broad|long jump|bound|standing long|triple/i.test(ex?.name ?? '') ? 'Distance' : 'Height');
 // The morning energy row also answers for the check-in's energy (data-k), which is hidden while this card is open.
-const numSeg = (k, vals, cur, extra = '') => `<div class="seg tight">${vals.map(n => `<button data-act="mornSet" data-m="${k}" ${k === 'energy' ? 'data-k="energy"' : ''} ${extra} data-v="${n}" class="${cur === n ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+const numSeg = (k, vals, cur, extra = '') => `<div class="seg tight">${vals.map(n => `<button data-act="mornSet" data-m="${esc(k)}" ${k === 'energy' ? 'data-k="energy"' : ''} ${extra} data-v="${esc(n)}" class="${esc(cur === n ? 'on' : '')}">${n}</button>`).join('')}</div>`;
 
 // Energy and pain each morning (js/morning.js). Logged: one line, and what it changes today.
 function morningCard() {
@@ -1092,7 +1111,7 @@ function morningCard() {
     <div class="field"><label>Energy <span class="hint">1 wrecked · 5 fresh</span></label>${numSeg('energy', [1, 2, 3, 4, 5], d.energy)}</div>
     ${parts.map(p => `<div class="field"><label>${esc(p)} <span class="hint">pain</span></label>${numSeg('pain', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], d.pain[p] ?? null, `data-p="${esc(p)}"`)}</div>`).join('')}
     <details class="parts" ${parts.length ? '' : 'open'}><summary>Tracked parts</summary>
-      <div class="chips">${ideas.map(p => `<button class="chip ${parts.includes(p) ? 'on' : ''}" data-act="mornPart" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+      <div class="chips">${ideas.map(p => `<button class="chip ${esc(parts.includes(p) ? 'on' : '')}" data-act="mornPart" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>
       <div class="row2"><input id="morn-part" placeholder="Another part"><button class="small" data-act="mornPartAdd">Add</button></div></details>
     <div class="brow"><button class="primary small" data-act="mornSave">Save</button>${e ? '<button class="small" data-act="mornCancel">Cancel</button>' : '<button class="small" data-act="mornSkip">Not today</button>'}</div></div>`;
 }
@@ -1170,15 +1189,15 @@ function viewBlockSetup(d) {
   return `<header class="top sub"><button class="back" data-act="blockSetupClose">‹ Plans</button></header>
     <h1 class="pagetitle">Run ${esc(d.group)}</h1>
     <h3>Schedule</h3><div class="card flush">${days.map(wd => `<div class="frow"><span class="grow"><span class="name">${WEEKDAYS[wd]}</span></span>
-      <select data-bsched="${wd}">${opts([['', 'Your own day'], ...plans.map(p => [p.id, shortPlan(p.id)])], at(wd))}</select></div>`).join('')}</div>
+      <select data-bsched="${esc(wd)}">${opts([['', 'Your own day'], ...plans.map(p => [p.id, shortPlan(p.id)])], at(wd))}</select></div>`).join('')}</div>
     <h3>What the program owns</h3><div class="card">
       <div class="field"><label>Body half <span class="hint">its T1/T2</span></label><div class="seg">${[['', 'Neither'], ['lower', 'Lower body'], ['upper', 'Upper body']].map(([v, t]) =>
-        `<button data-act="bOwnHalf" data-v="${v}" class="${(d.owns.half ?? '') === v ? 'on' : ''}">${t}</button>`).join('')}</div></div>
-      <div class="field"><label>Whole tiers</label><div class="chips">${['JUMP', 'COND'].map(t => `<button class="chip ${d.owns.tiers.includes(t) ? 'on' : ''}" data-act="bOwnTier" data-v="${t}">${t === 'JUMP' ? 'Jumps' : 'Conditioning'}</button>`).join('')}</div></div></div>
+        `<button data-act="bOwnHalf" data-v="${esc(v)}" class="${esc((d.owns.half ?? '') === v ? 'on' : '')}">${t}</button>`).join('')}</div></div>
+      <div class="field"><label>Whole tiers</label><div class="chips">${['JUMP', 'COND'].map(t => `<button class="chip ${esc(d.owns.tiers.includes(t) ? 'on' : '')}" data-act="bOwnTier" data-v="${esc(t)}">${t === 'JUMP' ? 'Jumps' : 'Conditioning'}</button>`).join('')}</div></div></div>
     <h3>Length</h3><div class="card">
       <div class="frow"><span class="grow"><span class="name">Weeks</span></span><div class="stepper small"><button data-act="bWeeks" data-d="-1" aria-label="Fewer weeks">−</button><span>${d.weeks}</span><button data-act="bWeeks" data-d="1" aria-label="More weeks">+</button></div></div>
       <label class="toggle"><input type="checkbox" data-bdeload ${d.deloadEvery ? 'checked' : ''}> Deload every 4th week <span class="hint">40% fewer sets</span></label>
-      <div class="field"><label>Start</label><div class="seg">${[['next', 'Next week'], ['today', 'Today']].map(([v, t]) => `<button data-act="bStart" data-v="${v}" class="${d.start === v ? 'on' : ''}">${t}</button>`).join('')}</div></div></div>
+      <div class="field"><label>Start</label><div class="seg">${[['next', 'Next week'], ['today', 'Today']].map(([v, t]) => `<button data-act="bStart" data-v="${esc(v)}" class="${esc(d.start === v ? 'on' : '')}">${t}</button>`).join('')}</div></div></div>
     ${paused.length ? `<div class="card muted">Pauses ${esc(paused.map(slotLabel).join(', '))}</div>` : ''}
     <div class="actions"><button data-act="blockSetupClose">Cancel</button><button class="primary" data-act="blockGo">Start the block</button></div>`;
 }
@@ -1203,7 +1222,7 @@ function blockReportCard() {
     ${row('Pain flags', x => x.painFlags)}
     ${row('Morning energy', x => x.energy, '', 1)}
     <p><b>${esc(r.verdict)}</b></p>
-    <div class="brow"><button class="primary small" data-act="blockAgain" data-id="${b.id}">Run it again</button><button class="small" data-act="blockSeen" data-id="${b.id}">Back to my goals</button><button class="small" data-act="blockCopy" data-id="${b.id}">Copy report</button></div></div>`;
+    <div class="brow"><button class="primary small" data-act="blockAgain" data-id="${esc(b.id)}">Run it again</button><button class="small" data-act="blockSeen" data-id="${esc(b.id)}">Back to my goals</button><button class="small" data-act="blockCopy" data-id="${esc(b.id)}">Copy report</button></div></div>`;
 }
 
 // Starts today's program session: the plan as written (40% fewer sets on a deload), jumps swapped for holds on a sore
@@ -1341,14 +1360,14 @@ function viewBlock(s, b, credit, idea = null) {
   // With progression the load is last time's (+ the increment), so show what share of your e1RM that really is.
   const progPct = prog && max ? (prog.load + (ex.bodyweight ? state.settings.bodyweight || 0 : 0)) / max : null;
   if (max) info.push(`e1RM ${round(max)}${ex.bodyweight ? ' total' : ''}${ex.metric === 'load_reps' && (progPct || pct) ? ` · ${round((progPct || pct) * 100)}%` : ''}`);
-  else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`<button class="link" data-act="maxSet" data-id="${ex.id}">Set 1RM</button>`);
+  else if (ex.metric === 'load_reps' && b.tier !== 'T3') info.push(`<button class="link" data-act="maxSet" data-id="${esc(ex.id)}">Set 1RM</button>`);
   const progLine = !prog ? '' : prog.up
     ? `<div class="dose prog up">↑ ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()} · every rep at ${prog.last.load} last time${prog.last.amrap != null ? `, ${prog.last.amrap} on the AMRAP` : ''}</div>`
     : `<div class="dose prog">${prog.down ? '↓' : '='} ${ex.bodyweight ? 'BW+' : ''}${prog.load} ${unit()}${prog.down ? '' : ' again'} · ${prog.last.short} rep${prog.last.short === 1 ? '' : 's'} short last time</div>`;
   const emom = sc.emom && b.restSec == null;
   const restBtn = emom
-    ? `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ every ${clock(sc.emom)}</button>${blockSets(b).some(x => x.done) || b.emomStart ? '' : ` <button class="restchip go-emom" data-act="emomStart" data-b="${b.id}">▶ Start EMOM</button>`}`
-    : `<button class="restchip" data-act="restEdit" data-b="${b.id}">⏱ rest ${clock(effectiveRest(b))}${b.restSec != null ? ' (set today)' : ex.restSec != null ? ' (exercise)' : ''}</button>`;
+    ? `<button class="restchip" data-act="restEdit" data-b="${esc(b.id)}">⏱ every ${clock(sc.emom)}</button>${blockSets(b).some(x => x.done) || b.emomStart ? '' : ` <button class="restchip go-emom" data-act="emomStart" data-b="${esc(b.id)}">▶ Start EMOM</button>`}`
+    : `<button class="restchip" data-act="restEdit" data-b="${esc(b.id)}">⏱ rest ${clock(effectiveRest(b))}${b.restSec != null ? ' (set today)' : ex.restSec != null ? ' (exercise)' : ''}</button>`;
 
   let dose = '';
   const slot = b.slotId && L.byId(state.slots, b.slotId);
@@ -1360,8 +1379,8 @@ function viewBlock(s, b, credit, idea = null) {
     const prog = orSets ? `${agg.reps}/${need} ${L.repUnit(b.tier)} or ${agg.sets}/${cfg.setMin || orSets} ${L.setUnit(b.tier)}` : `${agg.reps}/${need} ${L.repUnit(b.tier)}`;
     const goal = esc(exOf(slot.exerciseId)?.name ?? famOf(slot.familyId)?.name ?? '');
     // "Count it": this exercise fills its goal today whatever the sets or reps (shown while it isn't already done, or once ticked).
-    const box = b.countGoal || !r?.todayMet ? `<label class="countit"><input type="checkbox" data-countgoal="${b.id}" ${b.countGoal ? 'checked' : ''}> Count it</label>` : '';
-    dose = `<div class="dose ${r?.todayMet ? 'met' : ''}"><span>${r?.todayMet ? `✓ ${goal} goal done` : `${goal} · ${prog}`}</span>${box}</div>`;
+    const box = b.countGoal || !r?.todayMet ? `<label class="countit"><input type="checkbox" data-countgoal="${esc(b.id)}" ${b.countGoal ? 'checked' : ''}> Count it</label>` : '';
+    dose = `<div class="dose ${esc(r?.todayMet ? 'met' : '')}"><span>${r?.todayMet ? `✓ ${goal} goal done` : `${goal} · ${prog}`}</span>${box}</div>`;
   }
   if ((b.tier === 'T1' || b.tier === 'T2') && ex.metric !== 'load_reps' && !ex.explosive) {
     dose += `<div class="dose warn">Reps only: won't count toward a ${b.tier} goal</div>`;
@@ -1372,15 +1391,15 @@ function viewBlock(s, b, credit, idea = null) {
 
   if (ex.explosive && (b.tier === 'T1' || b.tier === 'T2')) {
     const rd = L.powerReadiness(state, s, ex, Date.now(), b.id);
-    if (!rd.fresh) dose += `<div class="dose warn">Not fresh: ${esc(rd.reasons.join('; '))} · <button class="link" data-act="toTech" data-b="${b.id}">As technique</button></div>`;
+    if (!rd.fresh) dose += `<div class="dose warn">Not fresh: ${esc(rd.reasons.join('; '))} · <button class="link" data-act="toTech" data-b="${esc(b.id)}">As technique</button></div>`;
   }
 
   const warmRows = warmSets(b).map((st, i) => {
     const hint = warmHint(b, ex, i);
     return `<div class="set warm ${st.done ? 'done' : ''}"><span class="n" title="Warm-up">W</span>
-      <input class="num" inputmode="decimal" data-set="${st.id}" data-f="load" value="${esc(st.load)}" placeholder="${esc(hint.load ?? '—')}"><span class="u">${ex.bodyweight ? '+' : ''}${unit()}</span>
-      <span class="x">×</span><input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}" placeholder="${hint.reps}">
-      <button class="check" data-act="check" data-id="${st.id}" aria-label="Log warm-up set">${st.done ? '✓' : ''}</button></div>`;
+      <input class="num" inputmode="decimal" data-set="${esc(st.id)}" data-f="load" value="${esc(st.load)}" placeholder="${esc(hint.load ?? '—')}"><span class="u">${ex.bodyweight ? '+' : ''}${unit()}</span>
+      <span class="x">×</span><input class="num" inputmode="numeric" data-set="${esc(st.id)}" data-f="reps" value="${esc(st.reps)}" placeholder="${esc(hint.reps)}">
+      <button class="check" data-act="check" data-id="${esc(st.id)}" aria-label="Log warm-up set">${st.done ? '✓' : ''}</button></div>`;
   }).join('');
 
   const rows = sets.map((st, i) => {
@@ -1388,19 +1407,19 @@ function viewBlock(s, b, credit, idea = null) {
     const other = st.exerciseId !== ex.id ? `<span class="meta">${esc(sx.name)}</span>` : '';
     let inputs = '';
     if (sx.metric === 'load_reps') {
-      inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="load" value="${esc(st.load)}" placeholder="—"><span class="u">${sx.bodyweight ? '+' : ''}${unit()}</span>
-        <span class="x">×</span><input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}">`;
+      inputs = `<input class="num" inputmode="decimal" data-set="${esc(st.id)}" data-f="load" value="${esc(st.load)}" placeholder="—"><span class="u">${sx.bodyweight ? '+' : ''}${unit()}</span>
+        <span class="x">×</span><input class="num" inputmode="numeric" data-set="${esc(st.id)}" data-f="reps" value="${esc(st.reps)}">`;
     } else if (sx.metric === 'reps') {
-      inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">${esc(sx.repUnit ?? 'reps')}</span>`;
+      inputs = `<input class="num" inputmode="numeric" data-set="${esc(st.id)}" data-f="reps" value="${esc(st.reps)}"><span class="u">${esc(sx.repUnit ?? 'reps')}</span>`;
     } else if (sx.metric === 'time') {
-      inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>${st.done ? '' : goBtn(`data-act="workStart" data-id="${st.id}"`, state.timer?.target?.set === st.id)}`;
+      inputs = `<input class="num" inputmode="numeric" data-set="${esc(st.id)}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>${st.done ? '' : goBtn(`data-act="workStart" data-id="${esc(st.id)}"`, state.timer?.target?.set === st.id)}`;
     } else if (sx.metric === 'distance') {
-      inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
+      inputs = `<input class="num" inputmode="decimal" data-set="${esc(st.id)}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
     }
     // Jumps: an optional height or distance, when you measure. The best is a record, like a 1RM.
-    if (b.tier === 'JUMP' || L.isJump(sx)) inputs += `<input class="num jumpin" inputmode="decimal" data-set="${st.id}" data-f="jump" value="${esc(st.jump)}" placeholder="—" aria-label="${jumpWord(sx)} (optional)"><span class="u">${B.jumpUnit(state)} ${jumpWord(sx) === 'Distance' ? '→' : '↑'}</span>`;
+    if (b.tier === 'JUMP' || L.isJump(sx)) inputs += `<input class="num jumpin" inputmode="decimal" data-set="${esc(st.id)}" data-f="jump" value="${esc(st.jump)}" placeholder="—" aria-label="${esc(jumpWord(sx))} (optional)"><span class="u">${B.jumpUnit(state)} ${jumpWord(sx) === 'Distance' ? '→' : '↑'}</span>`;
     return `<div class="set ${st.done ? 'done' : ''} ${st.amrap ? 'amrap' : ''}"><span class="n">${i + 1}</span>${inputs}${st.amrap ? '<span class="amraptag">AMRAP</span>' : ''}${st.done && st.pr ? `<span class="prtag" title="${esc(st.prText ?? 'Personal record')}" aria-label="${esc(st.prText ?? 'Personal record')}">🏆</span>` : ''}${other}
-      <button class="check" data-act="check" data-id="${st.id}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
+      <button class="check" data-act="check" data-id="${esc(st.id)}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
   }).join('');
 
   const vid = videoUrl(ex);
@@ -1410,31 +1429,31 @@ function viewBlock(s, b, credit, idea = null) {
   const others = group.filter(x => x !== b).map(x => esc(exOf(x.exerciseId)?.name)).join(' and ');
   const what = `${group.length > 2 ? 'Giant set' : 'Superset'} with ${others}`;
   const pairHead = main ? `<div class="sslabel">↔ ${what}
-    <button class="link" data-act="pairUnlink" data-b="${b.id}">Unlink</button></div>` : '';
+    <button class="link" data-act="pairUnlink" data-b="${esc(b.id)}">Unlink</button></div>` : '';
   const ideaRow = idea ? `<div class="pairidea"><span>↔ <b>${esc(idea.exercise.name)}</b>${idea.tier === 'COND' ? ` <span class="meta">${condPairCal(b)} cal each rest</span>` : ''}</span>
-    <span class="brow"><button class="small" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}">+ Add</button>
-    <button class="small quiet" data-act="pairOpen" data-b="${b.id}">Other</button>
-    <button class="small quiet" data-act="pairNo" data-b="${b.id}" aria-label="No thanks">✕</button></span></div>` : '';
-  return `<section class="block ${main ? 'paired' : ''} ${s.blocks.some(x => x.pairOf === b.id) ? 'haspair' : ''}">
+    <span class="brow"><button class="small" data-act="pairAdd" data-b="${esc(b.id)}" data-ex="${esc(idea.exercise.id)}">+ Add</button>
+    <button class="small quiet" data-act="pairOpen" data-b="${esc(b.id)}">Other</button>
+    <button class="small quiet" data-act="pairNo" data-b="${esc(b.id)}" aria-label="No thanks">✕</button></span></div>` : '';
+  return `<section class="block ${main ? 'paired' : ''} ${esc(s.blocks.some(x => x.pairOf === b.id) ? 'haspair' : '')}">
     ${pairHead}
-    <div class="bhead"><button class="tier ${b.tier}" data-act="tierEdit" data-b="${b.id}" aria-label="Change tier">${b.tier} ▾</button>
-      <button class="chip" data-act="swapEx" data-b="${b.id}">${esc(ex.name)} ▾</button>
-      <button class="chip" data-act="swapScheme" data-b="${b.id}">${esc(sc.name)} · ${b.pairOf ? '+' : ''}${round(L.setsMinutes(state, b, s.blocks))}m ▾</button>
-      <button class="icon bremove" data-act="removeBlock" data-b="${b.id}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
+    <div class="bhead"><button class="tier ${esc(b.tier)}" data-act="tierEdit" data-b="${esc(b.id)}" aria-label="Change tier">${esc(b.tier)} ▾</button>
+      <button class="chip" data-act="swapEx" data-b="${esc(b.id)}">${esc(ex.name)} ▾</button>
+      <button class="chip" data-act="swapScheme" data-b="${esc(b.id)}">${esc(sc.name)} · ${b.pairOf ? '+' : ''}${round(L.setsMinutes(state, b, s.blocks))}m ▾</button>
+      <button class="icon bremove" data-act="removeBlock" data-b="${esc(b.id)}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
     <div class="meta">${info.join(' · ')} ${restBtn}</div>
     ${progLine}${dose}
     <div class="sets">${warmRows}${rows}</div>
     <div class="brow">
-      <button class="small" data-act="addSet" data-b="${b.id}">+ set</button>
-      <button class="small" data-act="removeSet" data-b="${b.id}">− set</button>
-      ${inPair(s, b) ? '' : `<button class="small" data-act="pairOpen" data-b="${b.id}">↔ Superset</button>`}
-      <button class="small quiet ${more ? 'on' : ''}" data-act="bMore" data-b="${b.id}" aria-expanded="${more}" aria-label="More for ${esc(ex.name)}">⋯</button>
+      <button class="small" data-act="addSet" data-b="${esc(b.id)}">+ set</button>
+      <button class="small" data-act="removeSet" data-b="${esc(b.id)}">− set</button>
+      ${inPair(s, b) ? '' : `<button class="small" data-act="pairOpen" data-b="${esc(b.id)}">↔ Superset</button>`}
+      <button class="small quiet ${more ? 'on' : ''}" data-act="bMore" data-b="${esc(b.id)}" aria-expanded="${esc(more)}" aria-label="More for ${esc(ex.name)}">⋯</button>
     </div>
     <div class="brow bmorerow" ${more ? '' : 'hidden'}>
-      ${canWarm(b, ex) ? `<button class="small" data-act="addWarm" data-b="${b.id}">+ warm-up</button>` : ''}
-      ${canAmrap(b, ex) ? `<button class="small ${b.amrap ? 'on' : ''}" data-act="amrapToggle" data-b="${b.id}" aria-pressed="${!!b.amrap}">AMRAP last</button>` : ''}
-      <button class="small" data-act="timerStart" data-b="${b.id}">⏱ Rest now</button>
-      <button class="small" data-act="exHist" data-id="${ex.id}">History</button>
+      ${canWarm(b, ex) ? `<button class="small" data-act="addWarm" data-b="${esc(b.id)}">+ warm-up</button>` : ''}
+      ${canAmrap(b, ex) ? `<button class="small ${b.amrap ? 'on' : ''}" data-act="amrapToggle" data-b="${esc(b.id)}" aria-pressed="${esc(!!b.amrap)}">AMRAP last</button>` : ''}
+      <button class="small" data-act="timerStart" data-b="${esc(b.id)}">⏱ Rest now</button>
+      <button class="small" data-act="exHist" data-id="${esc(ex.id)}">History</button>
       ${vid ? `<a class="small" href="${esc(vid)}" target="_blank" rel="noopener">▶ Video</a>` : ''}
       ${ex.cues ? `<p class="meta cuesline">${esc(ex.cues)}</p>` : ''}
     </div>
@@ -1446,29 +1465,29 @@ function viewMobItem(item) {
   const ex = itemEx(item);
   if (!ex) return '';
   const t = ex.track, last = M.lastFor(state, ex.id, item.id);
-  const input = (st, f, mode, ph = '—') => `<input class="num${f === 'extra' ? ' wide' : ''}" inputmode="${mode}" data-mset="${item.id}|${st.id}" data-f="${f}" value="${esc(st[f])}" placeholder="${esc(ph)}">`;
+  const input = (st, f, mode, ph = '—') => `<input class="num${esc(f === 'extra' ? ' wide' : '')}" inputmode="${esc(mode)}" data-mset="${esc(item.id)}|${esc(st.id)}" data-f="${esc(f)}" value="${esc(st[f])}" placeholder="${esc(ph)}">`;
   const rows = item.sets.map((st, i) => {
     let h = '';
     if (t.load) h += `${input(st, 'load', 'decimal')}<span class="u">${unit()}</span>`;
     if (t.reps) h += `${input(st, 'reps', 'numeric')}<span class="u">reps</span>`;
     // A timer only for moves dosed as a hold (couch stretch), not reps with a pause at the top (cobra).
-    if (t.hold) h += `${input(st, 'hold', 'numeric')}<span class="u">s</span>${st.done || !ex.hold ? '' : goBtn(`data-act="mworkStart" data-i="${item.id}" data-s="${st.id}"`, state.timer?.target?.mset === st.id)}`;
+    if (t.hold) h += `${input(st, 'hold', 'numeric')}<span class="u">s</span>${st.done || !ex.hold ? '' : goBtn(`data-act="mworkStart" data-i="${esc(item.id)}" data-s="${esc(st.id)}"`, state.timer?.target?.mset === st.id)}`;
     if (t.extra) h += input(st, 'extra', 'text', t.extra);
     return `<div class="set ${st.done ? 'done' : ''}"><span class="n">${i + 1}</span>${h}
-      <button class="check" data-act="mcheck" data-i="${item.id}" data-s="${st.id}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
+      <button class="check" data-act="mcheck" data-i="${esc(item.id)}" data-s="${esc(st.id)}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
   }).join('');
   const vid = M.videoSearch(ex.video);
   const day = x => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return `<section class="block mob">
     <div class="bhead"><span class="tier MOB">${item.def ? 'JUMP' : 'MOB'}</span><span class="mobname">${esc(ex.name)}</span>
-      <button class="icon bremove" data-act="mRemove" data-i="${item.id}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
+      <button class="icon bremove" data-act="mRemove" data-i="${esc(item.id)}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
     <div class="meta">${esc([M.doseText(ex), `rest ${clock(ex.restSec || 0)}`].join(' · '))}</div>
     ${last ? `<div class="dose">Last (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
     <div class="sets">${rows}</div>
-    <input class="mobnote" data-mnote="${item.id}" value="${esc(item.note)}" placeholder="Notes">
+    <input class="mobnote" data-mnote="${esc(item.id)}" value="${esc(item.note)}" placeholder="Notes">
     <div class="brow">
-      <button class="small" data-act="mAddSet" data-i="${item.id}">+ set</button>
-      <button class="small" data-act="mRemoveSet" data-i="${item.id}">− set</button>
+      <button class="small" data-act="mAddSet" data-i="${esc(item.id)}">+ set</button>
+      <button class="small" data-act="mRemoveSet" data-i="${esc(item.id)}">− set</button>
       ${vid ? `<a class="small" href="${esc(vid)}" target="_blank" rel="noopener">▶ Video</a>` : ''}
     </div>
     ${ex.cues || ex.notes ? `<details class="cues"><summary>Cues${ex.notes ? ' and history' : ''}</summary>${ex.cues ? `<p>${esc(ex.cues)}</p>` : ''}${ex.notes ? `<p class="meta">${esc(ex.notes)}</p>` : ''}</details>` : ''}
@@ -1486,8 +1505,8 @@ function viewMobSession(m, workoutOpen) {
     <div class="actions"><button data-act="mobDiscard">Discard</button><button class="primary" data-act="mobFinish">Finish</button></div>`;
 }
 
-const libModeSeg = () => `<div class="seg libmode"><button class="${ui.libMode !== 'mobility' ? 'on' : ''}" data-act="libMode" data-v="strength">Strength</button>
-  <button class="${ui.libMode === 'mobility' ? 'on' : ''}" data-act="libMode" data-v="mobility">Mobility</button></div>`;
+const libModeSeg = () => `<div class="seg libmode"><button class="${esc(ui.libMode !== 'mobility' ? 'on' : '')}" data-act="libMode" data-v="strength">Strength</button>
+  <button class="${esc(ui.libMode === 'mobility' ? 'on' : '')}" data-act="libMode" data-v="mobility">Mobility</button></div>`;
 
 function viewMobLibrary() {
   const q = ui.libQuery.trim().toLowerCase(), pf = ui.mobPart;
@@ -1496,8 +1515,8 @@ function viewMobLibrary() {
     .sort((a, b) => a.name.localeCompare(b.name));
   return `<header class="top"><h1>Library</h1><button class="primary" data-act="mobExNew">+ Mobility</button></header>${libModeSeg()}
     <input class="search" id="libq" placeholder="Search mobility" value="${esc(ui.libQuery)}" data-libq>
-    <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${pf === p ? 'on' : ''}" data-act="mobPartFilter" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-    <div class="card">${list.map(e => `<div class="exrow"><button class="name" data-act="mobExEdit" data-id="${e.id}">${esc(e.name)}<span class="meta">${esc([M.doseText(e),
+    <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${esc(pf === p ? 'on' : '')}" data-act="mobPartFilter" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+    <div class="card">${list.map(e => `<div class="exrow"><button class="name" data-act="mobExEdit" data-id="${esc(e.id)}">${esc(e.name)}<span class="meta">${esc([M.doseText(e),
       last.has(e.id) ? fmtAgo(last.get(e.id)) : '', e.archived ? 'archived' : ''].filter(Boolean).join(' · '))}</span></button></div>`).join('') || '<p class="muted">No matches.</p>'}</div>`;
 }
 
@@ -1507,9 +1526,9 @@ function viewMobRoutine(r) {
     <div class="card">${r.items.map((id, i) => {
       const e = mobEx(id);
       return `<div class="exrow"><span class="name">${esc(e?.name ?? '?')}<span class="meta">${e ? esc(M.doseText(e)) : ''}</span></span>
-        <button class="icon" data-act="mobRoutineMove" data-i="${i}" data-dir="-1" aria-label="Move up">↑</button>
-        <button class="icon" data-act="mobRoutineMove" data-i="${i}" data-dir="1" aria-label="Move down">↓</button>
-        <button class="icon" data-act="mobRoutineDel" data-i="${i}" aria-label="Remove">✕</button></div>`;
+        <button class="icon" data-act="mobRoutineMove" data-i="${esc(i)}" data-dir="-1" aria-label="Move up">↑</button>
+        <button class="icon" data-act="mobRoutineMove" data-i="${esc(i)}" data-dir="1" aria-label="Move down">↓</button>
+        <button class="icon" data-act="mobRoutineDel" data-i="${esc(i)}" aria-label="Remove">✕</button></div>`;
     }).join('') || '<p class="muted">No exercises yet.</p>'}</div>
     <button data-act="mobPick" data-mode="routine">+ Add exercises</button>
     <div class="actions">${r.id ? '<button class="danger" data-act="mobRoutineDelete">Delete</button>' : ''}
@@ -1521,8 +1540,8 @@ function viewMobRoutine(r) {
 const OB_TITLES = { welcome: 'Welcome', you: 'About you', where: 'Where you train', week: 'Your week', heavy: 'Heavy lifts (T1)',
   support: 'Support work (T2)', pump: 'Accessories (T3)', maxes: '1-rep maxes', review: 'Your weekly goals' };
 
-const obStepper = (kind, id, n) => `<div class="stepper small"><button data-act="obQuota" data-k="${kind}" data-id="${id}" data-d="-1" aria-label="Fewer">−</button><span>${n}</span><button data-act="obQuota" data-k="${kind}" data-id="${id}" data-d="1" aria-label="More">+</button></div>`;
-const obChip = (kind, id, label, on) => `<button class="chip ${on ? 'on' : ''}" data-act="obToggle" data-k="${kind}" data-id="${id}">${esc(label)}</button>`;
+const obStepper = (kind, id, n) => `<div class="stepper small"><button data-act="obQuota" data-k="${esc(kind)}" data-id="${esc(id)}" data-d="-1" aria-label="Fewer">−</button><span>${n}</span><button data-act="obQuota" data-k="${esc(kind)}" data-id="${esc(id)}" data-d="1" aria-label="More">+</button></div>`;
+const obChip = (kind, id, label, on) => `<button class="chip ${on ? 'on' : ''}" data-act="obToggle" data-k="${esc(kind)}" data-id="${esc(id)}">${esc(label)}</button>`;
 // The picks of one kind with times a week for each.
 const obPicked = (kind, picks, nameOf) => kind === 'pump' && L.t3AsAreas(state) ? '' : Object.keys(picks).length
   ? `<div class="card flush">${Object.entries(picks).map(([id, n]) => `<div class="frow"><span class="grow"><span class="name">${esc(nameOf(id))}</span><span class="meta">times a week</span></span>${obStepper(kind, id, n)}</div>`).join('')}</div>`
@@ -1540,15 +1559,15 @@ function viewOnboard(d) {
       <div class="actions"><button data-act="obImport">Import from FitNotes</button><button data-act="obSkip">${state.settings.onboarded ? 'Cancel' : 'Skip'}</button></div>`;
   } else if (step === 'you') {
     body = `<div class="menu">
-        ${frow('Units', `<div class="seg">${['lb', 'kg'].map(u => `<button class="${d.unit === u ? 'on' : ''}" data-act="obSet" data-k="unit" data-v="${u}">${u}</button>`).join('')}</div>`)}
+        ${frow('Units', `<div class="seg">${['lb', 'kg'].map(u => `<button class="${esc(d.unit === u ? 'on' : '')}" data-act="obSet" data-k="unit" data-v="${esc(u)}">${u}</button>`).join('')}</div>`)}
         ${frow(`Bodyweight (${d.unit})`, `<input class="num" inputmode="decimal" data-ob="bodyweight" value="${esc(d.bodyweight ?? '')}">`)}
       </div>`;
   } else if (step === 'where') {
     body = `<p class="meta">Name each place and tap its gear.</p>` +
       d.locations.map((l, i) => `<div class="card">
-        <input class="titleinput" data-ob="loc.${i}.name" value="${esc(l.name)}" aria-label="Location name">
-        <div class="chips">${state.equipment.map(eq => `<button class="chip ${l.equipment.includes(eq) ? 'on' : ''}" data-act="obEq" data-i="${i}" data-eq="${esc(eq)}">${esc(eq)}</button>`).join('')}</div>
-        ${d.locations.length > 1 ? `<button class="link" data-act="obLocDel" data-i="${i}">Remove this location</button>` : ''}</div>`).join('') +
+        <input class="titleinput" data-ob="loc.${esc(i)}.name" value="${esc(l.name)}" aria-label="Location name">
+        <div class="chips">${state.equipment.map(eq => `<button class="chip ${esc(l.equipment.includes(eq) ? 'on' : '')}" data-act="obEq" data-i="${esc(i)}" data-eq="${esc(eq)}">${esc(eq)}</button>`).join('')}</div>
+        ${d.locations.length > 1 ? `<button class="link" data-act="obLocDel" data-i="${esc(i)}">Remove this location</button>` : ''}</div>`).join('') +
       `<button class="addblock" data-act="obLocAdd">+ Add location</button>`;
   } else if (step === 'week') {
     body = `<div class="menu">
@@ -1574,13 +1593,13 @@ function viewOnboard(d) {
     body = ids.length
       ? `<p class="meta">Optional, in ${d.unit}. Blank: learned from your sets.</p>
         <div class="menu">${ids.map(id => frow(`${esc(exName(id))}${exOf(id)?.bodyweight ? ' <span class="hint">added load</span>' : ''}`,
-          `<input class="num" inputmode="decimal" data-ob="max.${id}" value="${esc(d.maxes[id] ?? '')}" placeholder="1RM">`)).join('')}</div>`
+          `<input class="num" inputmode="decimal" data-ob="max.${esc(id)}" value="${esc(d.maxes[id] ?? '')}" placeholder="1RM">`)).join('')}</div>`
       : `<p class="muted">No lifts picked.</p>`;
   } else if (step === 'review') {
     const slots = O.buildSlots(state, d);
     const b = O.draftBudget(state, d);
     const label = sl => sl.exerciseId ? exName(sl.exerciseId) : famName(sl.familyId);
-    body = `<div class="card flush">${slots.map(sl => `<div class="slotrow"><span class="tier ${sl.tier}">${sl.tier}</span><span class="grow"><span class="name">${esc(label(sl))}</span></span><b>${sl.quota}/wk</b></div>`).join('') || '<p class="muted pad">No goals picked.</p>'}</div>
+    body = `<div class="card flush">${slots.map(sl => `<div class="slotrow"><span class="tier ${esc(sl.tier)}">${esc(sl.tier)}</span><span class="grow"><span class="name">${esc(label(sl))}</span></span><b>${sl.quota}/wk</b></div>`).join('') || '<p class="muted pad">No goals picked.</p>'}</div>
       <div class="card"><p>${b.room >= 0
         ? `<b>${round(b.used)}</b> of your <b>${round(b.total)}</b> minutes a week. Room for ${b.addT2} more T2 or ${b.addT3} more T3.`
         : `<b>${round(b.used)}</b> minutes, <b>${round(-b.room)}</b> over your ${round(b.total)}. Lower a few, accessories first.`}</p></div>
@@ -1598,15 +1617,15 @@ function weekBudgetCard() {
   const src = k => b.fromHistory[k] ? 'last 4 weeks' : state.settings.week?.[k] ? '' : 'a guess';
   const range = ([lo, hi]) => lo === hi ? `${lo}` : `${lo}–${hi}`;
   const areas = L.t3AsAreas(state);
-  const rows = L.TIERS.filter(t => L.TIER[t].core || b.count[t]).map(t => `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">${L.TIER[t].label}</span>
+  const rows = L.TIERS.filter(t => L.TIER[t].core || b.count[t]).map(t => `<div class="frow"><span class="tier ${esc(t)}">${t}</span><span class="grow"><span class="name">${L.TIER[t].label}</span>
       <span class="meta">${t === 'T3' && areas ? 'areas · fill spare time' : `${L.takesTime(t) ? `~${round(b.cost[t])} min each` : 'in the warm-up'}${b.guide[t] ? ` · guide ${range(b.guide[t])}` : ''}`}</span></span>
       <b>${t === 'T3' && areas ? `${b.areas} area${b.areas === 1 ? '' : 's'}` : `${b.count[t]}/wk`}</b></div>`).join('');
   const verdict = b.room >= 0 ? (areas ? `${round(b.room)} min a week left for T3 areas and extras.` : `Room for ${b.addT2} more T2 or ${b.addT3} more T3 a week.`)
     : `${round(-b.room)} min over: lower a quota or two${areas ? '' : ', accessories first'}.`;
   const hint = k => (src(k) ? `<span class="meta">${src(k)}</span>` : '');
   return `<details class="card budget"><summary><b>Week budget</b> <span class="meta">${round(b.used)} of ${round(b.total)} min</span></summary>
-    <div class="frow"><span class="grow"><span class="name">Workouts a week</span>${hint('workouts')}</span>${numIn('settings.week.workouts', state.settings.week?.workouts ?? '', `placeholder="${b.workouts}" data-rerender`)}</div>
-    <div class="frow"><span class="grow"><span class="name">Minutes each</span>${hint('minutes')}</span>${numIn('settings.week.minutes', state.settings.week?.minutes ?? '', `placeholder="${b.minutes}" data-rerender`)}</div>
+    <div class="frow"><span class="grow"><span class="name">Workouts a week</span>${hint('workouts')}</span>${numIn('settings.week.workouts', state.settings.week?.workouts ?? '', `placeholder="${esc(b.workouts)}" data-rerender`)}</div>
+    <div class="frow"><span class="grow"><span class="name">Minutes each</span>${hint('minutes')}</span>${numIn('settings.week.minutes', state.settings.week?.minutes ?? '', `placeholder="${esc(b.minutes)}" data-rerender`)}</div>
     ${rows}
     <p class="meta">${verdict}</p></details>`;
 }
@@ -1632,13 +1651,13 @@ function viewWeek() {
   const goalRow = r => {
     const area = L.isArea(state, r.slot);
     const pips = area ? (r.exposures ? `<span class="meta">${r.exposures}×</span>` : '')
-      : Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${i < r.filled ? 'on' : ''}"></span>`).join('');
+      : Array.from({ length: r.slot.quota }, (_, i) => `<span class="pip ${esc(i < r.filled ? 'on' : '')}"></span>`).join('');
     const unitOf = [L.repUnit(r.slot.tier), L.setUnit(r.slot.tier)];
     const days = [...r.days].map(([k, a]) => `${dayName(k)} ${a.reps ? `${a.reps} ${unitOf[0]}` : `${a.sets} ${unitOf[1]}`}${a.met ? ' ✓' : ''}`).join(' · ');
     const ex = exOf(r.slot.exerciseId);
     const name = ex?.name ?? famOf(r.slot.familyId)?.name;
     const sub = [r.slot.quota ? '' : 'paused', days].filter(Boolean).join(' · ');
-    return `<button class="slotrow" data-act="goalEdit" data-id="${r.slot.id}"><span class="tier ${r.slot.tier}">${r.slot.tier}</span>
+    return `<button class="slotrow" data-act="goalEdit" data-id="${esc(r.slot.id)}"><span class="tier ${esc(r.slot.tier)}">${esc(r.slot.tier)}</span>
       <span class="grow"><span class="name">${esc(name)}</span>${sub ? `<span class="meta">${esc(sub)}</span>` : ''}</span>
       <span class="pips">${pips}</span></button>`;
   };
@@ -1647,7 +1666,7 @@ function viewWeek() {
   if (ownedRows.length) {
     h += `<details class="owned"><summary>${ownedRows.length} paused for ${esc(state.block?.group ?? 'the program')}</summary><div class="card flush">${ownedRows.map(goalRow).join('')}</div></details>`;
   }
-  h += `<div class="brow pad"><button class="small" data-act="reviewOpen" data-w="${c.start}">Review this week</button></div>`;
+  h += `<div class="brow pad"><button class="small" data-act="reviewOpen" data-w="${esc(c.start)}">Review this week</button></div>`;
   h += weekBudgetCard();
 
   const sets = state.sets.filter(s => s.done && !s.warmup && s.loggedAt >= c.start && s.loggedAt < c.end).sort((a, b) => a.loggedAt - b.loggedAt);
@@ -1663,8 +1682,8 @@ function viewWeek() {
         const auto = L.autoSlotFor(state, s, blocksById);
         const autoLbl = auto ? slotLabel(L.byId(state.slots, auto)) : 'none';
         const val = s.countsManual ? (s.countsToward ?? 'none') : 'auto';
-        return `<div class="setlog"><div class="grow"><span class="tier ${s.tier}">${s.tier}</span> ${esc(ex?.name ?? '?')} <span class="meta">${esc(setAmount(ex, s))}</span></div>
-          <select data-counts="${s.id}" aria-label="Counts toward">${opts([['auto', `Auto: ${autoLbl}`], ...state.slots.map(sl => [sl.id, slotLabel(sl)]), ['none', 'Nothing']], val)}</select></div>`;
+        return `<div class="setlog"><div class="grow"><span class="tier ${esc(s.tier)}">${esc(s.tier)}</span> ${esc(ex?.name ?? '?')} <span class="meta">${esc(setAmount(ex, s))}</span></div>
+          <select data-counts="${esc(s.id)}" aria-label="Counts toward">${opts([['auto', `Auto: ${autoLbl}`], ...state.slots.map(sl => [sl.id, slotLabel(sl)]), ['none', 'Nothing']], val)}</select></div>`;
       }).join('')}`;
     }
     h += `</details>`;
@@ -1675,7 +1694,7 @@ function viewWeek() {
     const p = P.progress(state, d.id);
     if (!p) continue;
     const n = P.programSessions(state, d.id).filter(m => m.startedAt >= c.start && m.startedAt < c.end).length;
-    h += `<button class="card row" data-act="progOpen" data-id="${d.id}"><span><b>${esc(d.name)}</b>
+    h += `<button class="card row" data-act="progOpen" data-id="${esc(d.id)}"><span><b>${esc(d.name)}</b>
       <span class="meta">${n}/${d.days} days · ${p.finished ? 'finished' : `next: week ${p.week}, day ${p.day}`}</span></span><span>›</span></button>`;
   }
   return h;
@@ -1880,37 +1899,37 @@ function viewHistoryEdit(hs) {
   const setRow = (g, st, i) => {
     const sx = exOf(st.exerciseId) || g.ex;
     let inputs = '';
-    if (sx?.metric === 'load_reps') inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="load" value="${esc(st.load)}" placeholder="—"><span class="u">${sx.bodyweight ? '+' : ''}${unit()}</span>
-      <span class="x">×</span><input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}">`;
-    else if (sx?.metric === 'time') inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>`;
-    else if (sx?.metric === 'distance') inputs = `<input class="num" inputmode="decimal" data-set="${st.id}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
-    else inputs = `<input class="num" inputmode="numeric" data-set="${st.id}" data-f="reps" value="${esc(st.reps)}"><span class="u">${esc(sx?.repUnit ?? 'reps')}</span>`;
+    if (sx?.metric === 'load_reps') inputs = `<input class="num" inputmode="decimal" data-set="${esc(st.id)}" data-f="load" value="${esc(st.load)}" placeholder="—"><span class="u">${sx.bodyweight ? '+' : ''}${unit()}</span>
+      <span class="x">×</span><input class="num" inputmode="numeric" data-set="${esc(st.id)}" data-f="reps" value="${esc(st.reps)}">`;
+    else if (sx?.metric === 'time') inputs = `<input class="num" inputmode="numeric" data-set="${esc(st.id)}" data-f="time" value="${esc(st.time)}"><span class="u">sec</span>`;
+    else if (sx?.metric === 'distance') inputs = `<input class="num" inputmode="decimal" data-set="${esc(st.id)}" data-f="distance" value="${esc(st.distance)}"><span class="u">m</span>`;
+    else inputs = `<input class="num" inputmode="numeric" data-set="${esc(st.id)}" data-f="reps" value="${esc(st.reps)}"><span class="u">${esc(sx?.repUnit ?? 'reps')}</span>`;
     return `<div class="set ${st.warmup ? 'warm' : ''}"><span class="n" ${st.warmup ? 'title="Warm-up"' : ''}>${st.warmup ? 'W' : i + 1}</span>${inputs}
-      <button class="icon setdel" data-act="histDelSet" data-id="${st.id}" aria-label="Delete this set">✕</button></div>`;
+      <button class="icon setdel" data-act="histDelSet" data-id="${esc(st.id)}" aria-label="Delete this set">✕</button></div>`;
   };
   const groups = histGroups(s).map(g => {
     let n = 0;
     // Count it, as in a live workout: the exercise's block fills its goal that day whatever the sets or reps.
     const blk = s.blocks.find(x => x.id === g.sets[0]?.blockId && x.slotId && L.byId(state.slots, x.slotId));
-    const count = blk ? `<label class="countit"><input type="checkbox" data-countgoal="${blk.id}" data-hist="${s.id}" ${blk.countGoal ? 'checked' : ''}> Count it toward ${esc(slotLabel(L.byId(state.slots, blk.slotId)))}</label>` : '';
+    const count = blk ? `<label class="countit"><input type="checkbox" data-countgoal="${esc(blk.id)}" data-hist="${esc(s.id)}" ${blk.countGoal ? 'checked' : ''}> Count it toward ${esc(slotLabel(L.byId(state.slots, blk.slotId)))}</label>` : '';
     return `<section class="card histedit">
-      <div class="bhead"><select class="tierpick ${g.tier}" data-hgtier="${esc(g.key)}" aria-label="Tier">${L.TIERS.map(t => `<option value="${t}" ${t === g.tier ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <div class="bhead"><select class="tierpick ${esc(g.tier)}" data-hgtier="${esc(g.key)}" aria-label="Tier">${L.TIERS.map(t => `<option value="${esc(t)}" ${t === g.tier ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button class="chip" data-act="histSwap" data-g="${esc(g.key)}">${esc(g.ex?.name ?? '?')} ▾</button>
         <button class="icon bremove" data-act="histDelGroup" data-g="${esc(g.key)}" aria-label="Remove ${esc(g.ex?.name ?? 'exercise')} from this workout" title="Remove exercise">✕</button></div>
       <div class="sets">${g.sets.map(st => setRow(g, st, st.warmup ? 0 : n++)).join('')}</div>
       <div class="brow"><button class="small" data-act="histAddSet" data-g="${esc(g.key)}">+ set</button>${count}</div></section>`;
   }).join('');
   return `<header class="top sub"><button class="back" data-act="histEditDone">‹ History</button></header><h1 class="pagetitle">Edit workout</h1>
-    <div class="card"><div class="field"><label for="hist-date">Date</label><input id="hist-date" type="date" data-hdate max="${L.dayKey()}" value="${L.dayKey(when)}"></div>
+    <div class="card"><div class="field"><label for="hist-date">Date</label><input id="hist-date" type="date" data-hdate max="${esc(L.dayKey())}" value="${esc(L.dayKey(when))}"></div>
       <div class="field"><label for="hist-loc">Where</label><select id="hist-loc" data-hloc>${[['', '—'], ...state.locations.map(l => [l.id, l.name])].map(([v, t]) => `<option value="${esc(v)}" ${v === (s.locationId ?? '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
-      <div class="field"><label for="hist-dur">How long (min) <span class="hint">optional</span></label><input id="hist-dur" class="num" inputmode="numeric" data-hdur value="${esc(s.durationMin ?? '')}" placeholder="${loggedMinutes(s) ?? ''}">
+      <div class="field"><label for="hist-dur">How long (min) <span class="hint">optional</span></label><input id="hist-dur" class="num" inputmode="numeric" data-hdur value="${esc(s.durationMin ?? '')}" placeholder="${esc(loggedMinutes(s) ?? '')}">
 </div></div>
     ${groups || '<p class="muted">No exercises left in this workout.</p>'}
     <button class="addblock" data-act="histAddEx">+ Add exercise</button>
     <div class="actions"><button class="danger" data-act="histDeleteWorkout">Delete workout</button><button class="primary" data-act="histEditDone">Done</button></div>`;
 }
 
-const histTabs = mode => `<div class="seg histmode"><button class="${mode !== 'progress' ? 'on' : ''}" data-act="histMode" data-v="workouts">Workouts</button><button class="${mode === 'progress' ? 'on' : ''}" data-act="histMode" data-v="progress">Progress</button></div>`;
+const histTabs = mode => `<div class="seg histmode"><button class="${esc(mode !== 'progress' ? 'on' : '')}" data-act="histMode" data-v="workouts">Workouts</button><button class="${esc(mode === 'progress' ? 'on' : '')}" data-act="histMode" data-v="progress">Progress</button></div>`;
 
 function viewHistory(hs) {
   if (hs.edit) return viewHistoryEdit(hs);
@@ -1936,7 +1955,7 @@ function viewHistory(hs) {
       bits.push(progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
       if (m.status === 'open') bits.push('in progress');
     }
-    const lines = e.groups.map(g => `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(g.ex?.name ?? '?')}</span>
+    const lines = e.groups.map(g => `<div class="histex"><span class="tier ${esc(g.tier)}">${esc(g.tier)}</span><span class="grow"><span class="name">${esc(g.ex?.name ?? '?')}</span>
       <span class="meta">${esc(histSets(g))}${g.sets.some(x => x.pr) ? ` · <span class="prtag" title="${esc(g.sets.filter(x => x.pr).map(x => x.prText).join('; '))}">🏆</span> ${esc(g.sets.filter(x => x.pr).map(x => x.prText).at(-1) ?? 'PR')}` : ''}</span></span></div>`).join('')
       + e.mob.map(it => {
         const ex = itemEx(it);
@@ -1945,7 +1964,7 @@ function viewHistory(hs) {
       }).join('');
     const editable = s && s.status !== 'open' && s.status !== 'paused';
     return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span>
-      ${editable ? `<span class="brow">${s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${s.id}">Continue</button>` : ''}<button class="small" data-act="histEdit" data-id="${s.id}">Edit</button></span>` : ''}</div>${lines}</div>`;
+      ${editable ? `<span class="brow">${s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${esc(s.id)}">Continue</button>` : ''}<button class="small" data-act="histEdit" data-id="${esc(s.id)}">Edit</button></span>` : ''}</div>${lines}</div>`;
   };
   return `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
     ${histTabs(hs.mode)}
@@ -1974,7 +1993,7 @@ function chartCard(id, title, takeaway, chart, table, extra = '') {
   return `<div class="card chartcard"><h3>${esc(title)}</h3>${extra}${takeaway ? `<p class="meta">${takeaway}</p>` : ''}${body}</div>`;
 }
 
-const legend = keys => `<div class="legend">${keys.map(([k, name]) => `<span><i style="background:${CH.COLORS[k]}"></i>${esc(name)}</span>`).join('')}</div>`;
+const legend = keys => `<div class="legend">${keys.map(([k, name]) => `<span><i style="background:${esc(CH.COLORS[k])}"></i>${esc(name)}</span>`).join('')}</div>`;
 
 function viewProgress() {
   const pg = ui.prog ??= { range: '12w', lift: null };
@@ -1984,7 +2003,7 @@ function viewProgress() {
   chartHits.clear();
   let h = `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
     ${histTabs('progress')}
-    <div class="seg ranges">${PG.RANGES.map(([k, t]) => `<button class="${pg.range === k ? 'on' : ''}" data-act="progRange" data-v="${k}">${t}</button>`).join('')}</div>`;
+    <div class="seg ranges">${PG.RANGES.map(([k, t]) => `<button class="${esc(pg.range === k ? 'on' : '')}" data-act="progRange" data-v="${esc(k)}">${t}</button>`).join('')}</div>`;
 
   // Tiles: per-week averages in this range, against the same length of time before it.
   const now = PG.summary(state, from, to), was = pg.range === 'all' ? null : PG.summary(state, prev.from, prev.to);
@@ -2093,14 +2112,14 @@ function viewLibrary() {
     const members = all.filter(e => (ui.showArchived || !e.archived) && (!q || famMatch || e.name.toLowerCase().includes(q))
       && (!ui.libPart || L.bodyPart(state, e) === ui.libPart));
     if (!members.length && (q || ui.libPart || all.length)) continue; // nothing to show; truly empty families stay so you can add to them
-    h += `<div class="card"><h3 class="cathead">${esc(f.name)}<button class="icon" data-act="catEdit" data-id="${f.id}" aria-label="Edit ${esc(f.name)}">✎</button></h3>${members.map(e => {
+    h += `<div class="card"><h3 class="cathead">${esc(f.name)}<button class="icon" data-act="catEdit" data-id="${esc(f.id)}" aria-label="Edit ${esc(f.name)}">✎</button></h3>${members.map(e => {
       const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
       const meta = [max ? `e1RM ${round(max)}` : '', e.equipment.join(', '), e.archived ? 'archived' : ''].filter(Boolean).join(' · ');
-      return `<div class="exrow"><button class="name" data-act="libEdit" data-id="${e.id}">${f.defaultExerciseId === e.id ? '★ ' : ''}${esc(e.name)}${meta ? `<span class="meta">${esc(meta)}</span>` : ''}</button>
-        <button class="icon" data-act="libMove" data-id="${e.id}" data-dir="-1" aria-label="Move up">↑</button>
-        <button class="icon" data-act="libMove" data-id="${e.id}" data-dir="1" aria-label="Move down">↓</button></div>`;
+      return `<div class="exrow"><button class="name" data-act="libEdit" data-id="${esc(e.id)}">${f.defaultExerciseId === e.id ? '★ ' : ''}${esc(e.name)}${meta ? `<span class="meta">${esc(meta)}</span>` : ''}</button>
+        <button class="icon" data-act="libMove" data-id="${esc(e.id)}" data-dir="-1" aria-label="Move up">↑</button>
+        <button class="icon" data-act="libMove" data-id="${esc(e.id)}" data-dir="1" aria-label="Move down">↓</button></div>`;
     }).join('') || '<p class="muted">Empty category.</p>'}
-    <button class="small" data-act="quickAdd" data-fam="${f.id}">+ Add</button></div>`;
+    <button class="small" data-act="quickAdd" data-fam="${esc(f.id)}">+ Add</button></div>`;
   }
   return h;
 }
@@ -2108,7 +2127,7 @@ function viewLibrary() {
 function exerciseOptions(sel) {
   return [...state.families].sort((a, b) => a.name.localeCompare(b.name)).map(f =>
     `<optgroup label="${esc(f.name)}">${L.familyMembers(state, f.id).filter(e => !e.archived || e.id === sel).map(e =>
-      `<option value="${e.id}" ${e.id === sel ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup>`).join('');
+      `<option value="${esc(e.id)}" ${e.id === sel ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</optgroup>`).join('');
 }
 
 function viewPlans() {
@@ -2120,11 +2139,11 @@ function viewPlans() {
     return `<header class="top"><h1>${p.id ? 'Edit plan' : 'New plan'}</h1></header>
       <div class="field"><label>Name</label><input data-pbind="name" value="${esc(p.name)}" placeholder="e.g. Office pump 20"></div>
       ${p.items.map((it, i) => `<div class="card planitem">
-        <select data-pbind="items.${i}.exerciseId">${exerciseOptions(it.exerciseId)}</select>
+        <select data-pbind="items.${esc(i)}.exerciseId">${exerciseOptions(it.exerciseId)}</select>
         <div class="row2">
-          <select data-pbind="items.${i}.tier">${opts(L.TIERS.map(t => [t, t]), it.tier)}</select>
-          <select data-pbind="items.${i}.schemeId">${opts(L.schemeOptions(state, it.tier).map(s => [s.id, `${s.name} · ${s.minutes}m`]), it.schemeId)}</select>
-          <button class="icon" data-act="planDelItem" data-i="${i}" aria-label="Remove">✕</button></div></div>`).join('')}
+          <select data-pbind="items.${esc(i)}.tier">${opts(L.TIERS.map(t => [t, t]), it.tier)}</select>
+          <select data-pbind="items.${esc(i)}.schemeId">${opts(L.schemeOptions(state, it.tier).map(s => [s.id, `${s.name} · ${s.minutes}m`]), it.schemeId)}</select>
+          <button class="icon" data-act="planDelItem" data-i="${esc(i)}" aria-label="Remove">✕</button></div></div>`).join('')}
       <button data-act="planAddItem">+ Add exercise</button>
       <div class="actions">${p.id ? '<button class="danger" data-act="planDelete">Delete</button>' : ''}
         <button data-act="planCancel">Cancel</button><button class="primary" data-act="planSave">Save plan</button></div>`;
@@ -2134,13 +2153,13 @@ function viewPlans() {
   // Mobility routines: tap to start one, ✎ to edit it.
   const lastRoutine = id => { const t = Math.max(0, ...state.mobility.sessions.filter(x => x.routineId === id && x.status === 'done').map(x => x.startedAt)); return t ? fmtAgo(t) : ''; };
   h += `<div class="sectionhead"><h3>Mobility</h3><button class="small" data-act="mobRoutineNew">+ Routine</button></div>
-    <div class="card flush">${state.mobility.routines.map(r => `<div class="exrow"><button class="name" data-act="mobStart" data-id="${r.id}">${esc(r.name)}<span class="meta">${[`${r.items.length} exercises`, lastRoutine(r.id)].filter(Boolean).join(' · ')}</span></button>
-      <button class="icon" data-act="mobRoutineEdit" data-id="${r.id}" aria-label="Edit ${esc(r.name)}">✎</button></div>`).join('')}
+    <div class="card flush">${state.mobility.routines.map(r => `<div class="exrow"><button class="name" data-act="mobStart" data-id="${esc(r.id)}">${esc(r.name)}<span class="meta">${[`${r.items.length} exercises`, lastRoutine(r.id)].filter(Boolean).join(' · ')}</span></button>
+      <button class="icon" data-act="mobRoutineEdit" data-id="${esc(r.id)}" aria-label="Edit ${esc(r.name)}">✎</button></div>`).join('')}
       <button class="row add" data-act="mobPick" data-mode="new">Pick body parts ›</button></div>`;
   const own = state.plans.filter(p => !p.group);
   const planItems = p => esc(p.items.map(it => `${it.tier} ${exOf(it.exerciseId)?.name ?? '?'} ${schOf(it.schemeId)?.name ?? ''}`).join(' · '));
   if (own.length) {
-    h += `<div class="sectionhead"><h3>Saved plans</h3></div>` + own.map(p => `<button class="card row" data-act="planEdit" data-id="${p.id}"><span><b>${esc(p.name)}</b>
+    h += `<div class="sectionhead"><h3>Saved plans</h3></div>` + own.map(p => `<button class="card row" data-act="planEdit" data-id="${esc(p.id)}"><span><b>${esc(p.name)}</b>
       <span class="meta">${planItems(p)}</span></span><span>›</span></button>`).join('');
   }
   // Plan groups (the THP-style jump plan): a heading, what it's about (folded), and each day with Start and Edit.
@@ -2149,7 +2168,7 @@ function viewPlans() {
     h += `<div class="sectionhead"><h3>${esc(g)}</h3></div>${about ? `<details class="plannote"><summary>About</summary><p>${esc(about)}</p></details>` : ''}${groupBlockRow(g)}`;
     h += state.plans.filter(p => p.group === g).map(p => `<div class="card plangroup"><b>${esc(p.name)}</b>
       <div class="meta">${planItems(p)}</div>${p.note ? `<details class="plannote"><summary>Notes</summary><p>${esc(p.note)}</p></details>` : ''}
-      <div class="brow"><button class="small primary" data-act="startPlan" data-id="${p.id}">Start</button><button class="small" data-act="planEdit" data-id="${p.id}">Edit</button></div></div>`).join('');
+      <div class="brow"><button class="small primary" data-act="startPlan" data-id="${esc(p.id)}">Start</button><button class="small" data-act="planEdit" data-id="${esc(p.id)}">Edit</button></div></div>`).join('');
   }
   return h;
 }
@@ -2201,14 +2220,14 @@ function viewSettingsMenu() {
       <span class="meta">${ui.swVersion ? `you have ${esc(String(ui.swVersion).replace(/^afp-/, ''))} · ` : ''}your data stays</span></span></button></div>`;
 }
 
-const menuRow = (k, t, sub) => `<button class="menurow" data-act="setPage" data-p="${k}"><span class="grow"><span class="name">${esc(t)}</span>
+const menuRow = (k, t, sub) => `<button class="menurow" data-act="setPage" data-p="${esc(k)}"><span class="grow"><span class="name">${esc(t)}</span>
   <span class="meta">${esc(sub)}</span></span><span class="chev">›</span></button>`;
 
 // One labelled setting per row: label (and hint) on the left, control on the right.
 const frow = (label, control, hint = '') => `<label class="frow"><span class="grow"><span class="name">${label}</span>${hint ? `<span class="meta">${hint}</span>` : ''}</span>${control}</label>`;
-const numIn = (path, val, extra = '') => `<input class="num" inputmode="decimal" data-bind="${path}" data-type="num" value="${esc(val)}" ${extra}>`;
-const pctIn = (path, val) => `<input class="num" inputmode="numeric" data-bind="${path}" data-type="pct" value="${val == null ? '' : round(val * 100)}">`;
-const switchIn = (path, on) => `<input type="checkbox" class="switch" data-bind="${path}" data-type="bool" ${on ? 'checked' : ''}>`;
+const numIn = (path, val, extra = '') => `<input class="num" inputmode="decimal" data-bind="${esc(path)}" data-type="num" value="${esc(val)}" ${extra}>`;
+const pctIn = (path, val) => `<input class="num" inputmode="numeric" data-bind="${esc(path)}" data-type="pct" value="${esc(val == null ? '' : round(val * 100))}">`;
+const switchIn = (path, on) => `<input type="checkbox" class="switch" data-bind="${esc(path)}" data-type="bool" ${on ? 'checked' : ''}>`;
 
 function settingsYou() {
   const st = state.settings;
@@ -2268,9 +2287,9 @@ function settingsTimer() {
 
 function settingsLocations() {
   return state.locations.map((l, i) => `<div class="card">
-      <input class="titleinput" data-bind="locations.${i}.name" value="${esc(l.name)}" aria-label="Location name">
-      <div class="chips">${state.equipment.map(eq => `<label class="chip ${l.equipment.includes(eq) ? 'on' : ''}"><input type="checkbox" data-loceq="${l.id}|${esc(eq)}" ${l.equipment.includes(eq) ? 'checked' : ''}>${esc(eq)}</label>`).join('')}
-        <input class="chipinput" data-eqnew="loc:${l.id}" placeholder="+ New" aria-label="Add equipment" enterkeyhint="done"></div>
+      <input class="titleinput" data-bind="locations.${esc(i)}.name" value="${esc(l.name)}" aria-label="Location name">
+      <div class="chips">${state.equipment.map(eq => `<label class="chip ${esc(l.equipment.includes(eq) ? 'on' : '')}"><input type="checkbox" data-loceq="${esc(l.id)}|${esc(eq)}" ${l.equipment.includes(eq) ? 'checked' : ''}>${esc(eq)}</label>`).join('')}
+        <input class="chipinput" data-eqnew="loc:${esc(l.id)}" placeholder="+ New" aria-label="Add equipment" enterkeyhint="done"></div>
     </div>`).join('') + `<button class="addblock" data-act="locAdd">+ Add location</button>`;
 }
 
@@ -2287,7 +2306,7 @@ function settingsMaxes() {
   groups.push(['Other lifts you do', recent.sort((a, b) => a.name.localeCompare(b.name))]);
   const row = e => `<label class="frow"><span class="grow"><span class="name">${esc(e.name)}${e.bodyweight ? ' <span class="hint">added load</span>' : ''}</span>
       <span class="meta">${esc(maxLine(e) || 'No max yet')}</span></span>
-      <input class="num" inputmode="decimal" data-max="${e.id}" value="${esc(e.testedMax?.load ?? '')}" placeholder="1RM"></label>`;
+      <input class="num" inputmode="decimal" data-max="${esc(e.id)}" value="${esc(e.testedMax?.load ?? '')}" placeholder="1RM"></label>`;
   return `<p class="meta pad">Tested 1RMs (${unit()}). Blank uses your sets.</p>` +
     groups.filter(([, list]) => list.length).map(([label, list]) => `<div class="label">${label}</div><div class="menu">${list.map(row).join('')}</div>`).join('');
 }
@@ -2305,7 +2324,7 @@ function settingsTiers() {
   return `<p class="meta pad">A session counts toward a goal once it reaches the minimum.</p>` +
     L.TIERS.map(t => {
       const c = state.tiers[t];
-      return `<div class="label"><span class="tier ${t}">${t}</span> ${esc(L.TIER[t].label)}</div><div class="menu">
+      return `<div class="label"><span class="tier ${esc(t)}">${t}</span> ${esc(L.TIER[t].label)}</div><div class="menu">
         ${frow(`Minimum ${L.repUnit(t)}`, numIn(`tiers.${t}.repMin`, c.repMin))}
         ${frow(`Maximum ${L.repUnit(t)}`, numIn(`tiers.${t}.repMax`, c.repMax))}
         ${tierRows(t, c)}
@@ -2316,8 +2335,8 @@ function settingsTiers() {
 function settingsSchemes() {
   return L.TIERS.map(t => {
       const list = state.schemes.filter(sc => sc.tiers.includes(t));
-      return `<div class="label"><span class="tier ${t}">${t}</span></div><div class="menu">${list.map(sc =>
-        `<button class="menurow" data-act="schemeEdit" data-id="${sc.id}"><span class="grow"><span class="name">${esc(sc.name)}</span>
+      return `<div class="label"><span class="tier ${esc(t)}">${t}</span></div><div class="menu">${list.map(sc =>
+        `<button class="menurow" data-act="schemeEdit" data-id="${esc(sc.id)}"><span class="grow"><span class="name">${esc(sc.name)}</span>
           <span class="meta">${L.schemeReps(sc)} ${L.repUnit(sc.tiers[0])} · ${sc.minutes} min · ${sc.emom ? `every ${clock(sc.emom)}` : `rest ${clock(sc.restSec)}`}</span></span><span class="chev">›</span></button>`).join('')
         || '<p class="muted pad">None yet.</p>'}</div>`;
     }).join('') + `<button class="addblock" data-act="schemeNew">+ Add scheme</button>`;
@@ -2402,7 +2421,7 @@ function handleSync(r) {
 function sheetCloudAsk() {
   const a = ui.cloud?.ask;
   if (!a) return '<p class="muted">Nothing to choose.</p>';
-  const choice = (id, name, hint) => `<button class="row ${a.choice === id ? 'on' : ''}" data-act="cloudChoose" data-c="${id}"><span>${name}</span><span class="meta">${hint}</span></button>`;
+  const choice = (id, name, hint) => `<button class="row ${esc(a.choice === id ? 'on' : '')}" data-act="cloudChoose" data-c="${esc(id)}"><span>${name}</span><span class="meta">${hint}</span></button>`;
   return `<h3>Your account has a backup</h3>
     <p class="meta">Account: ${a.remote.workouts} workouts, ${a.remote.sets} sets (${esc(fmtDateTime(Date.parse(a.remote.saved_at)))}${a.remote.device ? `, ${esc(a.remote.device)}` : ''}).
       This device: ${a.local.workouts} workouts, ${a.local.sets} sets. What's replaced stays under Saved copies.</p>
@@ -2418,7 +2437,7 @@ function settingsData() {
   const persisted = st.storagePersisted === true ? 'Yes' : st.storagePersisted === 'unsupported' ? 'Not available here' : st.storagePersisted === false ? 'No' : '…';
   const copyLine = !v ? '…' : !v.usable ? 'Not available in this browser' : v.savedAt ? `Saved ${fmtMinutesAgo(v.savedAt)}` : 'Not saved yet';
   const status = statusRow;
-  const rows = (v?.rows ?? []).map(r => `<button class="menurow" data-act="vaultRestore" data-at="${r.at}"><span class="grow"><span class="name">${esc(fmtDateTime(r.at))}</span>
+  const rows = (v?.rows ?? []).map(r => `<button class="menurow" data-act="vaultRestore" data-at="${esc(r.at)}"><span class="grow"><span class="name">${esc(fmtDateTime(r.at))}</span>
     <span class="meta">${esc(SNAP_LABEL[r.reason] ?? r.reason)} · ${r.workouts ?? '?'} workouts, ${r.sets ?? '?'} sets</span></span><span class="chev">›</span></button>`).join('');
   return `<div class="label">Status</div>
     <div class="menu">
@@ -2487,7 +2506,7 @@ function fnRow(r, f) {
   const open = f.open.has(r.fnId);
   const count = r.active ? `${r.recent} in the last year` : `last ${fmtDay(r.last)}`;
   return `<div class="fnrow ${open ? 'open' : ''}">
-    <button class="menurow" data-act="fnToggle" data-id="${r.fnId}"><span class="grow"><span class="name">${esc(r.fnName)}</span>
+    <button class="menurow" data-act="fnToggle" data-id="${esc(r.fnId)}"><span class="grow"><span class="name">${esc(r.fnName)}</span>
       <span class="meta">${esc(fnLine(r))}</span><span class="meta">${esc(count)}</span></span><span class="chev">${open ? '−' : '+'}</span></button>
     ${open ? fnEditor(r) : ''}</div>`;
 }
@@ -2496,16 +2515,16 @@ function fnEditor(r) {
   const id = r.fnId;
   const choices = [['new', 'A new exercise'], ...state.exercises.filter(e => !e.archived || e.id === r.target)
     .map(e => [e.id, `${e.name} (${famOf(e.familyId)?.name ?? ''})`]).sort((a, b) => a[1].localeCompare(b[1]))];
-  let h = `<div class="fnedit"><div class="field"><label>Bring in as</label><select data-fn="${id}" data-k="target">${opts(choices, r.target)}</select></div>`;
+  let h = `<div class="fnedit"><div class="field"><label>Bring in as</label><select data-fn="${esc(id)}" data-k="target">${opts(choices, r.target)}</select></div>`;
   if (r.target === 'new') {
-    h += `<div class="field"><label>Name</label><input data-fn="${id}" data-k="name" value="${esc(r.name)}"></div>
-      <div class="field"><label>Category</label><input data-fn="${id}" data-k="family" list="fn-fams" value="${esc(r.family)}"></div>
-      <div class="field"><label>How it was logged</label><select data-fn="${id}" data-k="mode">${opts(FN.MODES, r.mode)}</select></div>
-      <div class="field"><label>Body region</label><select data-fn="${id}" data-k="region">${opts(Object.entries(REGION_LABEL), r.region)}</select></div>
-      <label class="toggle"><input type="checkbox" data-fn="${id}" data-k="explosive" ${r.explosive ? 'checked' : ''}> Explosive</label>
-      <label class="toggle"><input type="checkbox" data-fn="${id}" data-k="archive" ${r.archive ? 'checked' : ''}> Archive it <span class="hint">history only</span></label>
+    h += `<div class="field"><label>Name</label><input data-fn="${esc(id)}" data-k="name" value="${esc(r.name)}"></div>
+      <div class="field"><label>Category</label><input data-fn="${esc(id)}" data-k="family" list="fn-fams" value="${esc(r.family)}"></div>
+      <div class="field"><label>How it was logged</label><select data-fn="${esc(id)}" data-k="mode">${opts(FN.MODES, r.mode)}</select></div>
+      <div class="field"><label>Body region</label><select data-fn="${esc(id)}" data-k="region">${opts(Object.entries(REGION_LABEL), r.region)}</select></div>
+      <label class="toggle"><input type="checkbox" data-fn="${esc(id)}" data-k="explosive" ${r.explosive ? 'checked' : ''}> Explosive</label>
+      <label class="toggle"><input type="checkbox" data-fn="${esc(id)}" data-k="archive" ${r.archive ? 'checked' : ''}> Archive it <span class="hint">history only</span></label>
       <div class="field"><label>Equipment</label><div class="chips">${[...new Set([...state.equipment, ...r.equipment])].map(eq =>
-        `<label class="chip ${r.equipment.includes(eq) ? 'on' : ''}"><input type="checkbox" data-fn="${id}" data-k="eq" value="${esc(eq)}" ${r.equipment.includes(eq) ? 'checked' : ''}>${esc(eq)}</label>`).join('')}</div></div>`;
+        `<label class="chip ${esc(r.equipment.includes(eq) ? 'on' : '')}"><input type="checkbox" data-fn="${esc(id)}" data-k="eq" value="${esc(eq)}" ${r.equipment.includes(eq) ? 'checked' : ''}>${esc(eq)}</label>`).join('')}</div></div>`;
   } else if (FN.willAdopt(state, r)) {
     h += `<p class="meta">${esc(exOf(r.target).name)} will switch to ${esc(MODE_LABEL[r.mode].toLowerCase())} to match your history.</p>`;
   }
@@ -2562,7 +2581,7 @@ function lastWeekCard() {
   const t = r.totals;
   return `<div class="card review-due"><h3>Last week</h3>
     <p>${t.filled}/${t.quota} goal sessions · ${t.workouts} workout${t.workouts === 1 ? '' : 's'}${r.topReason ? ` · ${esc(R.REASONS[r.topReason].toLowerCase())}` : ''}</p>
-    <div class="brow"><button class="primary small" data-act="reviewOpen" data-w="${w}">Review</button><button class="small" data-act="reviewDismiss" data-w="${w}">Dismiss</button></div></div>`;
+    <div class="brow"><button class="primary small" data-act="reviewOpen" data-w="${esc(w)}">Review</button><button class="small" data-act="reviewDismiss" data-w="${esc(w)}">Dismiss</button></div></div>`;
 }
 
 function viewReview(rv) {
@@ -2579,7 +2598,7 @@ function viewReview(rv) {
     <div class="kv"><span>Goals met</span><b>${t.goalsMet} of ${t.goals}</b></div>
     <div class="kv"><span>Workouts</span><b>${t.workouts} · ${t.minutes} min</b></div>
     <div class="kv"><span>Working sets</span><b>${t.sets} (${esc(tiers)})</b></div></div>`;
-  h += `<h3>Goals</h3><div class="card flush">${r.goals.map(g => `<div class="slotrow"><span class="tier ${g.tier}">${g.tier}</span>
+  h += `<h3>Goals</h3><div class="card flush">${r.goals.map(g => `<div class="slotrow"><span class="tier ${esc(g.tier)}">${esc(g.tier)}</span>
       <span class="grow"><span class="name">${esc(g.label.slice(g.tier.length + 1))}</span>
       <span class="meta">${g.met ? 'met' : esc(R.REASONS[g.reason])}${g.missed >= 2 ? ` · ${g.missed} weeks running` : ''}${g.lastDone != null ? ` · last ${esc(ago(g.lastDone))}` : ''}</span></span>
       <b class="${g.met ? 'good' : ''}">${g.filled}/${g.quota}</b></div>`).join('') || '<p class="muted pad">No weekly goals.</p>'}</div>`;
@@ -2591,7 +2610,7 @@ function viewReview(rv) {
   }
   if (r.lifts.length) {
     const word = { up: 'up', held: 'held', down: 'down', stalled: 'stalled', new: 'first time' };
-    h += `<h3>Lifts</h3><div class="card flush">${r.lifts.map(l => `<div class="slotrow"><span class="tier ${l.tier}">${l.tier}</span>
+    h += `<h3>Lifts</h3><div class="card flush">${r.lifts.map(l => `<div class="slotrow"><span class="tier ${esc(l.tier)}">${esc(l.tier)}</span>
       <span class="grow"><span class="name">${esc(l.name)}</span><span class="meta">${l.load} ${unit()}${l.prev != null ? ` (was ${l.prev})` : ''}${l.complete ? '' : ' · reps missed'}</span></span>
       <b>${word[l.trend]}</b></div>`).join('')}</div>`;
   }
@@ -2615,7 +2634,7 @@ function viewGoalSuggest(g) {
   const total = g.rows.filter(r => r.include && !(r.tier === 'T3' && L.t3AsAreas(state))).reduce((t, r) => t + r.quota, 0);
   return `${head}
     <p class="meta pad">From ${g.workouts} workouts in ${g.weeks} weeks. Tap one to change it.</p>
-    <div class="card"><div class="kv ${total > g.capacity ? 'over' : ''}"><span>Goal sessions a week</span><b>${total} of ~${g.capacity} that fit</b></div></div>
+    <div class="card"><div class="kv ${esc(total > g.capacity ? 'over' : '')}"><span>Goal sessions a week</span><b>${total} of ~${g.capacity} that fit</b></div></div>
     <div class="menu">${g.rows.map(r => gsRow(r, g)).join('')}</div>
     <button class="primary big" data-act="gsApply" data-mode="replace">Replace my goals</button>
     <div class="actions"><button data-act="gsApply" data-mode="add">Add to my goals</button><button data-act="gsCancel">Cancel</button></div>`;
@@ -2626,18 +2645,18 @@ function gsRow(r, g) {
   const name = famOf(r.familyId)?.name ?? '?';
   const bits = [r.tier === 'T3' && L.t3AsAreas(state) ? 'area' : `${r.quota}× a week`, `${PRIORITY_LABEL[r.priority]} priority`, r.repMin ? `${r.repMin}+ reps` : ''].filter(Boolean).join(' · ');
   return `<div class="fnrow ${open ? 'open' : ''} ${r.include ? '' : 'off'}">
-    <div class="gsline"><input type="checkbox" class="gsinc" data-gs="${r.key}" data-k="include" ${r.include ? 'checked' : ''} aria-label="Include ${esc(name)}">
-      <button class="menurow" data-act="gsToggle" data-key="${r.key}"><span class="tier ${r.tier}">${r.tier}</span>
+    <div class="gsline"><input type="checkbox" class="gsinc" data-gs="${esc(r.key)}" data-k="include" ${r.include ? 'checked' : ''} aria-label="Include ${esc(name)}">
+      <button class="menurow" data-act="gsToggle" data-key="${esc(r.key)}"><span class="tier ${esc(r.tier)}">${esc(r.tier)}</span>
         <span class="grow"><span class="name">${esc(name)}</span><span class="meta">${esc(bits)}</span><span class="meta">${esc(r.reason)}</span></span>
         <span class="chev">${open ? '−' : '+'}</span></button></div>
     ${open ? `<div class="fnedit">
-      <div class="field"><label>Tier</label><div class="seg">${L.TIERS.map(t => `<button class="${r.tier === t ? 'on' : ''}" data-act="gsSet" data-key="${r.key}" data-k="tier" data-v="${t}">${t}</button>`).join('')}</div>
+      <div class="field"><label>Tier</label><div class="seg">${L.TIERS.map(t => `<button class="${esc(r.tier === t ? 'on' : '')}" data-act="gsSet" data-key="${esc(r.key)}" data-k="tier" data-v="${esc(t)}">${t}</button>`).join('')}</div>
 </div>
       <div class="field"><label>Times per week</label><div class="stepper">
-        <button data-act="gsStep" data-key="${r.key}" data-d="-1" aria-label="Fewer">−</button><span>${r.quota}</span><button data-act="gsStep" data-key="${r.key}" data-d="1" aria-label="More">+</button></div></div>
-      <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${r.priority === v ? 'on' : ''}" data-act="gsSet" data-key="${r.key}" data-k="priority" data-v="${v}">${t}</button>`).join('')}</div></div>
+        <button data-act="gsStep" data-key="${esc(r.key)}" data-d="-1" aria-label="Fewer">−</button><span>${r.quota}</span><button data-act="gsStep" data-key="${esc(r.key)}" data-d="1" aria-label="More">+</button></div></div>
+      <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${esc(r.priority === v ? 'on' : '')}" data-act="gsSet" data-key="${esc(r.key)}" data-k="priority" data-v="${esc(v)}">${t}</button>`).join('')}</div></div>
       <div class="field"><label>Reps per session <span class="hint">optional</span></label>
-        <input inputmode="numeric" data-gs="${r.key}" data-k="repMin" value="${esc(r.repMin ?? '')}" placeholder="${L.slotDose(state, null, r.tier).repMin}"></div>
+        <input inputmode="numeric" data-gs="${esc(r.key)}" data-k="repMin" value="${esc(r.repMin ?? '')}" placeholder="${esc(L.slotDose(state, null, r.tier).repMin)}"></div>
     </div>` : ''}</div>`;
 }
 
@@ -2705,7 +2724,7 @@ const TIER_DESC = {
 const partChips = (list, cur, act) => {
   const have = new Set(list.map(e => L.bodyPart(state, e)));
   return `<div class="chips partchips">${L.BODY_PARTS.filter(p => have.has(p)).map(p =>
-    `<button class="chip ${cur === p ? 'on' : ''}" data-act="${act}" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>`;
+    `<button class="chip ${esc(cur === p ? 'on' : '')}" data-act="${esc(act)}" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>`;
 };
 
 // Exercises you've logged, newest first (each once), out of `list`.
@@ -2738,7 +2757,7 @@ function sheetAddEx(sh) {
   const away = past || (!q && !sh.part) ? 0 : matches.length - here.length;
   const tier = sh.mode === 'swap' ? findBlock(sh.blockId).b.tier : sh.tier;
   const title = sh.mode === 'add' || sh.mode === 'histAdd' ? 'Add an exercise' : sh.mode === 'histSwap' ? 'Change to another exercise' : sh.mode === 'pair' ? `Superset with ${esc(exOf(findBlock(sh.blockId).b.exerciseId)?.name)}` : 'Swap to any exercise';
-  const row = e => `<button class="row" data-act="addExPick" data-id="${e.id}"><span>${esc(e.name)}</span>
+  const row = e => `<button class="row" data-act="addExPick" data-id="${esc(e.id)}"><span>${esc(e.name)}</span>
       <span class="meta">${(tier === 'T1' || tier === 'T2') && e.metric !== 'load_reps' && !e.explosive ? 'reps only' : ''}</span></button>`;
   let rows;
   if (q || sh.part) {
@@ -2755,7 +2774,7 @@ function sheetAddEx(sh) {
   }
   const raw = (sh.q || '').trim();
   return `<h3>${title}</h3>
-    ${sh.mode !== 'swap' && sh.mode !== 'histSwap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${sh.tier === t ? 'on' : ''}" data-act="addExTier" data-t="${t}">${t}</button>`).join('')}</div>` : ''}
+    ${sh.mode !== 'swap' && sh.mode !== 'histSwap' ? `<div class="seg tierseg">${L.TIERS.map(t => `<button class="${esc(sh.tier === t ? 'on' : '')}" data-act="addExTier" data-t="${esc(t)}">${t}</button>`).join('')}</div>` : ''}
     <input class="search" id="sheetq" data-sheetq value="${esc(sh.q || '')}" placeholder="Search, or type a new name" autocomplete="off">
     ${q ? '' : partChips(usable, sh.part, 'addExPart')}
     <div class="list">${rows}
@@ -2769,7 +2788,7 @@ function sheetTier(sh) {
   return `<h3>Tier for ${esc(ex.name)}</h3>
     <div class="list">${L.TIERS.map(t => {
       const sl = L.slotFor(state, ex, t);
-      return `<button class="row ${b.tier === t ? 'on' : ''}" data-act="tierPick" data-t="${t}"><span><span class="tier ${t}">${t}</span> ${TIER_DESC[t]}</span>
+      return `<button class="row ${esc(b.tier === t ? 'on' : '')}" data-act="tierPick" data-t="${esc(t)}"><span><span class="tier ${esc(t)}">${t}</span> ${TIER_DESC[t]}</span>
         <span class="meta">${sl ? `goal: ${esc(exOf(sl.exerciseId)?.name ?? famOf(sl.familyId)?.name ?? '')}` : ''}</span></button>`;
     }).join('')}</div>`;
 }
@@ -2783,18 +2802,18 @@ function sheetGoal(sh) {
   const members = L.familyMembers(state, g.familyId).filter(e => !e.archived || e.id === g.exerciseId);
   const usual = exOf(famOf(g.familyId)?.defaultExerciseId)?.name;
   return `<h3>${sh.isNew ? 'New weekly goal' : 'Edit weekly goal'}</h3>
-    <div class="field"><label>Tier</label><div class="seg">${L.TIERS.map(t => `<button class="${g.tier === t ? 'on' : ''}" data-act="goalSet" data-k="tier" data-v="${t}">${t}</button>`).join('')}</div>
+    <div class="field"><label>Tier</label><div class="seg">${L.TIERS.map(t => `<button class="${esc(g.tier === t ? 'on' : '')}" data-act="goalSet" data-k="tier" data-v="${esc(t)}">${t}</button>`).join('')}</div>
       <p class="meta">${TIER_DESC[g.tier]}</p></div>
     <div class="field"><label>Category</label><select data-gdraft="familyId">${opts(famOpts, g.familyId)}</select></div>
     <div class="field"><label>Exercise</label><select data-gdraft="exerciseId">${opts([['', `Any${usual ? ` (usually ${usual})` : ''}`], ...members.map(e => [e.id, e.name])], g.exerciseId ?? '')}</select></div>
     ${goalMaxField(g)}
     ${g.tier === 'T3' && L.t3AsAreas(state)
-      ? `<div class="field"><label>Area <span class="hint">no weekly count</span></label><div class="seg">${[[1, 'Active'], [0, 'Paused']].map(([v, t]) => `<button class="${(g.quota > 0 ? 1 : 0) === v ? 'on' : ''}" data-act="goalActive" data-v="${v}">${t}</button>`).join('')}</div></div>`
+      ? `<div class="field"><label>Area <span class="hint">no weekly count</span></label><div class="seg">${[[1, 'Active'], [0, 'Paused']].map(([v, t]) => `<button class="${esc((g.quota > 0 ? 1 : 0) === v ? 'on' : '')}" data-act="goalActive" data-v="${esc(v)}">${t}</button>`).join('')}</div></div>`
       : `<div class="field"><label>Times per week</label><div class="stepper">
       <button data-act="goalStep" data-d="-1" aria-label="Fewer">−</button><span>${g.quota || 'Paused'}</span><button data-act="goalStep" data-d="1" aria-label="More">+</button></div></div>`}
     <div class="field"><label>Reps per session <span class="hint">optional</span></label>
-      <input id="g-reps" inputmode="numeric" value="${esc(g.repMin ?? '')}" placeholder="${L.slotDose(state, null, g.tier).repMin}"></div>
-    <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${g.priority === v ? 'on' : ''}" data-act="goalSet" data-k="priority" data-v="${v}">${t}</button>`).join('')}</div></div>
+      <input id="g-reps" inputmode="numeric" value="${esc(g.repMin ?? '')}" placeholder="${esc(L.slotDose(state, null, g.tier).repMin)}"></div>
+    <div class="field"><label>Priority</label><div class="seg">${PRIORITIES.map(([v, t]) => `<button class="${esc(g.priority === v ? 'on' : '')}" data-act="goalSet" data-k="priority" data-v="${esc(v)}">${t}</button>`).join('')}</div></div>
     <div class="actions">${sh.isNew ? '' : '<button class="danger" data-act="goalDelete">Delete</button>'}
       <button class="primary" data-act="goalSave">${sh.isNew ? 'Add goal' : 'Save'}</button></div>`;
 }
@@ -2804,7 +2823,7 @@ function goalMaxField(g) {
   const lift = exOf(g.exerciseId) ?? exOf(famOf(g.familyId)?.defaultExerciseId);
   if (!lift || lift.metric !== 'load_reps' || !['T1', 'T2', 'TECH'].includes(g.tier)) return '';
   return `<div class="field"><label>1-rep max${g.exerciseId ? '' : ` · ${esc(lift.name)}`}${lift.bodyweight ? ' <span class="hint">added load</span>' : ''}</label>
-    <div class="maxrow"><input class="num" inputmode="decimal" data-max="${lift.id}" value="${esc(lift.testedMax?.load ?? '')}" placeholder="1RM" aria-label="Tested 1-rep max, ${esc(lift.name)}">
+    <div class="maxrow"><input class="num" inputmode="decimal" data-max="${esc(lift.id)}" value="${esc(lift.testedMax?.load ?? '')}" placeholder="1RM" aria-label="Tested 1-rep max, ${esc(lift.name)}">
       <span class="meta">${esc(L.maxSource(state, lift.id) === 'tested' && lift.testedMax?.at ? `tested ${shortDay(lift.testedMax.at)}` : maxLine(lift) || 'No max yet')}</span></div></div>`;
 }
 
@@ -2818,10 +2837,10 @@ function sheetScheme(sh) {
       <div class="field"><label>Sets</label><input id="sc-sets" class="num" inputmode="numeric" value="${esc(d.sets)}"></div>
       <div class="field"><label>Reps</label><input id="sc-reps" class="num" inputmode="numeric" value="${esc(d.reps)}"></div>
       <div class="field"><label>Rest</label><input id="sc-rest" class="num" value="${esc(clock(d.restSec || 0))}"></div>
-      <div class="field"><label>Minutes</label><input id="sc-min" class="num" inputmode="numeric" value="${esc(d.minutes ?? '')}" placeholder="${est}"></div>
+      <div class="field"><label>Minutes</label><input id="sc-min" class="num" inputmode="numeric" value="${esc(d.minutes ?? '')}" placeholder="${esc(est)}"></div>
     </div>
     <p class="meta">${d.sets * d.reps} reps · ~${est} min</p>
-    <div class="field"><label>Use for</label><div class="seg">${L.TIERS.map(t => `<button class="${d.tiers.includes(t) ? 'on' : ''}" data-act="schemeTier" data-t="${t}">${t}</button>`).join('')}</div></div>
+    <div class="field"><label>Use for</label><div class="seg">${L.TIERS.map(t => `<button class="${esc(d.tiers.includes(t) ? 'on' : '')}" data-act="schemeTier" data-t="${esc(t)}">${t}</button>`).join('')}</div></div>
     <div class="actions">${sh.id ? (used ? '<p class="meta">In use, so it can’t be deleted</p>' : '<button class="danger" data-act="schemeDelete">Delete</button>') : ''}
       <button class="primary" data-act="schemeSave">Save</button></div>`;
 }
@@ -2841,7 +2860,7 @@ function findBlock(id) {
 }
 
 function reasonChips(cur) {
-  return `<div class="chips">${REASONS.map(r => `<button class="chip ${cur === r ? 'on' : ''}" data-act="reason" data-v="${r}">${r}</button>`).join('')}</div>`;
+  return `<div class="chips">${REASONS.map(r => `<button class="chip ${esc(cur === r ? 'on' : '')}" data-act="reason" data-v="${esc(r)}">${r}</button>`).join('')}</div>`;
 }
 
 function sheetSwapEx(sh) {
@@ -2853,12 +2872,12 @@ function sheetSwapEx(sh) {
   const alts = L.alternatives(state, cur, loc).sort((x, y) => (usual.get(y.id) ?? 0) - (usual.get(x.id) ?? 0));
   return `<h3>Swap ${esc(cur.name)}</h3><div class="meta">${esc(fam?.name)} at ${esc(loc?.name)}</div>
     <div class="label">Why? <span class="hint">optional</span></div>${reasonChips(sh.reason)}
-    <div class="list">${alts.map(a => `<button class="row" data-act="pickEx" data-id="${a.id}"><span>${a.pref === 'fav' ? '★ ' : ''}${esc(a.name)}</span>
+    <div class="list">${alts.map(a => `<button class="row" data-act="pickEx" data-id="${esc(a.id)}"><span>${a.pref === 'fav' ? '★ ' : ''}${esc(a.name)}</span>
       <span class="meta">${usual.has(a.id) ? 'your usual · ' : ''}${a.rank < cur.rank ? 'harder' : 'easier'}${a.metric !== 'load_reps' && !a.explosive && (b.tier === 'T1' || b.tier === 'T2') ? ' · won’t count' : ''}</span></button>`).join('')
       || '<p class="muted">Nothing else in this category here.</p>'}
-    <button class="row add" data-act="qaVariation" data-id="${cur.id}" data-from="swap">+ New variation</button>
+    <button class="row add" data-act="qaVariation" data-id="${esc(cur.id)}" data-from="swap">+ New variation</button>
     <button class="row add" data-act="swapAny">All exercises ›</button>
-    <button class="row add" data-act="tastePref" data-id="${cur.id}" data-v="never">${cur.pref === 'never' ? `Suggest ${esc(cur.name)} again` : `Never suggest ${esc(cur.name)}`}</button></div>`;
+    <button class="row add" data-act="tastePref" data-id="${esc(cur.id)}" data-v="never">${cur.pref === 'never' ? `Suggest ${esc(cur.name)} again` : `Never suggest ${esc(cur.name)}`}</button></div>`;
 }
 
 function sheetSwapScheme(sh) {
@@ -2866,7 +2885,7 @@ function sheetSwapScheme(sh) {
   const ex = exOf(b.exerciseId);
   const budget = sessionBudget(s, b) - L.overhead(state, b.tier, b.exerciseId, s.locationId ?? null);
   const time = sc => round(L.setsMinutes(state, b, s.blocks, sc));
-  return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${b.tier} · ${round(budget)} min left</div>
+  return `<h3>Scheme for ${esc(ex.name)}</h3><div class="meta">${esc(b.tier)} · ${round(budget)} min left</div>
     <div class="label">Why? <span class="hint">optional</span></div>${reasonChips(sh.reason)}
     <div class="list">${L.schemeOptions(state, b.tier).map(sc => {
       const load = L.targetLoad(state, ex, b.tier, sc, s.checkinAt);
@@ -2874,7 +2893,7 @@ function sheetSwapScheme(sh) {
         L.doseFit(state, b.tier, sc, L.slotDose(state, L.byId(state.slots, b.slotId), b.tier)) ? '✓ goal' : '', time(sc) > budget ? 'over time' : '',
         L.overRepCap(ex, sc) ? 'too many reps' : ''].filter(Boolean);
       const dim = time(sc) > budget || L.overRepCap(ex, sc);
-      return `<button class="row ${sc.id === b.schemeId ? 'on' : ''} ${dim ? 'dim' : ''}" data-act="pickScheme" data-id="${sc.id}">
+      return `<button class="row ${esc(sc.id === b.schemeId ? 'on' : '')} ${dim ? 'dim' : ''}" data-act="pickScheme" data-id="${esc(sc.id)}">
         <span>${esc(sc.name)}</span><span class="meta">${esc(bits.join(' · '))}</span></button>`;
     }).join('')}</div>`;
 }
@@ -2888,10 +2907,10 @@ function sheetPair(sh) {
   const names = o => groupOf(s, o).map(x => esc(exOf(x.exerciseId)?.name)).join(' + ');
   return `<h3>Superset with ${esc(ex.name)}</h3>
     <div class="list">
-      ${idea && b.tier !== 'T3' ? `<button class="row" data-act="pairAdd" data-b="${b.id}" data-ex="${idea.exercise.id}"><span>+ ${esc(idea.exercise.name)} <span class="tier T3">T3</span></span><span class="meta">suggested</span></button>` : ''}
-      ${others.length ? `<div class="label">Already in this workout</div>${others.map(o => `<button class="row" data-act="pairLink" data-b="${b.id}" data-o="${o.id}">
-        <span>${names(o)} <span class="tier ${o.tier}">${o.tier}</span></span><span class="meta">${inPair(s, o) ? 'giant set' : ''}</span></button>`).join('')}` : ''}
-      <button class="row add" data-act="pairAny" data-b="${b.id}">All exercises ›</button></div>`;
+      ${idea && b.tier !== 'T3' ? `<button class="row" data-act="pairAdd" data-b="${esc(b.id)}" data-ex="${esc(idea.exercise.id)}"><span>+ ${esc(idea.exercise.name)} <span class="tier T3">T3</span></span><span class="meta">suggested</span></button>` : ''}
+      ${others.length ? `<div class="label">Already in this workout</div>${others.map(o => `<button class="row" data-act="pairLink" data-b="${esc(b.id)}" data-o="${esc(o.id)}">
+        <span>${names(o)} <span class="tier ${esc(o.tier)}">${esc(o.tier)}</span></span><span class="meta">${inPair(s, o) ? 'giant set' : ''}</span></button>`).join('')}` : ''}
+      <button class="row add" data-act="pairAny" data-b="${esc(b.id)}">All exercises ›</button></div>`;
 }
 
 const MOB_PICK_TITLE = { new: 'Mobility session', session: 'Add mobility', workout: 'Add mobility to this workout', routine: 'Add to routine' };
@@ -2901,8 +2920,8 @@ function sheetMobPick(sh) {
   const shown = sh.parts.length || sh.mode === 'routine' ? M.rankForParts(state, sh.parts, sh.exclude) : [];
   return `<h3>${MOB_PICK_TITLE[sh.mode]}</h3>
     <p class="meta">Up to 3 body parts</p>
-    <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${sh.parts.includes(p) ? 'on' : ''}" data-act="mobPart" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-    <div class="list">${shown.map(({ e }) => `<button class="row ${sh.picked.includes(e.id) ? 'on' : ''}" data-act="mobTick" data-id="${e.id}">
+    <div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${esc(sh.parts.includes(p) ? 'on' : '')}" data-act="mobPart" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+    <div class="list">${shown.map(({ e }) => `<button class="row ${esc(sh.picked.includes(e.id) ? 'on' : '')}" data-act="mobTick" data-id="${esc(e.id)}">
       <span>${sh.picked.includes(e.id) ? '☑' : '☐'} ${esc(e.name)}</span>
       <span class="meta">${esc(`${M.doseText(e)}${last.has(e.id) ? ` · ${fmtAgo(last.get(e.id))}` : ''}`)}</span></button>`).join('')
       || (sh.parts.length ? '<p class="muted">Nothing for those yet.</p>' : '')}
@@ -2912,12 +2931,12 @@ function sheetMobPick(sh) {
 
 function sheetMobEx(sh) {
   const d = sh.draft;
-  const num = (id, v) => `<input id="${id}" class="num" inputmode="numeric" value="${esc(v ?? '')}">`;
-  const box = (id, on, label) => `<label class="toggle"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}> ${label}</label>`;
+  const num = (id, v) => `<input id="${esc(id)}" class="num" inputmode="numeric" value="${esc(v ?? '')}">`;
+  const box = (id, on, label) => `<label class="toggle"><input type="checkbox" id="${esc(id)}" ${on ? 'checked' : ''}> ${label}</label>`;
   const used = sh.id && M.loggedItems(state).some(x => x.item.exerciseId === sh.id);
   return `<h3>${sh.isNew ? 'New mobility exercise' : 'Edit mobility exercise'}</h3>
     <div class="field"><label>Name</label><input id="me-name" value="${esc(d.name)}" placeholder="e.g. 90/90 hip switch"></div>
-    <div class="field"><label>Body parts</label><div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${d.parts.includes(p) ? 'on' : ''}" data-act="mobExPart" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div></div>
+    <div class="field"><label>Body parts</label><div class="chips">${M.BODY_PARTS.map(p => `<button class="chip ${esc(d.parts.includes(p) ? 'on' : '')}" data-act="mobExPart" data-v="${esc(p)}">${esc(p)}</button>`).join('')}</div></div>
     <div class="row2 fields">
       <div class="field"><label>Sets</label>${num('me-sets', d.sets)}</div>
       <div class="field"><label>Reps</label>${num('me-reps', d.reps)}</div>
@@ -2972,8 +2991,8 @@ function sheetExHist(sh) {
     const sc = schOf(work[0]?.schemeId);
     const best = Math.max(0, ...work.map(x => L.setE1rm(state, x) || 0));
     const hit = sc && ['T1', 'T2'].includes(g.tier) && ex.metric === 'load_reps'
-      ? (work.length >= sc.sets && work.every(x => Number(x.reps) >= sc.reps) ? ' · ✓ every rep' : ' · short') : '';
-    return `<div class="histex"><span class="tier ${g.tier}">${g.tier}</span><span class="grow"><span class="name">${esc(day(g.at))}${sc ? ` · ${esc(sc.name)}` : ''}</span>
+      ? (work.reduce((n, x) => n + (Number(x.reps) || 0), 0) >= L.schemeReps(sc) ? ' · ✓ every rep' : ' · short') : ''; // in total, as progression counts them
+    return `<div class="histex"><span class="tier ${esc(g.tier)}">${esc(g.tier)}</span><span class="grow"><span class="name">${esc(day(g.at))}${sc ? ` · ${esc(sc.name)}` : ''}</span>
       <span class="meta">${esc(histSets({ ex, sets: g.sets }))}${best ? ` · e1RM ${round(best)}` : ''}${hit}</span></span></div>`;
   };
   // What the next session asks for at each tier you've done it at lately (same scheme as last time).
@@ -2981,7 +3000,7 @@ function sheetExHist(sh) {
     const last = L.lastOutcome(state, ex.id, t);
     if (!last) return '';
     const load = L.targetLoad(state, ex, t, last.scheme);
-    return load == null ? '' : `<div class="frow"><span class="tier ${t}">${t}</span><span class="grow"><span class="name">Next ${esc(last.scheme.name)}: ${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}</span>
+    return load == null ? '' : `<div class="frow"><span class="tier ${esc(t)}">${t}</span><span class="grow"><span class="name">Next ${esc(last.scheme.name)}: ${ex.bodyweight ? 'BW+' : ''}${load} ${unit()}</span>
       <span class="meta">${last.complete ? `every rep at ${last.load} last time, so up` : `${last.short} rep${last.short === 1 ? '' : 's'} short at ${last.load} last time, so the same`}</span></span></div>`;
   }).join('');
   return `<h3>${esc(ex.name)}</h3>
@@ -3000,7 +3019,7 @@ function exerciseCharts(ex, sh) {
   const { from, to } = PG.rangeBounds(state, range);
   const u = unit(), ju = B.jumpUnit(state);
   const ss = PG.exerciseSessions(state, ex.id, from, to);
-  let h = `<div class="seg ranges">${PG.RANGES.map(([k, t]) => `<button class="${range === k ? 'on' : ''}" data-act="exHistRange" data-v="${k}">${t}</button>`).join('')}</div>`;
+  let h = `<div class="seg ranges">${PG.RANGES.map(([k, t]) => `<button class="${esc(range === k ? 'on' : '')}" data-act="exHistRange" data-v="${esc(k)}">${t}</button>`).join('')}</div>`;
   if (!ss.length) return `${h}<p class="muted">Nothing logged in this range.</p>`;
   const tipDay = (w, value, sub) => ({ value, title: fmtShortDay(w.t), sub });
   const table = (head, f) => ({ head: ['Day', ...head], rows: ss.map(w => [fmtShortDay(w.t), ...f(w)]) });
@@ -3042,7 +3061,7 @@ function sheetFinishAsk(sh) {
 
 function sheetMoreTime() {
   return `<h3>More time</h3>
-    <div class="seg">${[10, 15, 20, 30, 45].map(m => `<button data-act="addTime" data-v="${m}">+${m} min</button>`).join('')}</div>`;
+    <div class="seg">${[10, 15, 20, 30, 45].map(m => `<button data-act="addTime" data-v="${esc(m)}">+${m} min</button>`).join('')}</div>`;
 }
 
 // In-app confirmation; native confirm() is unavailable in some hosts.
@@ -3081,7 +3100,7 @@ function sheetRest(sh) {
     <div class="meta">${esc(sc.name)} default ${clock(sc.restSec)}${ex.restSec != null ? ` · yours ${clock(ex.restSec)}` : ''}</div>
     <div class="restbig">${clock(cur)}</div>
     <div class="seg"><button data-act="restNudge" data-d="-15">−15s</button><button data-act="restNudge" data-d="15">+15s</button></div>
-    <div class="chips">${REST_PRESETS.map(v => `<button class="chip ${v === cur ? 'on' : ''}" data-act="restPreset" data-v="${v}">${clock(v)}</button>`).join('')}</div>
+    <div class="chips">${REST_PRESETS.map(v => `<button class="chip ${esc(v === cur ? 'on' : '')}" data-act="restPreset" data-v="${esc(v)}">${clock(v)}</button>`).join('')}</div>
     <label class="toggle"><input type="checkbox" id="rest-save" ${sh.saveDefault ? 'checked' : ''}> Always for ${esc(ex.name)}</label>
     <div class="actions">
       ${b.restSec != null || ex.restSec != null ? '<button data-act="restClear">Scheme default</button>' : ''}
@@ -3091,14 +3110,14 @@ function sheetRest(sh) {
 function sheetPlans() {
   if (!state.plans.length) return `<h3>Plans</h3><p class="muted">No saved plans yet.</p><button data-act="goPlans">Build one</button>`;
   return `<h3>Use a plan</h3><div class="meta">Logged sets stay</div><div class="list">${state.plans.map(p =>
-    `<button class="row" data-act="applyPlan" data-id="${p.id}"><span>${esc(p.name)}</span></button>`).join('')}</div>`;
+    `<button class="row" data-act="applyPlan" data-id="${esc(p.id)}"><span>${esc(p.name)}</span></button>`).join('')}</div>`;
 }
 
-const equipChip = (eq, on, name) => `<label class="chip ${on ? 'on' : ''}"><input type="checkbox" name="${name}" value="${esc(eq)}" ${on ? 'checked' : ''}>${esc(eq)}</label>`;
+const equipChip = (eq, on, name) => `<label class="chip ${on ? 'on' : ''}"><input type="checkbox" name="${esc(name)}" value="${esc(eq)}" ${on ? 'checked' : ''}>${esc(eq)}</label>`;
 
 function equipChips(sel, name) {
   return `<div class="chips">${state.equipment.map(eq => equipChip(eq, sel.includes(eq), name)).join('')}
-    <input class="chipinput" data-eqnew="${name}" placeholder="+ New" aria-label="Add equipment" enterkeyhint="done"></div>`;
+    <input class="chipinput" data-eqnew="${esc(name)}" placeholder="+ New" aria-label="Add equipment" enterkeyhint="done"></div>`;
 }
 
 const LOG_TYPES = [['load_reps', 'Weight × reps'], ['reps', 'Reps'], ['time', 'Time'], ['distance', 'Distance']];
@@ -3138,7 +3157,7 @@ function qaHint(typed, sh) {
   if (!m) return '';
   if (m.exact) return `You already have ${esc(m.e.name)}.`;
   if (sh.baseId === m.e.id) return '';
-  return `Looks like a variation of ${esc(m.e.name)}. <button class="link" data-act="qaUseBase" data-id="${m.e.id}">Copy its details</button>`;
+  return `Looks like a variation of ${esc(m.e.name)}. <button class="link" data-act="qaUseBase" data-id="${esc(m.e.id)}">Copy its details</button>`;
 }
 
 // A category (a family: exercises that swap for each other): its name, what's in it, exercises to move in from other
@@ -3165,7 +3184,7 @@ function sheetCategory(sh) {
     <div class="label">Move exercises here</div>
     <input class="search" id="catq" data-catq value="${esc(sh.q || '')}" placeholder="Search" autocomplete="off">
     ${q ? '' : partChips(others, sh.part, 'catPart')}
-    <div class="list">${shown.sort((a, b) => a.name.localeCompare(b.name)).map(e => `<button class="row ${d.moveIn.includes(e.id) ? 'on' : ''}" data-act="catPick" data-id="${e.id}">
+    <div class="list">${shown.sort((a, b) => a.name.localeCompare(b.name)).map(e => `<button class="row ${esc(d.moveIn.includes(e.id) ? 'on' : '')}" data-act="catPick" data-id="${esc(e.id)}">
       <span>${d.moveIn.includes(e.id) ? '☑' : '☐'} ${esc(e.name)}</span><span class="meta">${esc(famOf(e.familyId)?.name ?? '')}</span></button>`).join('')
       || (q || sh.part ? '<p class="muted">No matches.</p>' : '')}</div>
     <div class="field"><label>New exercises <span class="hint">one per line</span></label><textarea id="cat-new" rows="3" placeholder="e.g. Cable pushdown">${esc(d.newLines)}</textarea></div>
@@ -3178,7 +3197,7 @@ function sheetQuickAdd(sh) {
   const base = sh.baseId ? exOf(sh.baseId) : null;
   const d = qaDefaults(sh, base);
   const label = sh.from === 'swap' ? 'Add and use' : sh.from === 'ob' ? 'Add and pick' : sh.from === 'add' ? `Add to today as ${sh.tier}` : 'Add exercise';
-  const radio = (name, value, text, on) => `<label><input type="radio" name="${name}" value="${value}" ${on ? 'checked' : ''}>${text}</label>`;
+  const radio = (name, value, text, on) => `<label><input type="radio" name="${esc(name)}" value="${esc(value)}" ${on ? 'checked' : ''}>${text}</label>`;
   return `<h3>${base ? `New variation of ${esc(base.name)}` : 'New exercise'}</h3>
     <div class="field"><label>Name</label><input id="qa-name" data-qaname autocomplete="off" value="${esc(sh.name ?? '')}"
       placeholder="${base ? `e.g. Weighted ${esc(base.name.toLowerCase())}` : 'e.g. Pause squat'}"></div>
@@ -3224,7 +3243,7 @@ function sheetMax(sh) {
     <div class="field"><label>Tested 1RM (${unit()}${e.bodyweight ? ', added load' : ''})</label>
       <input id="mx-load" inputmode="decimal" value="${esc(e.testedMax?.load ?? '')}" placeholder="e.g. 315"></div>
     <p class="meta">Counts for ${L.TESTED_MAX_WEEKS} weeks; stronger sets still raise it.</p>
-    <div class="actions"><button class="primary" data-act="maxSave" data-id="${e.id}">Save</button></div>`;
+    <div class="actions"><button class="primary" data-act="maxSave" data-id="${esc(e.id)}">Save</button></div>`;
 }
 
 function sheetEditEx(sh) {
@@ -3259,10 +3278,10 @@ function sheetEditEx(sh) {
     <div class="field"><label>YouTube URL</label><input id="ee-yt" value="${esc(e.youtube)}" placeholder="https://youtu.be/..."></div>
     <div class="field"><label>Start time (m:ss)</label><input id="ee-start" value="${esc(fmtMSS(e.start))}" placeholder="0:42"></div>
     <div class="field"><label>Cues</label><textarea id="ee-cues" rows="3">${esc(e.cues)}</textarea></div>
-    <div class="actions">${hasHistory ? '' : `<button class="danger" data-act="exDelete" data-id="${e.id}">Delete</button>`}
-      ${hasHistory ? `<button data-act="exHist" data-id="${e.id}">History</button>` : ''}
-      <button data-act="qaVariation" data-id="${e.id}">Make a variation</button>
-      <button class="primary" data-act="exSave" data-id="${e.id}">Save</button></div>`;
+    <div class="actions">${hasHistory ? '' : `<button class="danger" data-act="exDelete" data-id="${esc(e.id)}">Delete</button>`}
+      ${hasHistory ? `<button data-act="exHist" data-id="${esc(e.id)}">History</button>` : ''}
+      <button data-act="qaVariation" data-id="${esc(e.id)}">Make a variation</button>
+      <button class="primary" data-act="exSave" data-id="${esc(e.id)}">Save</button></div>`;
 }
 
 // ---------- actions ----------
@@ -4814,6 +4833,7 @@ document.addEventListener('click', e => {
   if (e.target === sheetEl) return closeSheet();
   const el = e.target.closest('[data-act]');
   if (!el) return;
+  rollDay(); // before the action looks for today's workout
   const fn = actions[el.dataset.act];
   if (fn) { e.preventDefault(); fn(el.dataset, el); }
 });
@@ -5137,6 +5157,7 @@ let hiddenAt = null;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') hiddenAt = Date.now();
   else if (hiddenAt && Date.now() - hiddenAt > 30 * 60 * 1000 && !ui.sheet) location.reload();
+  else if (rollDay()) render();
 });
 
 onSaveFail(() => { toast('Couldn’t save your last change. See the message at the top.'); });
@@ -5155,6 +5176,7 @@ onSaveFail(() => { toast('Couldn’t save your last change. See the message at t
 }
 
 closeStale();
+slimHistory(state);
 // Drop a timer left over from an earlier visit.
 if (state.timer && ((!currentSession() && !currentMobility()) || Date.now() - state.timer.endsAt > 10 * 60e3)) state.timer = null;
 save();
