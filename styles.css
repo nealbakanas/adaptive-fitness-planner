@@ -559,3 +559,16 @@ h3.cathead .icon { min-height: 32px; padding: 4px 10px; }
 .ivhr { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 8px 0 4px; }
 .ivhr:empty { display: none; }
 .hrbig { font-size: 40px; font-weight: 700; color: #ff6b6b; font-variant-numeric: tabular-nums; line-height: 1.1; }
+/* Heart-rate zones: a small tag, the big readout in its zone's colour, where you are against a timer's target. */
+.ztag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; color: #fff; vertical-align: 2px; font-style: normal; }
+.ztag.z1 { background: #5b6572; } .ztag.z2 { background: #3987e5; } .ztag.z3 { background: #199e70; } .ztag.z4 { background: #c98a1e; } .ztag.z5 { background: #d95926; }
+.hrbig.z1 { color: #a3adba; } .hrbig.z2 { color: #5aa5f5; } .hrbig.z3 { color: #2fc58f; } .hrbig.z4 { color: #f0b13f; } .hrbig.z5 { color: #ff6b4a; }
+.ivhr .hrok, .ivhr .hrlow, .ivhr .hrhigh { font-size: 17px; font-weight: 600; margin: 4px 0; }
+.hrok { color: var(--good); } .hrlow { color: #f0b13f; } .hrhigh { color: #ff6b4a; }
+.ivcheck { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 15px; }
+.ivcheck input { width: 20px; height: 20px; }
+table.hrtable { width: 100%; border-collapse: collapse; margin: 6px 0; font-variant-numeric: tabular-nums; }
+table.hrtable th, table.hrtable td { text-align: left; padding: 5px 4px; border-bottom: 1px solid var(--line, #2a313a); font-size: 14px; }
+table.hrtable th { color: var(--muted); font-weight: 500; }
+.hrrounds { padding: 4px 0 0; }
+.card.hrweek { padding: 10px 14px; color: var(--muted); }

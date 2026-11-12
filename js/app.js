@@ -836,18 +836,62 @@ HR.onChange(live => {
   const big = document.getElementById('iv-hr');
   if (big) big.innerHTML = hrBigInner();
 });
+const hrBasis = () => HR.basis(state.settings);
+const zoneTag = bpm => { const z = HR.zoneOf(hrBasis(), bpm); return z ? ` <span class="ztag z${z}">Z${z}</span>` : ''; };
 const hrPillInner = () => {
   const s = HR.live.status;
-  if (s === 'live') return HR.fresh() ? `♥ <b>${esc(HR.live.bpm)}</b>` : '♥ …';
+  if (s === 'live') return HR.fresh() ? `♥ <b>${esc(HR.live.bpm)}</b>${zoneTag(HR.live.bpm)}` : '♥ …';
   return s === 'connecting' ? '♥ Connecting…' : s === 'lost' ? '♥ Reconnecting…' : '♥ Heart rate';
 };
 // The live heart rate, or a button to connect the strap (nothing where the browser can't reach Bluetooth).
 const hrPill = () => (HR.supported() ? `<button class="hrpill ${esc(HR.live.status)}" data-act="hrTap" aria-label="Heart rate strap">${hrPillInner()}</button>` : '');
-// The interval timer's big readout: the bpm, and the workout's average and peak so far.
+// The interval timer's big readout: the bpm in its zone's colour with % of max, where you are against the timer's target,
+// and the average and peak so far.
 function hrBigInner() {
   if (!HR.fresh()) return '';
+  const b = hrBasis(), bpm = HR.live.bpm, z = HR.zoneOf(b, bpm);
   const sm = HR.summary(hrTarget()?.hr);
-  return `<span class="hrbig">♥ ${esc(HR.live.bpm)}</span>${sm ? `<span class="meta">avg ${esc(sm.avg)} · peak ${esc(sm.max)}</span>` : ''}`;
+  const run = state.intervalRun;
+  let status = '';
+  const tgt = run?.cfg.hr && HR.targetBpm(b, run.cfg.hr);
+  if (tgt) {
+    const at = I.phaseAt(I.phases(run.cfg), I.elapsed(run));
+    const mark = run.marks?.at(-1);
+    if (at?.phase.kind === 'work') {
+      const secs = mark?.kind === 'work' ? HR.secondsIn(hrTarget()?.hr, tgt.lo, tgt.hi, mark.at, Date.now() + 1) : 0;
+      status = bpm < tgt.lo ? `<span class="hrlow">Below ${esc(tgt.lo)}${run.cfg.hr.hold ? ' · clock waits for you' : ' · push'}</span>`
+        : tgt.hi && bpm > tgt.hi ? `<span class="hrhigh">Above ${esc(tgt.hi)} · ease off</span>`
+        : `<span class="hrok">At target${secs ? ` · ${clock(secs)} this round` : ''}</span>`;
+    } else status = `<span class="meta">Target ${esc(HR.targetText(run.cfg.hr))} · ${esc(tgt.lo)}${tgt.hi ? `-${esc(tgt.hi)}` : '+'} bpm</span>`;
+  }
+  return `<span class="hrbig ${z ? `z${z}` : ''}">♥ ${esc(bpm)}</span>
+    ${b ? `<span class="meta">${esc(Math.round(HR.pctOf(b, bpm)))}% ${b.reserve ? 'of reserve' : 'of max'}${z ? ` · Z${z} ${esc(HR.ZONES[z - 1].name)}` : ''}</span>` : ''}
+    ${status}${sm ? `<span class="meta">avg ${esc(sm.avg)} · peak ${esc(sm.max)}</span>` : ''}`;
+}
+// Minutes in zone 2 and at 80% and up, for a recording: "Z2 32 min · 80%+ 9 min" ('' without a max or the minutes).
+function zoneText(rec) {
+  const b = hrBasis();
+  if (!b || !rec) return '';
+  const zt = HR.zoneTimes(rec, b), m = s => Math.round(s / 60);
+  return [m(zt[2]) ? `Z2 ${m(zt[2])} min` : '', m(zt[4] + zt[5]) ? `80%+ ${m(zt[4] + zt[5])} min` : ''].filter(Boolean).join(' · ');
+}
+// This week's heart-rate work: "Zone 2 42 min · 80%+ 12 min this week" ('' with none).
+function zoneWeekText(from, to) {
+  const b = hrBasis();
+  if (!b) return '';
+  const zt = [0, 0, 0, 0, 0, 0];
+  for (const s of state.sessions) if (s.hr) HR.zoneTimes(s.hr, b, from, to).forEach((x, i) => { zt[i] += x; });
+  const z2 = Math.round(zt[2] / 60), hi = Math.round((zt[4] + zt[5]) / 60);
+  return z2 || hi ? `Zone 2 ${z2} min · 80%+ ${hi} min this week` : '';
+}
+// One timer block's rounds: "Rounds at 80%+: 3:10 · 3:40 · 4:00 · drop in rest 24 · 26".
+function roundsText(b) {
+  const r = b.hrRounds;
+  if (!r?.length) return '';
+  const tt = b.hrTarget ? `at ${HR.targetText(b.hrTarget)}` : 'avg';
+  const vals = r.map(x => (b.hrTarget ? (x.atTarget != null ? clock(x.atTarget) : '–') : x.avg ?? '–')).join(' · ');
+  const drops = r.map(x => x.drop).filter(x => x != null);
+  return `Rounds ${tt}: ${vals}${drops.length ? ` · drop in rest ${drops.join(' · ')}` : ''}`;
 }
 // "♥ 138 avg · 171 peak" for a workout that has a recording, else ''.
 const hrText = rec => { const sm = HR.summary(rec); return sm ? `♥ ${sm.avg} avg · ${sm.max} peak` : ''; };
@@ -869,11 +913,26 @@ function viewTimer() {
       <div class="row2 fields">${field('rounds', 'Rounds', d.rounds)}${field('sets', 'Sets', d.sets)}</div>
       <div class="row2 fields">${field('setRest', 'Rest between sets', clock(d.setRest))}${field('prep', 'Get ready', clock(d.prep))}</div>
       ${sets}
+      ${ivHrFields(d)}
       <p class="meta">${esc(I.describe(d))}</p>
       <div class="brow"><button class="primary big" data-act="ivStart">Start</button></div>
       <div class="brow"><button class="small" data-act="ivSave">${d.presetId && presets.some(p => p.id === d.presetId && !p.id.startsWith('iv-')) ? 'Save changes' : 'Save as a timer'}</button>
         ${d.presetId && !d.presetId.startsWith('iv-') ? '<button class="small quiet" data-act="ivDel">Delete</button>' : ''}</div>
     </div>`;
+}
+
+// The timer's heart-rate target: a range for the work intervals, whether the clock waits for you to reach it, and beeps.
+const HR_TARGETS = [['', 'None'], ['60-70', 'Zone 2 · 60-70%'], ['70-80', '70-80%'], ['80', '80%+'], ['85', '85%+'], ['85-95', '85-95%'], ['90', '90%+']];
+function ivHrFields(d) {
+  if (!HR.supported() && !d.hr) return '';
+  const cur = d.hr ? `${d.hr.lo}${d.hr.hi ? `-${d.hr.hi}` : ''}` : '';
+  const list = HR_TARGETS.some(([v]) => v === cur) ? HR_TARGETS : [...HR_TARGETS, [cur, `${HR.targetText(d.hr)}`]];
+  const b = hrBasis(), tgt = HR.targetBpm(b, d.hr);
+  const box = (k, label) => `<label class="ivcheck"><input type="checkbox" data-ivhr="${esc(k)}" ${d.hr?.[k] ? 'checked' : ''}> ${label}</label>`;
+  return `<div class="field"><label for="iv-hr">Heart rate during work</label>
+      <select id="iv-hr" data-ivhr="target">${opts(list, cur)}</select></div>
+    ${d.hr ? `<p class="meta">${tgt ? `${tgt.lo}${tgt.hi ? `-${tgt.hi}` : '+'} bpm for you` : 'Set your max heart rate in Settings → You to use a target.'}</p>
+      ${box('hold', 'Clock runs only at the target')}${box('alert', 'Beep when I drift out of it')}` : ''}`;
 }
 
 function viewIntervalRun(run) {
@@ -892,7 +951,7 @@ function ivRunInner(run, list, at) {
   const ex = exOf(p.exerciseId)?.name ?? '';
   const next = at.next ? `Next: ${IV_LABEL[at.next.kind]}${at.next.kind === 'work' ? ` · ${esc(exOf(at.next.exerciseId)?.name ?? '')}` : ''}` : 'Last one';
   return `<div class="ivfill" style="width:${esc(Math.min(100, at.frac * 100))}%"></div>
-    <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}</div>
+    <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}${run.cfg.hr?.hold && p.kind === 'work' && HR.fresh() && HR.live.bpm < (HR.targetBpm(hrBasis(), run.cfg.hr)?.lo ?? 0) ? ' · waiting' : ''}</div>
     <div class="ivclock">${clock(at.rem)}</div>
     <div class="ivsub">${p.kind === 'prep' ? esc(ex) : `${esc(ex)} · round ${p.round} of ${c.rounds}${c.sets > 1 ? ` · set ${p.set} of ${c.sets}` : ''}`}</div>
     <div class="ivnext">${next}</div>`;
@@ -912,7 +971,24 @@ function viewIntervalLog(lg) {
       return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')} · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}</label>
         ${unitWord ? `<input id="iv-total-${esc(d.set)}" class="num" inputmode="numeric" data-ivtotal="${esc(d.set)}" value="${esc(lg.totals?.[d.set] ?? '')}" placeholder="total ${esc(unitWord)}">` : `<span class="meta">${lg.cfg.work}s a round</span>`}</div>`;
     }).join('')}
+    ${ivRoundsTable(lg)}
     <div class="brow"><button class="primary big" data-act="ivLog">Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
+}
+
+// The run's heart rate, round by round (with a recording): average, time at the target, and the drop over the rest.
+const ivStats = lg => {
+  const rec = lg.hr ?? currentSession()?.hr;
+  return rec && lg.marks?.length ? HR.intervalStats(rec, lg.marks, HR.targetBpm(hrBasis(), lg.cfg.hr), lg.endAt ?? Date.now()) : [];
+};
+function ivRoundsTable(lg) {
+  const st = ivStats(lg).filter(x => x.avg);
+  if (!st.length) return '';
+  const rec = lg.hr ?? currentSession()?.hr, from = lg.marks[0]?.at, sm = HR.summary(rec, from, (lg.endAt ?? Date.now()) + 1);
+  const t = lg.cfg.hr;
+  return `<div class="label">Heart rate${sm ? ` · avg ${esc(sm.avg)} · peak ${esc(sm.max)}` : ''}</div>
+    <table class="hrtable"><thead><tr><th>Round</th><th>Avg</th><th>Peak</th>${t ? `<th>At ${esc(HR.targetText(t))}</th>` : ''}<th>Drop</th></tr></thead>
+    <tbody>${st.map(x => `<tr><td>${lg.cfg.sets > 1 ? `${esc(x.set)}.` : ''}${esc(x.round)}</td><td>${esc(x.avg)}</td><td>${esc(x.max)}</td>${t ? `<td>${x.atTarget != null ? clock(x.atTarget) : '–'} of ${clock(x.secs)}</td>` : ''}<td>${x.drop != null ? esc(x.drop) : '–'}</td></tr>`).join('')}</tbody></table>
+    <p class="meta">Drop: how far your heart rate fell over the rest after the round. A bigger drop as you get fitter is a good sign.</p>`;
 }
 
 // A scheme for a block of timer rounds (kept, so the block has one; never suggested: manualOnly).
@@ -933,6 +1009,7 @@ function logIntervals(lg) {
   const cfg = I.clean(lg.cfg), done = I.roundsDone(I.phases(cfg), lg.ms);
   if (!done.length) return 0;
   const open = currentSession();
+  const stats = ivStats(lg);
   const s = open ?? { id: L.uid(), day: L.dayKey(lg.startedAt), checkinAt: lg.startedAt, firstSetAt: null, status: 'done', source: 'interval',
     locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round(I.totalSecs(cfg) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
   let n = 0;
@@ -943,6 +1020,9 @@ function logIntervals(lg) {
     const reps = I.spread(lg.totals?.[d.set], d.rounds.length);
     const sc = intervalScheme(cfg, tier, reps[0]);
     const b = { id: L.uid(), tier, slotId: slotIdFor(ex.id, tier), exerciseId: ex.id, schemeId: sc.id, swaps: [], interval: cfg.name };
+    // Heart rate per round, kept on the block: { round, avg, max, atTarget (s), secs, drop }.
+    const mine = stats.filter(x => x.set === d.set && x.avg).map(({ set, ...x }) => x);
+    if (mine.length) { b.hrRounds = mine; if (cfg.hr) b.hrTarget = { lo: cfg.hr.lo, hi: cfg.hr.hi }; }
     s.blocks.push(b);
     d.rounds.forEach((r, i) => {
       state.sets.push({ id: L.uid(), sessionId: s.id, blockId: b.id, exerciseId: ex.id, tier, schemeId: sc.id, load: null,
@@ -962,12 +1042,30 @@ function logIntervals(lg) {
 let ivLast = null;
 function tickInterval() {
   const run = state.intervalRun;
-  if (!run || run.pausedAt) return;
+  if (!run || run.pausedAt) { if (run) run.lastTick = null; return; }
+  const now = Date.now(), dt = run.lastTick ? Math.min(2000, now - run.lastTick) : 0;
+  run.lastTick = now;
+  // A heart-rate target: below it with "clock runs only at the target", the work clock waits; drifting out with beeps on
+  // (10 seconds, so a blip doesn't sound), a low double beep.
+  const tgt = run.cfg.hr && HR.fresh() ? HR.targetBpm(hrBasis(), run.cfg.hr) : null;
+  const pre = I.phaseAt(I.phases(run.cfg), I.elapsed(run));
+  if (tgt && pre?.phase.kind === 'work') {
+    const bpm = HR.live.bpm;
+    if (run.cfg.hr.hold && bpm < tgt.lo) run.pausedMs = (run.pausedMs || 0) + dt;
+    const out = bpm < tgt.lo || (tgt.hi && bpm > tgt.hi);
+    if (out && run.cfg.hr.alert) {
+      run.outSince ??= now;
+      if (now - run.outSince >= 10e3 && !run.outBeeped) { run.outBeeped = true; beep(2, 440); if (timerCfg().vibrate) navigator.vibrate?.([400, 150, 400]); }
+    } else { run.outSince = null; run.outBeeped = false; }
+  }
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
+  // Where each phase began on the clock on the wall (holds and pauses move them), for the rounds' heart-rate results.
+  run.marks ??= [];
+  if (at && run.marks.at(-1)?.i !== at.i) run.marks.push({ i: at.i, kind: at.phase.kind, set: at.phase.set, round: at.phase.round, at: now });
   if (!at) {
     beep(3, 880);
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
-    ui.ivLog = { cfg: run.cfg, startedAt: run.startedAt, ms: I.totalSecs(run.cfg) * 1000, totals: {}, hr: run.hr ?? null };
+    ui.ivLog = { cfg: run.cfg, startedAt: run.startedAt, ms: I.totalSecs(run.cfg) * 1000, totals: {}, hr: run.hr ?? null, marks: run.marks ?? [], endAt: now };
     state.intervalRun = null; ivLast = null;
     setWakeLock(false);
     save(); render();
@@ -983,6 +1081,8 @@ function tickInterval() {
   if (at.rem <= 3 && run.beeped !== `${at.i}:${at.rem}`) { run.beeped = `${at.i}:${at.rem}`; beep(1, 660); }
   const el = document.getElementById('iv-run');
   if (el && ui.tab === 'timer') { el.className = `ivrun ${at.phase.kind}`; el.innerHTML = ivRunInner(run, list, at); }
+  const hrEl = document.getElementById('iv-hr');
+  if (hrEl && ui.tab === 'timer') hrEl.innerHTML = hrBigInner();
 }
 setInterval(tickInterval, 250);
 
@@ -1678,6 +1778,8 @@ function viewWeek() {
   if (ui.reviewUndo) h += `<div class="banner">Goals changed. <button class="link" data-act="reviewUndo">Undo</button></div>`;
   h += lastWeekCard();
   h += weekBlockCard();
+  const wkZones = zoneWeekText(c.start, c.end);
+  if (wkZones) h += `<div class="card hrweek">♥ ${esc(wkZones)}</div>`;
   const owned = B.ownedSlotIds(state);
   const allSlots = [...c.slots.values()].sort((a, b) => a.slot.tier.localeCompare(b.slot.tier) || (b.slot.priority - a.slot.priority));
   const slots = allSlots.filter(r => !owned.has(r.slot.id));
@@ -1984,7 +2086,7 @@ function viewHistory(hs) {
         if (mins > 0) bits.push(`${mins} min`);
       }
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
-      if (s.hr) bits.push(hrText(s.hr));
+      if (s.hr) bits.push(hrText(s.hr), zoneText(s.hr));
       if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
     } else {
       bits.push(progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
@@ -1997,9 +2099,10 @@ function viewHistory(hs) {
         return `<div class="histex"><span class="tier MOB">${it.def ? 'JUMP' : 'MOB'}</span><span class="grow"><span class="name">${esc(ex?.name ?? '?')}</span>
           <span class="meta">${esc(ex ? M.itemText(ex, it, unit()) : '')}${it.note ? ` · “${esc(it.note)}”` : ''}</span></span></div>`;
       }).join('');
+    const rounds = (s?.blocks || []).map(roundsText).filter(Boolean).map(t => `<div class="meta hrrounds">♥ ${esc(t)}</div>`).join('');
     const editable = s && s.status !== 'open' && s.status !== 'paused';
     return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span>
-      ${editable ? `<span class="brow">${s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${esc(s.id)}">Continue</button>` : ''}<button class="small" data-act="histEdit" data-id="${esc(s.id)}">Edit</button></span>` : ''}</div>${lines}</div>`;
+      ${editable ? `<span class="brow">${s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${esc(s.id)}">Continue</button>` : ''}<button class="small" data-act="histEdit" data-id="${esc(s.id)}">Edit</button></span>` : ''}</div>${lines}${rounds}</div>`;
   };
   return `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
     ${histTabs(hs.mode)}
@@ -2092,6 +2195,19 @@ function viewProgress() {
     h += chartCard('hr', 'Heart rate per workout', `Avg <b>${Math.round(hrs.reduce((x, w) => x + w.avg, 0) / hrs.length)} bpm</b> · highest peak ${Math.max(...hrs.map(w => w.max))}`,
       CH.lineChart('hr', 'Average heart rate per workout', hrs.map(w => ({ t: w.t, v: w.avg, tip: { value: `${w.avg} bpm avg`, title: fmtShortDay(w.t), sub: `peak ${w.max} · ${w.minutes} min recorded` } }))),
       { head: ['Workout', 'Avg', 'Peak', 'Minutes'], rows: hrs.map(w => [fmtShortDay(w.t), w.avg, w.max, w.minutes]) });
+    const hb = hrBasis();
+    if (hb) {
+      const zk = HR.ZONES.map(z => [`Z${z.n}`, `Z${z.n} ${z.name.split(' ·')[0]}`]);
+      const wz = PG.weekly(state, from, to).map(w => {
+        const zt = [0, 0, 0, 0, 0, 0];
+        for (const s of state.sessions) if (s.hr) HR.zoneTimes(s.hr, hb, w.start, w.end).forEach((x, i) => { zt[i] += x; });
+        return { start: w.start, m: zt.map(x => Math.round(x / 60)) };
+      });
+      const avgZ2 = Math.round(wz.reduce((x, w) => x + w.m[2], 0) / Math.max(1, wz.length)), avgHi = Math.round(wz.reduce((x, w) => x + w.m[4] + w.m[5], 0) / Math.max(1, wz.length));
+      h += chartCard('zones', 'Minutes by heart-rate zone, per week', `Zone 2 avg <b>${avgZ2} min</b> a week · 80%+ ${avgHi} min`,
+        CH.columnChart('zones', 'Minutes in each heart-rate zone per week', wz.map(w => ({ t: w.start, parts: zk.map(([k], i) => ({ key: k, v: w.m[i + 1] })), tip: { value: `${w.m.slice(1).reduce((a, b) => a + b, 0)} min`, title: weekLabel(w.start), sub: zk.map(([k], i) => `${k} ${w.m[i + 1]}`).join(' · ') } })), { fmt: v => `${v}` }),
+        { head: ['Week', ...zk.map(([k]) => k)], rows: wz.map(w => [weekLabel(w.start), ...w.m.slice(1)]) }, legend(zk));
+    }
   }
 
   // Week by week: sets by tier, and how much of your goals you hit.
@@ -2283,6 +2399,8 @@ function settingsYou() {
       ${frow('Changeover (min)', numIn('settings.changeover', st.changeover ?? 2), 'setup time per exercise')}
       ${frow('Week starts on', `<select data-bind="settings.weekStartDay" data-type="num">${opts(WEEKDAYS.map((d, i) => [i, d]), st.weekStartDay)}</select>`)}
     </div>
+    <div class="label">Heart rate</div>
+    <div class="menu">${hrSettingsRows()}</div>
     <div class="label">Suggestions</div>
     <div class="menu">${frow('Power work on low-energy days', switchIn('settings.recovery.powerWhenTired', st.recovery?.powerWhenTired !== false), 'off: technique work instead')}
       ${frow('Rest what you trained yesterday', switchIn('settings.recovery.t1AfterT1', st.recovery?.t1AfterT1), 'alternate upper and lower days')}
@@ -2295,6 +2413,21 @@ function settingsYou() {
       ${paceRows()}
       <button class="menurow" data-act="paceReset"><span class="grow"><span class="name">Reset my pace</span>
         ${st.paceSince ? `<span class="meta">learning since ${esc(new Date(st.paceSince).toLocaleDateString())}</span>` : ''}</span></button></div>`;
+}
+
+// Max and resting heart rate, the zone method, and your zones in bpm.
+function hrSettingsRows() {
+  const st = state.settings, b = hrBasis();
+  const top = Math.max(0, ...state.sessions.map(s => s.hr?.max ?? HR.summary(s.hr)?.max ?? 0));
+  const rows = [
+    frow('Max heart rate', numIn('settings.hrMax', st.hrMax, 'data-rerender placeholder="—"'), top ? `highest the strap has seen: ${top}` : 'or about 208 − 0.7 × your age'),
+    top && top !== st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(top)}"><span class="grow"><span class="name">Use ${esc(top)} as your max</span></span></button>` : '',
+    frow('Resting heart rate', numIn('settings.hrRest', st.hrRest, 'data-rerender placeholder="—"'), 'first thing in the morning'),
+    frow('Zones from', `<select data-bind="settings.hrMethod" data-rerender>${opts([['max', '% of max'], ['reserve', '% of reserve (needs resting)']], st.hrMethod ?? 'max')}</select>`),
+  ];
+  if (b) rows.push(...HR.ZONES.map(z => `<div class="frow"><span class="grow"><span class="name"><span class="ztag z${z.n}">Z${z.n}</span> ${esc(z.name)}</span>
+    <span class="meta">${z.lo}-${z.hi}%</span></span><b>${HR.bpmAt(b, z.lo)}-${HR.bpmAt(b, z.hi)}</b></div>`));
+  return rows.join('');
 }
 
 // What the estimates learned: changeover per location, and how many per-set times.
@@ -3909,7 +4042,7 @@ const actions = {
   },
   ivStop: () => {
     const r = state.intervalRun; if (!r) return;
-    ui.ivLog = { cfg: r.cfg, startedAt: r.startedAt, ms: I.elapsed(r), totals: {}, hr: r.hr ?? null };
+    ui.ivLog = { cfg: r.cfg, startedAt: r.startedAt, ms: I.elapsed(r), totals: {}, hr: r.hr ?? null, marks: r.marks ?? [], endAt: Date.now() };
     state.intervalRun = null; ivLast = null;
     setWakeLock(false);
     save(); render();
@@ -3923,6 +4056,7 @@ const actions = {
     toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}` : 'Nothing to log');
   },
   ivDiscard: () => { ui.ivLog = null; render(); },
+  hrUseTop: d => { state.settings.hrMax = Number(d.v); save(); render(); toast(`Max heart rate ${d.v}`); },
   // The heart-rate pill: connect the strap (Chrome's device list), or once it's on, offer to disconnect it.
   hrTap: async () => {
     if (HR.live.status === 'live' || HR.live.status === 'lost' || HR.live.status === 'connecting') {
@@ -4974,6 +5108,13 @@ document.addEventListener('change', e => {
     else if (['work', 'rest', 'setRest', 'prep'].includes(d.iv)) v[d.iv] = /^\s*0+(:0+)?\s*$/.test(el.value) ? 0 : parseMSS(el.value) ?? v[d.iv];
     else v[d.iv] = Number(el.value) || v[d.iv];
     Object.assign(v, I.clean(v), { presetId: v.presetId });
+    render();
+  } else if (d.ivhr !== undefined) {
+    const v = ivDraft();
+    if (d.ivhr === 'target') {
+      const [lo, hi] = el.value.split('-').map(Number);
+      v.hr = el.value ? I.cleanHr({ ...(v.hr || {}), lo, hi: hi || null }) : null;
+    } else if (v.hr) v.hr = { ...v.hr, [d.ivhr]: el.checked };
     render();
   } else if (d.ivex !== undefined) {
     const v = ivDraft();
