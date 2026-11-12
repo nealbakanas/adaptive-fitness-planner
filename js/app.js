@@ -11,6 +11,7 @@ import * as B from './block.js';
 import * as Mo from './morning.js';
 import * as PG from './progress.js';
 import * as CH from './charts.js';
+import * as HR from './hr.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -656,7 +657,7 @@ function renderTimer() {
   timerEl.className = over ? 'over' : '';
   timerEl.innerHTML = `<div class="fill" style="width:${esc(pct)}%"></div>
     <div class="tbody"><div class="tmain"><span class="tclock">${over ? '+' + clock(-rem) : clock(rem)}</span>
-      <span class="tlabel">${over ? 'Go' : 'Rest'}${t.next ? ` · next: ${esc(t.next)}` : ''}</span></div>
+      <span class="tlabel">${HR.fresh() ? `<span class="hrinline">♥ ${esc(HR.live.bpm)}</span> ` : ''}${over ? 'Go' : 'Rest'}${t.next ? ` · next: ${esc(t.next)}` : ''}</span></div>
       <div class="tbtns">${over ? '' : `<button data-act="timerAdj" data-d="-15">−15</button><button data-act="timerAdj" data-d="15">+15</button>`}
       <button data-act="timerStop">${over ? 'Done' : 'Skip'}</button></div></div>`;
 }
@@ -820,6 +821,37 @@ function ivExerciseOptions(sel) {
   return `<optgroup label="Conditioning">${o(cond)}</optgroup><optgroup label="Everything else">${o(rest)}</optgroup>`;
 }
 
+// ---------- heart rate (js/hr.js) ----------
+// While the strap is on, every reading goes on what you're doing: the open workout, else a running interval timer
+// (it moves to the workout the timer logs). Saved every half minute, not every beat.
+const hrTarget = () => currentSession() ?? state.intervalRun ?? null;
+let hrSaveAt = 0;
+HR.onChange(live => {
+  const target = live.status === 'live' && live.bpm ? hrTarget() : null;
+  if (target) {
+    target.hr = HR.addSample(target.hr, Date.now(), live.bpm);
+    if (Date.now() - hrSaveAt > 30e3) { hrSaveAt = Date.now(); save(); }
+  }
+  for (const el of document.querySelectorAll('.hrpill')) { el.className = `hrpill ${live.status}`; el.innerHTML = hrPillInner(); }
+  const big = document.getElementById('iv-hr');
+  if (big) big.innerHTML = hrBigInner();
+});
+const hrPillInner = () => {
+  const s = HR.live.status;
+  if (s === 'live') return HR.fresh() ? `♥ <b>${esc(HR.live.bpm)}</b>` : '♥ …';
+  return s === 'connecting' ? '♥ Connecting…' : s === 'lost' ? '♥ Reconnecting…' : '♥ Heart rate';
+};
+// The live heart rate, or a button to connect the strap (nothing where the browser can't reach Bluetooth).
+const hrPill = () => (HR.supported() ? `<button class="hrpill ${esc(HR.live.status)}" data-act="hrTap" aria-label="Heart rate strap">${hrPillInner()}</button>` : '');
+// The interval timer's big readout: the bpm, and the workout's average and peak so far.
+function hrBigInner() {
+  if (!HR.fresh()) return '';
+  const sm = HR.summary(hrTarget()?.hr);
+  return `<span class="hrbig">♥ ${esc(HR.live.bpm)}</span>${sm ? `<span class="meta">avg ${esc(sm.avg)} · peak ${esc(sm.max)}</span>` : ''}`;
+}
+// "♥ 138 avg · 171 peak" for a workout that has a recording, else ''.
+const hrText = rec => { const sm = HR.summary(rec); return sm ? `♥ ${sm.avg} avg · ${sm.max} peak` : ''; };
+
 function viewTimer() {
   if (state.intervalRun) return viewIntervalRun(state.intervalRun);
   if (ui.ivLog) return viewIntervalLog(ui.ivLog);
@@ -829,7 +861,7 @@ function viewTimer() {
     <input id="iv-${esc(k)}" class="num" inputmode="${esc(k === 'rounds' || k === 'sets' ? 'numeric' : 'text')}" data-iv="${esc(k)}" value="${esc(val)}"></div>`;
   const sets = Array.from({ length: d.sets }, (_, i) => `<div class="field"><label for="iv-ex-${esc(i)}">${d.sets > 1 ? `Set ${i + 1}` : 'Exercise'}</label>
     <select id="iv-ex-${esc(i)}" data-ivex="${esc(i)}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`).join('');
-  return `<header class="top"><h1>Timer</h1></header>
+  return `<header class="top"><h1>Timer</h1><div class="hbtns">${hrPill()}</div></header>
     <div class="chips">${presets.map(p => `<button class="chip ${esc(d.presetId === p.id ? 'on' : '')}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
     <div class="card">
       <div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div>
@@ -846,8 +878,9 @@ function viewTimer() {
 
 function viewIntervalRun(run) {
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
-  return `<header class="top"><h1>${esc(run.cfg.name)}</h1></header>
+  return `<header class="top"><h1>${esc(run.cfg.name)}</h1><div class="hbtns">${hrPill()}</div></header>
     <div class="ivrun ${esc(at?.phase.kind ?? 'done')}" id="iv-run">${ivRunInner(run, list, at)}</div>
+    <div class="ivhr" id="iv-hr">${hrBigInner()}</div>
     <div class="brow ivbtns">${run.pausedAt ? '<button class="primary big" data-act="ivResume">Resume</button>' : '<button class="big" data-act="ivPause">Pause</button>'}
       <button class="big" data-act="ivSkip">Skip</button><button class="big danger" data-act="ivStop">Stop</button></div>`;
 }
@@ -920,6 +953,7 @@ function logIntervals(lg) {
   }
   const first = Math.min(...state.sets.filter(x => x.sessionId === s.id && x.done && x.loggedAt).map(x => x.loggedAt));
   if (!s.firstSetAt || first < s.firstSetAt) s.firstSetAt = first;
+  if (!open && lg.hr) s.hr = lg.hr; // with a workout open, the readings were already going on it
   if (!open) state.sessions.push(s);
   return n;
 }
@@ -933,7 +967,7 @@ function tickInterval() {
   if (!at) {
     beep(3, 880);
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
-    ui.ivLog = { cfg: run.cfg, startedAt: run.startedAt, ms: I.totalSecs(run.cfg) * 1000, totals: {} };
+    ui.ivLog = { cfg: run.cfg, startedAt: run.startedAt, ms: I.totalSecs(run.cfg) * 1000, totals: {}, hr: run.hr ?? null };
     state.intervalRun = null; ivLast = null;
     setWakeLock(false);
     save(); render();
@@ -1284,7 +1318,7 @@ function viewSession(s) {
   let h = `<header class="top"><div><h1>Today</h1><div class="sub">${esc(bits.join(' · '))}</div>
     ${s.skip?.length ? `<div class="sub">Skipping ${esc(s.skip.map(id => famOf(id)?.name).filter(Boolean).join(', '))}</div>` : ''}
     ${ready ? `<div class="sub ready">${esc(ready)}</div>` : ''}${burst ? '<div class="sub">Tick each set as you finish it to learn your pace.</div>' : ''}</div>
-    <div class="hbtns"><button class="small" data-act="moreTime">+ Time</button></div></header>`;
+    <div class="hbtns">${hrPill()}<button class="small" data-act="moreTime">+ Time</button></div></header>`;
   h += laterBanner(s);
   if (s.blockRun) h += `<div class="banner program">${esc(s.programLabel ?? 'Program')}${s.deload ? ' · deload' : ''}</div>`;
   if (s.painSwap?.length) h += `<div class="card muted">No jumps today (${esc(s.painSwap.join(', '))}): isometric holds instead.</div>`;
@@ -1950,6 +1984,7 @@ function viewHistory(hs) {
         if (mins > 0) bits.push(`${mins} min`);
       }
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
+      if (s.hr) bits.push(hrText(s.hr));
       if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
     } else {
       bits.push(progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
@@ -2049,6 +2084,15 @@ function viewProgress() {
   h += chartCard('energy', 'Energy by day', en.length ? `Avg <b>${(en.reduce((x, e) => x + e.v, 0) / en.length).toFixed(1)}</b> · ${low} low day${low === 1 ? '' : 's'}` : '',
     CH.lineChart('energy', 'Energy by day', en.map(e => ({ t: e.t, v: e.v, tip: { value: `${e.v} / 5`, title: fmtShortDay(e.t), sub: e.source === 'morning' ? 'morning check' : 'check-in' } })), { domain: [1, 5], fmt: v => String(v) }),
     { head: ['Day', 'Energy', 'From'], rows: en.map(e => [fmtShortDay(e.t), e.v, e.source]) });
+
+  // Heart rate per workout (a strap was on): average and peak.
+  const hrs = state.sessions.filter(s => s.hr && (s.firstSetAt ?? s.checkinAt) >= from && (s.firstSetAt ?? s.checkinAt) < to)
+    .map(s => ({ t: s.firstSetAt ?? s.checkinAt, ...HR.summary(s.hr) })).filter(x => x.avg).sort((a, b) => a.t - b.t);
+  if (hrs.length) {
+    h += chartCard('hr', 'Heart rate per workout', `Avg <b>${Math.round(hrs.reduce((x, w) => x + w.avg, 0) / hrs.length)} bpm</b> · highest peak ${Math.max(...hrs.map(w => w.max))}`,
+      CH.lineChart('hr', 'Average heart rate per workout', hrs.map(w => ({ t: w.t, v: w.avg, tip: { value: `${w.avg} bpm avg`, title: fmtShortDay(w.t), sub: `peak ${w.max} · ${w.minutes} min recorded` } }))),
+      { head: ['Workout', 'Avg', 'Peak', 'Minutes'], rows: hrs.map(w => [fmtShortDay(w.t), w.avg, w.max, w.minutes]) });
+  }
 
   // Week by week: sets by tier, and how much of your goals you hit.
   const wk = PG.weekly(state, from, to);
@@ -3865,7 +3909,7 @@ const actions = {
   },
   ivStop: () => {
     const r = state.intervalRun; if (!r) return;
-    ui.ivLog = { cfg: r.cfg, startedAt: r.startedAt, ms: I.elapsed(r), totals: {} };
+    ui.ivLog = { cfg: r.cfg, startedAt: r.startedAt, ms: I.elapsed(r), totals: {}, hr: r.hr ?? null };
     state.intervalRun = null; ivLast = null;
     setWakeLock(false);
     save(); render();
@@ -3879,6 +3923,18 @@ const actions = {
     toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}` : 'Nothing to log');
   },
   ivDiscard: () => { ui.ivLog = null; render(); },
+  // The heart-rate pill: connect the strap (Chrome's device list), or once it's on, offer to disconnect it.
+  hrTap: async () => {
+    if (HR.live.status === 'live' || HR.live.status === 'lost' || HR.live.status === 'connecting') {
+      return askConfirm(`Disconnect ${HR.live.name ?? 'the strap'}?`, 'What it recorded stays on the workout.', 'Disconnect', () => { HR.disconnect(); render(); });
+    }
+    try {
+      const name = await HR.connect();
+      if (state.settings.hrStrap !== name) { state.settings.hrStrap = name; save(); }
+      toast(`${name} connected`);
+    } catch (e) { toast(e.message); }
+    render();
+  },
   resume: d => {
     const cur = currentSession();
     if (cur) { cur.status = 'paused'; cur.pausedAt = Date.now(); }
@@ -5156,7 +5212,7 @@ if ('serviceWorker' in navigator) {
 let hiddenAt = null;
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') hiddenAt = Date.now();
-  else if (hiddenAt && Date.now() - hiddenAt > 30 * 60 * 1000 && !ui.sheet) location.reload();
+  else if (hiddenAt && Date.now() - hiddenAt > 30 * 60 * 1000 && !ui.sheet && HR.live.status === 'off') location.reload();
   else if (rollDay()) render();
 });
 
@@ -5184,4 +5240,5 @@ if (O.isNewUser(state)) ui.onboard = O.startDraft(state);
 render();
 if (!ui.onboard) requestPersist();
 Sync.start(handleSync);
+if (state.settings.hrStrap && HR.supported()) HR.reconnect(state.settings.hrStrap).then(ok => { if (ok) render(); });
 if (ui.setPage === 'data') openDataPage();

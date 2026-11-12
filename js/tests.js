@@ -18,6 +18,8 @@ import * as B from './block.js';
 import * as PG from './progress.js';
 import * as CH from './charts.js';
 import * as CAT from './categories.js';
+import * as HR from './hr.js';
+import { installFakeBluetooth } from './fake-bluetooth.js';
 
 const results = [];
 const pass = name => results.push(['PASS', name]), fail = (name, e) => results.push(['FAIL', `${name} — ${e.message}`]);
@@ -1805,6 +1807,72 @@ test('saved data stays small: finished workouts drop the builder\'s working, old
   eq([get('old').blocks.length, get('open').why[0].score], [1, 1.2], 'blocks kept; an open workout is left alone');
   ok(!Store.slimHistory(s, now), 'nothing more the second time');
 });
+// ---------- heart rate (js/hr.js) ----------
+
+test('heart rate: reads 8- and 16-bit measurements, and nothing that isn\'t one', () => {
+  const v = bytes => new DataView(new Uint8Array(bytes).buffer);
+  eq(HR.parseMeasurement(v([0x00, 72])), 72, '8-bit');
+  eq(HR.parseMeasurement(v([0x16, 142, 0x20, 0x03])), 142, '8-bit with contact and RR intervals after it');
+  eq(HR.parseMeasurement(v([0x01, 0x2c, 0x01])), 300 > 254 ? null : 300, 'a 16-bit value outside what a heart does');
+  eq(HR.parseMeasurement(v([0x01, 0xb4, 0x00])), 180, '16-bit');
+  eq([HR.parseMeasurement(v([0x00, 0])), HR.parseMeasurement(v([0x01, 5])), HR.parseMeasurement(null)], [null, null, null], 'no contact, too short, nothing');
+});
+test('heart rate: a recording averages each 5 seconds, keeps gaps, and is 15 seconds a sample once finished', () => {
+  const t0 = 1_000_000;
+  let r = null;
+  for (const [s, bpm] of [[0, 100], [1, 110], [4, 120], [5, 130], [20, 150]]) r = HR.addSample(r, t0 + s * 1000, bpm);
+  eq([r.step, r.v], [5, [110, 130, 0, 0, 150]], '0-5 s average 110, a gap, then 150');
+  eq(HR.summary(r), { avg: 130, max: 150, minutes: 0 });
+  r = HR.addSample(r, t0 + 21000, 170);
+  eq([r.v.at(-1), HR.summary(r).max], [160, 170], 'the peak is the highest beat, not the highest 5-second average');
+  r.v[4] = 150; r.n[4] = 1; r.max = 150;
+  eq(HR.summary(r, t0 + 5000, t0 + 10000), { avg: 130, max: 130, minutes: 0 }, 'over a window');
+  eq(HR.summary(HR.addSample(null, t0, 90), t0 + 1e6), null, 'nothing in the window');
+  const k = HR.resample(r);
+  eq([k.step, k.v, 'n' in k, k.max], [15, [120, 150], false, 150], 'finished: 15 s, the working counts gone, the peak kept');
+  eq(HR.points(r).map(p => p.v), [110, 130, 150], 'chart points skip the gaps');
+  eq(HR.addSample(r, t0 + 10 * 3600e3, 99).v.length, 5, 'a reading hours later is not this workout');
+});
+test('heart rate: finished workouts keep a 15-second recording (slimHistory); open ones are left alone', () => {
+  const s = seed(), now = Date.now();
+  let rec = null;
+  for (let i = 0; i < 60; i++) rec = HR.addSample(rec, now - 3600e3 + i * 1000, 120 + (i % 10));
+  s.sessions.push({ id: 'hr-done', status: 'done', firstSetAt: now - 3600e3, blocks: [], hr: structuredClone(rec) }, { id: 'hr-open', status: 'open', checkinAt: now, blocks: [], hr: structuredClone(rec) });
+  Store.slimHistory(s, now);
+  const done = s.sessions.find(x => x.id === 'hr-done').hr, open = s.sessions.find(x => x.id === 'hr-open').hr;
+  eq([done.step, done.v.length, 'n' in done, open.step, open.v.length], [15, 4, false, 5, 12]);
+});
+atest('heart rate: connects to the strap, follows its readings, reconnects after a drop, disconnects', async () => {
+  const strap = installFakeBluetooth();
+  const seen = [];
+  const off = HR.onChange(l => seen.push(l.status));
+  eq(HR.supported(), true);
+  eq(await HR.connect(), 'Powr Labs HR');
+  eq(strap.lastFilters, [{ services: ['heart_rate'] }], 'asks only for heart-rate straps');
+  eq([HR.live.status, strap.notifying], ['live', true]);
+  strap.beat(138);
+  eq([HR.live.bpm, HR.fresh()], [138, true]);
+  strap.beat(301);
+  eq(HR.live.bpm, 138, 'a garbled reading is ignored');
+  strap.drop();
+  eq([HR.live.status, HR.live.bpm, HR.fresh()], ['lost', null, false], 'dropped: reconnecting');
+  await new Promise(r => setTimeout(r, 1200));
+  eq([HR.live.status, strap.connects], ['live', 2], 'back after a second');
+  HR.disconnect();
+  eq(HR.live.status, 'off');
+  strap.drop();
+  await new Promise(r => setTimeout(r, 1200));
+  eq([HR.live.status, strap.connects], ['off', 2], 'no reconnecting after you disconnect');
+  ok(await HR.reconnect('Powr Labs HR'), 'the strap picked before comes back without the list');
+  HR.disconnect();
+  strap.cancel = true;
+  let msg = '';
+  try { await HR.connect(); } catch (e) { msg = e.message; }
+  ok(/No strap picked/.test(msg), msg);
+  off();
+  ok(seen.includes('connecting') && seen.includes('lost'));
+});
+
 atest('sync: the first upload, then nothing to do, then a change is pushed', async () => {
   const fake = globalThis.__fake = await signedInDevice();
   await withFake(async () => {
