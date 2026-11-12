@@ -1485,8 +1485,61 @@ step('plan tomorrow: preview tomorrow\'s workout, save it, start it the next day
   if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
 });
 
-// ---------- backup and data (async: the second copy lives in IndexedDB) ----------
+// ---------- heart rate (a fake strap: js/fake-bluetooth.js) ----------
 const tick = ms => new Promise(r => setTimeout(r, ms));
+try {
+  const strap = (await import('./fake-bluetooth.js')).installFakeBluetooth();
+  const S = () => store.state;
+  const pill = () => q('.hrpill');
+  click('[data-act=nav][data-tab=today]');
+  if (q('[data-act=recheck]')) click('[data-act=recheck]');
+  onlyAt('loc-basement');
+  click('[data-act=suggest]');
+  check('a workout shows the heart-rate button', /Heart rate/.test(pill()?.textContent ?? ''), pill()?.outerHTML);
+  click(pill()); await tick(50);
+  check('tapping it connects the strap and remembers it', /connected/.test(document.body.textContent) && S().settings.hrStrap === 'Powr Labs HR' && pill()?.classList.contains('live'));
+  strap.beat(128); strap.beat(131);
+  check('the live bpm shows on the workout', /♥ 131/.test(pill()?.textContent ?? ''), pill()?.textContent);
+  const s = S().sessions.filter(x => x.status === 'open').at(-1);
+  check('and goes on the workout as it records', HR_avg(s) >= 128 && HR_avg(s) <= 131, JSON.stringify(s.hr));
+  click(q('section.block .set:not(.warm) [data-act=check]'));
+  check('the rest bar shows it too', /♥ 131/.test(q('#timer')?.textContent ?? ''), q('#timer')?.textContent);
+  strap.drop(); await tick(20);
+  check('a dropped strap says so', /Reconnecting/.test(pill()?.textContent ?? ''));
+  await tick(1200);
+  strap.beat(140);
+  check('and comes back by itself', /♥ 140/.test(pill()?.textContent ?? ''), pill()?.textContent);
+  click('[data-act=finish]'); await tick(20);
+  if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=histOpen]');
+  check('History shows the workout\'s average and peak', /♥ \d+ avg · 140 peak/.test(text()), text().slice(0, 300));
+  click('[data-act=histMode][data-v=progress]');
+  check('Progress has a heart-rate chart', /Heart rate per workout/.test(text()));
+  click('[data-act=histClose]');
+  // The interval timer with no workout open: the readings go with the run, onto the workout it logs.
+  click('[data-act=nav][data-tab=timer]');
+  click('[data-act=ivStart]');
+  strap.beat(150); strap.beat(160);
+  check('the interval timer shows it big, with average and peak', /♥ 160/.test(q('#iv-hr')?.textContent ?? '') && /peak 160/.test(q('#iv-hr')?.textContent ?? ''), q('#iv-hr')?.textContent);
+  S().intervalRun.startedAt -= 60e3; // a minute in, so a round or two is done
+  click('[data-act=ivStop]');
+  click('[data-act=ivLog]');
+  const logged = S().sessions.filter(x => x.source === 'interval').at(-1);
+  check('the logged timer workout keeps the recording', logged?.hr && HR_max(logged) === 160, JSON.stringify(logged?.hr));
+  click(pill()); click('#sheet [data-act=confirmYes]');
+  check('disconnecting from the pill', pill()?.classList.contains('off') && /Heart rate/.test(pill()?.textContent ?? ''));
+  S().sessions = S().sessions.filter(x => x !== logged && x.id !== s.id);
+  S().sets = S().sets.filter(x => x.sessionId !== logged?.id && x.sessionId !== s.id);
+  store.save();
+  click('[data-act=nav][data-tab=today]');
+} catch (e) {
+  out.push(['FAIL', `heart rate — ${e.message}`]);
+}
+function HR_avg(s) { const v = (s?.hr?.v ?? []).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; }
+function HR_max(s) { return s?.hr?.max ?? 0; }
+
+// ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const V = await import('./vault.js');
 try {
   const st = () => store.state;

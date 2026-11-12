@@ -6,6 +6,7 @@ import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_R
 import { gsMobilityExercises, addMcgill } from './mobility.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
 import * as Vault from './vault.js';
+import { resample } from './hr.js';
 
 // Test pages set their own key so they never touch real data.
 const KEY = globalThis.AFP_STORAGE_KEY ?? 'afp.v1';
@@ -512,6 +513,8 @@ export function slimHistory(s, now = Date.now()) {
   const cutoff = now - SLIM_AFTER_WEEKS * 7 * 864e5;
   for (const x of s.sessions || []) {
     if (x.status !== 'done') continue;
+    // A heart-rate recording: every 15 seconds once the workout is over (every 5 while it runs).
+    if (x.hr && (x.hr.n || x.hr.step < 15)) { const r = resample(x.hr); if (r) x.hr = r; else delete x.hr; changed = true; }
     if ((x.firstSetAt ?? x.checkinAt ?? 0) < cutoff) {
       for (const k of ['why', 'focusNotes', 'ready', 'goalMinutes']) if (k in x) { delete x[k]; changed = true; }
     } else for (const w of x.why || []) if ('score' in w || 'why' in w) { delete w.score; delete w.why; changed = true; }
