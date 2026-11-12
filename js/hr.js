@@ -147,3 +147,80 @@ export function disconnect() {
 
 // A reading older than this isn't "now" any more (the strap stopped sending without dropping the connection).
 export const fresh = (t = Date.now()) => live.status === 'live' && live.bpm != null && t - live.at < 10e3;
+
+// ---------- zones ----------
+// Five zones as a share of your max heart rate (Settings → You), or of your heart-rate reserve (max − resting, the
+// Karvonen method) when you choose it and give a resting rate. Zone 2 (60-70%) is easy aerobic work you can hold for
+// an hour; 80% and up is threshold and VO2-max work.
+export const ZONES = [
+  { n: 1, lo: 50, hi: 60, name: 'Recovery' },
+  { n: 2, lo: 60, hi: 70, name: 'Zone 2 · aerobic base' },
+  { n: 3, lo: 70, hi: 80, name: 'Tempo' },
+  { n: 4, lo: 80, hi: 90, name: 'Threshold' },
+  { n: 5, lo: 90, hi: 100, name: 'VO2 max' },
+];
+
+// The basis for zones from settings: { max, rest, reserve } or null without a max.
+export function basis(settings) {
+  const max = Number(settings?.hrMax);
+  if (!(max >= 100 && max <= 240)) return null;
+  const rest = Number(settings?.hrRest);
+  const reserve = settings?.hrMethod === 'reserve' && rest >= 30 && rest < max - 20;
+  return { max, rest: reserve ? rest : 0, reserve };
+}
+// The bpm for a percentage, and the percentage for a bpm (of max, or of reserve).
+export const bpmAt = (b, pct) => Math.round(b.rest + (b.max - b.rest) * pct / 100);
+export const pctOf = (b, bpm) => (100 * (bpm - b.rest)) / (b.max - b.rest);
+// Zone 1-5 for a bpm, 0 below zone 1.
+export function zoneOf(b, bpm) {
+  if (!b || !(bpm > 0)) return 0;
+  const p = pctOf(b, bpm);
+  for (let i = ZONES.length - 1; i >= 0; i--) if (p >= ZONES[i].lo) return ZONES[i].n;
+  return 0;
+}
+// Seconds in each zone over [from, to): [below, z1, z2, z3, z4, z5].
+export function zoneTimes(rec, b, from = -Infinity, to = Infinity) {
+  const out = [0, 0, 0, 0, 0, 0];
+  if (!b || !rec?.v) return out;
+  rec.v.forEach((x, i) => {
+    const t = rec.t0 + i * rec.step * 1000;
+    if (x > 0 && t >= from && t < to) out[zoneOf(b, x)] += rec.step;
+  });
+  return out;
+}
+// Seconds with the heart rate in [lo, hi] (bpm; hi null for no ceiling) over [from, to).
+export function secondsIn(rec, lo, hi = null, from = -Infinity, to = Infinity) {
+  let s = 0;
+  (rec?.v ?? []).forEach((x, i) => {
+    const t = rec.t0 + i * rec.step * 1000;
+    if (x > 0 && t >= from && t < to && x >= lo && (hi == null || x <= hi)) s += rec.step;
+  });
+  return s;
+}
+// The last reading before a moment (the end of a round, the end of its rest), looking back up to 15 s; null without one.
+export function at(rec, t) {
+  if (!rec?.v?.length) return null;
+  const i = Math.ceil((t - rec.t0) / (rec.step * 1000)) - 1;
+  for (let d = 0; d * rec.step <= 15; d++) { const x = rec.v[i - d]; if (x > 0) return x; }
+  return null;
+}
+// A target range in bpm from one in percent ({ lo, hi } of max or reserve): { lo, hi } or null.
+export const targetBpm = (b, t) => (b && t?.lo ? { lo: bpmAt(b, t.lo), hi: t.hi ? bpmAt(b, t.hi) : null } : null);
+// "80%+", "60-70%"
+export const targetText = t => (!t?.lo ? '' : t.hi ? `${t.lo}-${t.hi}%` : `${t.lo}%+`);
+
+// Each work interval of a timer run, from the wall-clock marks the run kept ([{ kind, set, round, at }]):
+// [{ set, round, secs, avg, max, atTarget, drop }]. `drop`: how far the heart rate fell over the rest after it.
+export function intervalStats(rec, marks, bpmTarget, endAt) {
+  const out = [];
+  marks.forEach((m, k) => {
+    if (m.kind !== 'work') return;
+    const end = marks[k + 1]?.at ?? endAt;
+    const sm = summary(rec, m.at, end);
+    const next = marks[k + 1], restEnd = next && next.kind !== 'work' ? marks[k + 2]?.at ?? endAt : null;
+    const a = at(rec, end), b = restEnd ? at(rec, restEnd) : null;
+    out.push({ set: m.set, round: m.round, secs: Math.round((end - m.at) / 1000), avg: sm?.avg ?? null, max: sm?.max ?? null,
+      atTarget: bpmTarget ? secondsIn(rec, bpmTarget.lo, bpmTarget.hi, m.at, end) : null, drop: a && b ? a - b : null });
+  });
+  return out;
+}

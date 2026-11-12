@@ -6,6 +6,7 @@ export const W = 340, H = 180;
 const PAD = { l: 38, r: 12, t: 14, b: 24 };
 export const COLORS = {
   series: '#3987e5',        // one series: blue
+  Z1: '#5b6572', Z2: '#3987e5', Z3: '#199e70', Z4: '#e0a030', Z5: '#d95926', // heart-rate zones: easy to hard
   T1: '#d95926', T2: '#9085e9', T3: '#199e70', Other: '#5b6572', // tiers: the app's hues, stepped for the dark surface
   grid: '#2a313a', axis: '#3a434e', ink: '#8b97a6', surface: '#1a1f26',
 };

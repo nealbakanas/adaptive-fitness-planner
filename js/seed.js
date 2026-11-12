@@ -228,7 +228,7 @@ export function seed() {
   ];
 
   return splitCategories({
-    version: 31,
+    version: 32,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -237,6 +237,7 @@ export function seed() {
       increment: 5,
       kettlebells: [30, 40, 45, 53], // loads for kettlebell exercises snap to these
       recovery: { t1AfterT1: true, powerWhenTired: true }, // powerWhenTired off: a low-energy day makes power work technique
+      hrMax: null, hrRest: null, hrMethod: 'max', // heart-rate zones (js/hr.js): your max, resting rate, and % of max or of reserve
       t3Areas: false, // T3 goals as areas with no weekly count (logic.js isArea): off for new installs
       week: { workouts: null, minutes: null }, // your usual week for the goal budget; null = from your recent check-ins
       onboarded: false, // a new install starts with the setup (js/onboard.js)

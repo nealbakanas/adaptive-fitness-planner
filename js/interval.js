@@ -1,6 +1,7 @@
 // The interval timer (the Timer tab): Tabata, EMOM, 30/30 and anything between. Pure: no DOM, no storage.
-// A config is { name, work, rest, rounds, sets, setRest, prep, exercises } (seconds; `exercises`: an exercise id per set,
-// repeating when there are fewer than sets). A run is laid out as phases ahead of time, so where you are is just a
+// A config is { name, work, rest, rounds, sets, setRest, prep, exercises, hr } (seconds; `exercises`: an exercise id per set,
+// repeating when there are fewer than sets; `hr`: a heart-rate target for the work, { lo, hi } in % of max with a heart-rate
+// strap, plus `hold` (the work clock only runs at the target) and `alert` (beep when you drift out of it)). A run is laid out as phases ahead of time, so where you are is just a
 // matter of how long it has been running (pauses aside): it survives a reload or a locked phone.
 
 export const DEFAULT_PRESETS = [
@@ -8,7 +9,18 @@ export const DEFAULT_PRESETS = [
   { id: 'iv-tabata-2x6', name: 'Tabata 2 × 6', work: 20, rest: 10, rounds: 2, sets: 6, setRest: 60, prep: 10 }, // 20/10, 20/10, a minute's rest; six times
   { id: 'iv-emom-10', name: 'EMOM 10', work: 60, rest: 0, rounds: 10, sets: 1, setRest: 0, prep: 10 },
   { id: 'iv-30-30', name: '30/30 × 10', work: 30, rest: 30, rounds: 10, sets: 1, setRest: 0, prep: 10 },
+  // With a heart-rate strap: long steady aerobic work, and intervals held at 80% of max and up.
+  { id: 'iv-z2-45', name: 'Zone 2 · 45 min', work: 2700, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: 10, hr: { lo: 60, hi: 70, alert: true } },
+  { id: 'iv-4x4-80', name: '4 × 4 min at 80%+', work: 240, rest: 60, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 80, hi: null, hold: true } },
+  { id: 'iv-4x4-nor', name: 'Norwegian 4 × 4', work: 240, rest: 180, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 85, hi: 95 } },
 ];
+// The heart-rate target kept clean: lo 40-100%, hi above it or none; null without a lo.
+export function cleanHr(hr) {
+  const lo = Math.round(Number(hr?.lo));
+  if (!(lo >= 40 && lo <= 100)) return null;
+  const hi = Math.round(Number(hr?.hi));
+  return { lo, hi: hi > lo && hi <= 100 ? hi : null, hold: !!hr.hold, alert: !!hr.alert };
+}
 
 const n = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
 
@@ -20,6 +32,7 @@ export function clean(cfg = {}) {
     rounds: n(cfg.rounds, 1, 100, 8), sets: n(cfg.sets, 1, 20, 1),
     setRest: n(cfg.setRest, 0, 3600, 60), prep: n(cfg.prep, 0, 60, 10),
     exercises: Array.isArray(cfg.exercises) ? cfg.exercises.filter(Boolean) : [],
+    hr: cleanHr(cfg.hr),
   };
 }
 
@@ -86,6 +99,8 @@ export function spread(total, rounds) {
 const clock = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 export function describe(raw) {
   const c = clean(raw);
-  const each = c.rest ? `${c.work}s on / ${c.rest}s off × ${c.rounds}` : `every ${clock(c.work)} × ${c.rounds}`;
-  return `${each}${c.sets > 1 ? `, ${c.sets} sets${c.setRest ? ` with ${clock(c.setRest)} between` : ''}` : ''} · ${clock(totalSecs(c))}`;
+  const secs = x => (x >= 60 ? clock(x) : `${x}s`);
+  const each = c.rounds === 1 && !c.rest ? clock(c.work) : c.rest ? `${secs(c.work)} on / ${secs(c.rest)} off × ${c.rounds}` : `every ${clock(c.work)} × ${c.rounds}`;
+  const hr = c.hr ? ` at ${c.hr.hi ? `${c.hr.lo}-${c.hr.hi}%` : `${c.hr.lo}%+`} of max${c.hr.hold ? ' (clock runs at target)' : ''}` : '';
+  return `${each}${hr}${c.sets > 1 ? `, ${c.sets} sets${c.setRest ? ` with ${clock(c.setRest)} between` : ''}` : ''} · ${clock(totalSecs(c))}`;
 }

@@ -1527,6 +1527,45 @@ try {
   click('[data-act=ivLog]');
   const logged = S().sessions.filter(x => x.source === 'interval').at(-1);
   check('the logged timer workout keeps the recording', logged?.hr && HR_max(logged) === 160, JSON.stringify(logged?.hr));
+  // Zones: a max heart rate in Settings → You, then the 4 × 4 at 80%+ with the clock running only at the target.
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=you]');
+  check('Settings offers the highest heart rate seen as your max', !!q('[data-act=hrUseTop][data-v="160"]'), text().slice(0, 400));
+  const mx = q('input[data-bind="settings.hrMax"]');
+  mx.value = '190'; mx.dispatchEvent(new Event('change', { bubbles: true }));
+  check('and lists your zones in bpm', /Zone 2 · aerobic base/.test(text()) && /114-133/.test(text()) && S().settings.hrMax === 190, text().slice(0, 600));
+  click('[data-act=nav][data-tab=timer]');
+  click('[data-act=ivPreset][data-id=iv-4x4-80]');
+  check('the 4 × 4 timer has its heart-rate target, in your bpm', q('#iv-hr')?.value === '80' && /152\+ bpm for you/.test(text()) && q('[data-ivhr=hold]')?.checked, text().slice(0, 500));
+  click('[data-act=ivStart]');
+  click('[data-act=ivSkip]'); // past the get-ready
+  strap.beat(135);
+  const el0 = L0(); await tick(1100); strap.beat(136);
+  check('below the target the work clock waits', L0() - el0 < 400 && /Below 152 · clock waits for you/.test(q('#iv-hr')?.textContent ?? ''), `${L0() - el0} ms · ${q('#iv-hr')?.textContent}`);
+  strap.beat(158);
+  const el1 = L0(); await tick(1100); strap.beat(159);
+  check('at the target it runs, and says so', L0() - el1 > 700 && /At target/.test(q('#iv-hr')?.textContent ?? '') && /Z4/.test(q('#iv-hr')?.textContent ?? ''), `${L0() - el1} ms · ${q('#iv-hr')?.textContent}`);
+  // A round and its rest, as if they'd happened: four minutes, three of them at 152+, then a minute's rest falling to 130.
+  const H = await import('./hr.js'), run = S().intervalRun, t1 = Date.now() - 300e3;
+  run.hr = null;
+  for (let x = 0; x < 300; x += 5) run.hr = H.addSample(run.hr, t1 + x * 1000, x < 60 ? 140 : x < 240 ? 160 : 160 - Math.round((x - 240) / 2));
+  run.marks = [{ i: 0, kind: 'prep', set: 1, round: 1, at: t1 - 10e3 }, { i: 1, kind: 'work', set: 1, round: 1, at: t1 }, { i: 2, kind: 'rest', set: 1, round: 1, at: t1 + 240e3 }, { i: 3, kind: 'work', set: 1, round: 2, at: Date.now() - 1 }];
+  run.pausedMs = (run.pausedMs || 0) - 300e3; // the clock is five minutes on, so a round is done
+  click('[data-act=ivStop]');
+  check('after the run: each round\'s time at the target and the drop over the rest', /At 80%\+/.test(text()) && /3:00 of 4:00/.test(text()) && /4:0028$/.test(q('table.hrtable tbody tr')?.textContent ?? ''), q('table.hrtable')?.textContent);
+  click('[data-act=ivLog]');
+  const lb = S().sessions.filter(x => x.source === 'interval').at(-1);
+  check('kept on the logged block', lb?.blocks[0]?.hrRounds?.[0]?.atTarget === 180 && lb.blocks[0].hrTarget?.lo === 80, JSON.stringify(lb?.blocks[0]));
+  click('[data-act=nav][data-tab=week]');
+  check('the Week tab shows this week\'s zone minutes', /80%\+ \d+ min this week/.test(text()), text().slice(0, 300));
+  click('[data-act=histOpen]');
+  check('History shows the rounds at the target', /Rounds at 80%\+: 3:00/.test(text()), text().slice(0, 400));
+  click('[data-act=histMode][data-v=progress]');
+  check('Progress has minutes by zone per week', /Minutes by heart-rate zone/.test(text()));
+  click('[data-act=histClose]');
+  S().sessions = S().sessions.filter(x => x !== lb);
+  S().sets = S().sets.filter(x => x.sessionId !== lb?.id);
+  S().settings.hrMax = null;
+  click('[data-act=nav][data-tab=timer]');
   click(pill()); click('#sheet [data-act=confirmYes]');
   check('disconnecting from the pill', pill()?.classList.contains('off') && /Heart rate/.test(pill()?.textContent ?? ''));
   S().sessions = S().sessions.filter(x => x !== logged && x.id !== s.id);
@@ -1536,6 +1575,7 @@ try {
 } catch (e) {
   out.push(['FAIL', `heart rate — ${e.message}`]);
 }
+function L0() { const r = store.state.intervalRun; return r ? Date.now() - r.startedAt - (r.pausedMs || 0) : 0; }
 function HR_avg(s) { const v = (s?.hr?.v ?? []).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; }
 function HR_max(s) { return s?.hr?.max ?? 0; }
 

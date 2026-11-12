@@ -364,6 +364,13 @@ export function migrate(s) {
     splitCategories(s);
     s.version = 31;
   }
+  if (s.version < 32) {
+    // v32: heart-rate zones. Settings hrMax, hrRest and hrMethod arrive from the defaults above; the new timers (zone 2 and
+    // intervals at 80%+ of max) go in after yours, unless you have ones with their ids.
+    const presets = (s.intervals ??= { presets: [], last: null }).presets ??= [];
+    for (const p of DEFAULT_PRESETS) if (p.hr && !presets.some(x => x.id === p.id)) presets.push(structuredClone(p));
+    s.version = 32;
+  }
   return s;
 }
 
