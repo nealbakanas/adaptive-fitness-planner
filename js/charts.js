@@ -32,11 +32,11 @@ function frame(ticks, y, fmt) {
   return ticks.map(v => `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(v)}" y2="${y(v)}" stroke="${COLORS.grid}" stroke-width="1"/>
     <text x="${PAD.l - 6}" y="${y(v) + 4}" text-anchor="end" class="tick">${esc(fmt(v))}</text>`).join('');
 }
-// Three date labels along the bottom: first, middle, last.
-function dateAxis(xs, ts) {
+// Three date labels along the bottom: first, middle, last (or `xfmt`'s labels, e.g. minutes into a session).
+function dateAxis(xs, ts, fmt = fmtDay) {
   if (!xs.length) return '';
   const idx = [...new Set([0, Math.floor((xs.length - 1) / 2), xs.length - 1])];
-  return idx.map((i, k) => `<text x="${xs[i]}" y="${H - 6}" text-anchor="${k === 0 && idx.length > 1 ? 'start' : k === idx.length - 1 && idx.length > 1 ? 'end' : 'middle'}" class="tick">${esc(fmtDay(ts[i]))}</text>`).join('');
+  return idx.map((i, k) => `<text x="${xs[i]}" y="${H - 6}" text-anchor="${k === 0 && idx.length > 1 ? 'start' : k === idx.length - 1 && idx.length > 1 ? 'end' : 'middle'}" class="tick">${esc(fmt(ts[i]))}</text>`).join('');
 }
 
 const svgOpen = (id, label) => `<svg viewBox="0 0 ${W} ${H}" class="chartsvg" data-chart="${esc(id)}" role="img" aria-label="${esc(label)}">`;
@@ -44,7 +44,7 @@ const crosshair = `<line class="xhair" x1="0" x2="0" y1="${PAD.t}" y2="${H - PAD
 
 // A line over time. points: [{ t, v, tip }] in time order (tip: the readout's lines). Returns { svg, hits }.
 // `domain`: [lo, hi] to fix the y-axis (energy 1-5); otherwise it hugs the data with some room.
-export function lineChart(id, label, points, { domain = null, fmt = fmtNum, unit = '' } = {}) {
+export function lineChart(id, label, points, { domain = null, fmt = fmtNum, unit = '', xfmt = fmtDay } = {}) {
   if (!points.length) return { svg: '', hits: [] };
   const vs = points.map(p => p.v);
   let lo = domain ? domain[0] : Math.min(...vs), hi = domain ? domain[1] : Math.max(...vs);
@@ -62,7 +62,7 @@ export function lineChart(id, label, points, { domain = null, fmt = fmtNum, unit
   const svg = `${svgOpen(id, label)}${frame(ticks, y, fmt)}${crosshair}
     <path d="${path}" fill="none" stroke="${COLORS.series}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${endLabel}
     <circle class="hdot" r="5" fill="${COLORS.series}" stroke="${COLORS.surface}" stroke-width="2" visibility="hidden"/>
-    ${dateAxis(xs, points.map(p => p.t))}</svg>`;
+    ${dateAxis(xs, points.map(p => p.t), xfmt)}</svg>`;
   return { svg, hits: points.map((p, i) => ({ x: xs[i], y: y(p.v), tip: p.tip })) };
 }
 

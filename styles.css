@@ -572,3 +572,56 @@ table.hrtable th, table.hrtable td { text-align: left; padding: 5px 4px; border-
 table.hrtable th { color: var(--muted); font-weight: 500; }
 .hrrounds { padding: 4px 0 0; }
 .card.hrweek { padding: 10px 14px; color: var(--muted); }
+
+/* Timer setup: Intervals or Steady, the rest under More options. */
+.seg.ivmode { margin-bottom: 4px; }
+details.ivmore { margin: 10px 0 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+details.ivmore > summary { color: var(--accent); cursor: pointer; padding: 6px 0; font-size: 15px; }
+.ivtarget { font-size: 19px; color: var(--text); margin-top: 10px; font-variant-numeric: tabular-nums; }
+.ivtarget b { font-size: 24px; }
+.ivtarget.met b { color: var(--good); }
+.ivsum { margin-top: 10px; }
+
+/* Photos behind the running timer: each crossfades in over a blurred, filled copy of itself, so nothing is cropped. */
+#slides { position: fixed; inset: 0; z-index: 0; background: #000; overflow: hidden; }
+#slides[hidden] { display: none; }
+#slides .slide { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s ease; }
+#slides .slide.on { opacity: 1; }
+#slides .slide::before { content: ''; position: absolute; inset: -40px; background: var(--u) center / cover no-repeat; filter: blur(28px) brightness(.55); }
+#slides .slide img { position: relative; width: 100%; height: 100%; object-fit: contain; }
+body.slideshow #app { position: relative; z-index: 1; }
+body.slideshow #app .top h1, body.slideshow .ivhr { text-shadow: 0 1px 6px #000c; }
+body.slideshow .ivrun { background: #10131799; border-color: #ffffff22; backdrop-filter: blur(6px); }
+body.slideshow .ivbtns button, body.slideshow .hrpill, body.slideshow #app .brow .small { background: #10131799; backdrop-filter: blur(6px); }
+/* Photos bigger: the photo fills the top of the screen, the timer sits small and see-through at the bottom. */
+body.photofocus #slides .slide img { height: 58%; }
+body.photofocus #app { padding-top: 54vh; }
+body.photofocus #app .top { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 16px; right: 16px; max-width: 528px; margin: 0 auto; }
+body.photofocus #app .top h1 { font-size: 18px; }
+body.photofocus .ivrun { padding: 8px 12px; margin: 0 0 6px; background: #1013176b; }
+body.photofocus .ivphase { font-size: 13px; }
+body.photofocus .ivclock { font-size: 48px; }
+body.photofocus .ivnext, body.photofocus .ivsub { display: none; }
+body.photofocus .ivtarget { font-size: 15px; margin-top: 2px; } body.photofocus .ivtarget b { font-size: 18px; }
+body.photofocus .ivhr { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 4px 12px; margin: 2px 0 6px; }
+body.photofocus .ivhr .hrbig { font-size: 26px; }
+body.photofocus .ivhr .meta { display: none; }
+body.photofocus .ivhr .hrok, body.photofocus .ivhr .hrlow, body.photofocus .ivhr .hrhigh { font-size: 14px; margin: 0; }
+body.photofocus .ivbtns { flex-direction: row; flex-wrap: nowrap; gap: 8px; }
+body.photofocus .ivbtns button.big { flex: 1; min-height: 44px; padding: 6px 8px; font-size: 15px; }
+body.photofocus .slidesbtn { justify-content: center; margin-top: 2px; }
+
+/* The Heart tab: the live card, a thin bar of time in each zone, tiles, and sessions. */
+.heartlive { text-align: center; }
+.heartlive .hrbig { font-size: 56px; margin: 4px 0; }
+.trackhead { display: flex; justify-content: space-between; align-items: baseline; }
+.trackclock { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.zbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 0 4px; background: var(--line); gap: 1px; }
+.zbar span { display: block; min-width: 2px; }
+.zbar .z1 { background: #5b6572; } .zbar .z2 { background: #3987e5; } .zbar .z3 { background: #199e70; } .zbar .z4 { background: #e0a030; } .zbar .z5 { background: #d95926; }
+.zmins { display: flex; justify-content: space-between; gap: 4px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.zmins i { font-style: normal; }
+.hrsess .zbar { margin: 6px 0 0; height: 6px; }
+.hrsess .grow { min-width: 0; }
+.tile b { display: block; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile > span { color: var(--muted); font-size: 13px; }

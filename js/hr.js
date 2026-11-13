@@ -224,3 +224,41 @@ export function intervalStats(rec, marks, bpmTarget, endAt) {
   });
   return out;
 }
+
+// ---------- analytics ----------
+
+// Training load (Edwards' TRIMP): minutes in each zone times the zone's number, so 10 minutes in zone 4 count 40 and
+// an hour of zone 2 counts 120. Comparable between a lifting day, a volleyball game and intervals.
+export function load(rec, b, from = -Infinity, to = Infinity) {
+  const zt = zoneTimes(rec, b, from, to);
+  return Math.round(zt.reduce((sum, secs, z) => sum + (secs / 60) * z, 0));
+}
+
+// Calories from heart rate (Keytel et al., 2005), for heart rates in the exercise range; needs your weight (kg), age and
+// sex ('m' or 'f'). An estimate: within about 15-20% for most people. Null without what it needs.
+export function calories(rec, who, from = -Infinity, to = Infinity) {
+  const { kg, age, sex } = who ?? {};
+  if (!(kg > 30) || !(age >= 12) || !['m', 'f'].includes(sex) || !rec?.v) return null;
+  let kcal = 0;
+  rec.v.forEach((x, i) => {
+    const t = rec.t0 + i * rec.step * 1000;
+    if (!(x >= 80) || t < from || t >= to) return; // below about 80 bpm the formula isn't meant for it
+    const perMin = sex === 'm' ? (-55.0969 + 0.6309 * x + 0.1988 * kg + 0.2017 * age) / 4.184 : (-20.4022 + 0.4472 * x - 0.1263 * kg + 0.074 * age) / 4.184;
+    kcal += Math.max(0, perMin) * rec.step / 60;
+  });
+  return Math.round(kcal);
+}
+
+// Heart-rate drift over a steady effort: the second half's average against the first's, in %. Under about 5% at the same
+// effort means you stayed aerobic; more means the effort was above your aerobic threshold (or heat, or you were tired).
+// Needs 20 minutes of readings; { first, second, pct } or null.
+export function drift(rec, from = -Infinity, to = Infinity) {
+  const xs = (rec?.v ?? []).filter((x, i) => { const t = rec.t0 + i * rec.step * 1000; return x > 0 && t >= from && t < to; });
+  if (xs.length * (rec?.step ?? 0) < 20 * 60) return null;
+  const h = Math.floor(xs.length / 2), avg = a => a.reduce((s, x) => s + x, 0) / a.length;
+  const first = avg(xs.slice(0, h)), second = avg(xs.slice(h));
+  return { first: Math.round(first), second: Math.round(second), pct: Math.round(1000 * (second - first) / first) / 10 };
+}
+
+// 208 − 0.7 × age (Tanaka), the usual estimate of max heart rate when you haven't measured it.
+export const maxFromAge = age => (age >= 10 && age <= 100 ? Math.round(208 - 0.7 * age) : null);

@@ -12,6 +12,7 @@ import * as Mo from './morning.js';
 import * as PG from './progress.js';
 import * as CH from './charts.js';
 import * as HR from './hr.js';
+import * as Ph from './photos.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -24,7 +25,7 @@ const appEl = document.getElementById('app');
 const navEl = document.getElementById('nav');
 const sheetEl = document.getElementById('sheet');
 
-const TABS = [['today', 'Today'], ['week', 'Week'], ['timer', 'Timer'], ['library', 'Library'], ['plans', 'Plans'], ['more', 'Settings']];
+const TABS = [['today', 'Today'], ['week', 'Week'], ['timer', 'Timer'], ['heart', 'Heart'], ['library', 'Library'], ['plans', 'Plans'], ['more', 'Settings']];
 const INTENTS = [['auto', 'You pick'], ['heavy', 'Heavy'], ['sweat', 'Sweat'], ['easy', 'Easy']];
 const LEANS = [['either', 'Either'], ['upper', 'Upper body'], ['lower', 'Lower body']];
 const TIMES = [10, 15, 20, 30, 45, 60, 90];
@@ -442,24 +443,55 @@ function unlockAudio() {
   } catch { /* no audio support */ }
 }
 
+// Loud beeps (on unless you turn them off): a square wave with a fifth above it, an octave and more higher (2-3 kHz, where
+// the ear is keenest and most music is thinnest), squeezed by a compressor so it plays at full level. The phone's media
+// volume still caps it: the beeps and your music share that slider.
+let loudOut = null;
 function beep(count = 1, freq = 880) {
   if (!audioCtx || !timerCfg().sound) return;
-  const t0 = audioCtx.currentTime;
+  const loud = timerCfg().loud !== false;
+  if (loud && !loudOut) {
+    const comp = audioCtx.createDynamicsCompressor();
+    comp.threshold.value = -30; comp.knee.value = 0; comp.ratio.value = 20; comp.attack.value = 0.001; comp.release.value = 0.1;
+    const make = audioCtx.createGain(); make.gain.value = 2.5;
+    comp.connect(make).connect(audioCtx.destination);
+    loudOut = comp;
+  }
+  const t0 = audioCtx.currentTime, f = loud ? Math.min(3200, freq * 2.6) : freq, len = loud ? 0.26 : 0.2, gap = loud ? 0.34 : 0.3;
   for (let i = 0; i < count; i++) {
-    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, t0 + i * 0.3);
-    gain.gain.exponentialRampToValueAtTime(0.4, t0 + i * 0.3 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.3 + 0.2);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start(t0 + i * 0.3);
-    osc.stop(t0 + i * 0.3 + 0.22);
+    const at = t0 + i * gap;
+    for (const [mult, level] of loud ? [[1, 0.9], [1.5, 0.5]] : [[1, 0.4]]) {
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = loud ? 'square' : 'sine';
+      osc.frequency.value = f * mult;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(level, at + 0.01);
+      gain.gain.setValueAtTime(level, at + len - 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + len);
+      osc.connect(gain).connect(loud ? loudOut : audioCtx.destination);
+      osc.start(at);
+      osc.stop(at + len + 0.02);
+    }
   }
 }
-
-async function setWakeLock(on) {
+// Says it out loud (Timer → Say what's next), cutting off anything it was still saying. Android lowers your music for it.
+function say(text) {
+  if (!timerCfg().voice || !timerCfg().sound || !globalThis.speechSynthesis) return;
   try {
-    if (on && !wakeLock && timerCfg().keepAwake && 'wakeLock' in navigator) {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.1; u.volume = 1;
+    speechSynthesis.speak(u);
+  } catch { /* no voice here */ }
+}
+
+// Something on screen that you'd want to see without touching the phone: a rest timer, a workout, an interval timer, or
+// an activity you're tracking (its heart-rate readings stop when Chrome is hidden). The lock is let go only when none is.
+const wantAwake = () => !!(state.timer || currentSession() || state.intervalRun || state.hrTrack);
+async function setWakeLock(on) {
+  if (!on && wantAwake()) on = true;
+  try {
+    if (on && !wakeLock && timerCfg().keepAwake && 'wakeLock' in navigator && document.visibilityState === 'visible') {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => { wakeLock = null; });
     } else if (!on && wakeLock) {
@@ -638,7 +670,7 @@ function tickTimer() {
   }
   if (!t.alerted && rem <= 0) {
     t.alerted = true;
-    beep(3, 880);
+    beep(3, 880); say(t.next ? `Rest over. ${t.next}` : 'Rest over');
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
     save();
   }
@@ -679,7 +711,7 @@ function renderWork(t) {
 setInterval(tickTimer, 250);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return syncTimerToWorker(true);
-  if (state.timer || currentSession()) setWakeLock(true); // the browser drops the lock when hidden
+  if (wantAwake()) setWakeLock(true); // the browser drops the lock when the page is hidden: take it again on the way back
   tickTimer();
 });
 
@@ -695,10 +727,11 @@ function render() {
   }
   navEl.hidden = false;
   navEl.innerHTML = TABS.map(([k, t]) => `<button data-act="nav" data-tab="${esc(k)}" class="${esc(ui.tab === k ? 'on' : '')} ${esc(k === 'timer' && state.intervalRun ? 'live' : '')}" ${k === 'timer' && state.intervalRun ? 'aria-label="Timer, running"' : ''}>${t}</button>`).join('');
-  const views = { today: viewToday, week: viewWeek, timer: viewTimer, library: viewLibrary, plans: viewPlans, more: viewSettings };
+  const views = { today: viewToday, week: viewWeek, timer: viewTimer, heart: viewHeart, library: viewLibrary, plans: viewPlans, more: viewSettings };
   appEl.innerHTML = globalBanners() + views[ui.tab]();
   renderSheet();
   renderTimer();
+  syncSlides();
   if (ui.focus) {
     const el = appEl.querySelector(ui.focus);
     if (el) { el.focus(); el.setSelectionRange?.(el.value.length, el.value.length); }
@@ -824,7 +857,8 @@ function ivExerciseOptions(sel) {
 // ---------- heart rate (js/hr.js) ----------
 // While the strap is on, every reading goes on what you're doing: the open workout, else a running interval timer
 // (it moves to the workout the timer logs). Saved every half minute, not every beat.
-const hrTarget = () => currentSession() ?? state.intervalRun ?? null;
+// (An activity you're tracking on the Heart tab first: you started it on purpose.)
+const hrTarget = () => state.hrTrack ?? currentSession() ?? state.intervalRun ?? null;
 let hrSaveAt = 0;
 HR.onChange(live => {
   const target = live.status === 'live' && live.bpm ? hrTarget() : null;
@@ -835,6 +869,8 @@ HR.onChange(live => {
   for (const el of document.querySelectorAll('.hrpill')) { el.className = `hrpill ${live.status}`; el.innerHTML = hrPillInner(); }
   const big = document.getElementById('iv-hr');
   if (big) big.innerHTML = hrBigInner();
+  const hl = document.getElementById('heart-live');
+  if (hl) hl.innerHTML = heartLiveInner();
 });
 const hrBasis = () => HR.basis(state.settings);
 const zoneTag = bpm => { const z = HR.zoneOf(hrBasis(), bpm); return z ? ` <span class="ztag z${z}">Z${z}</span>` : ''; };
@@ -858,8 +894,8 @@ function hrBigInner() {
     const at = I.phaseAt(I.phases(run.cfg), I.elapsed(run));
     const mark = run.marks?.at(-1);
     if (at?.phase.kind === 'work') {
-      const secs = mark?.kind === 'work' ? HR.secondsIn(hrTarget()?.hr, tgt.lo, tgt.hi, mark.at, Date.now() + 1) : 0;
-      status = bpm < tgt.lo ? `<span class="hrlow">Below ${esc(tgt.lo)}${run.cfg.hr.hold ? ' · clock waits for you' : ' · push'}</span>`
+      const secs = !at.phase.steady && mark?.kind === 'work' ? HR.secondsIn(hrTarget()?.hr, tgt.lo, tgt.hi, mark.at, Date.now() + 1) : 0;
+      status = bpm < tgt.lo ? `<span class="hrlow">Below ${esc(tgt.lo)}${run.cfg.hr.hold ? ' · clock waits for you' : at.phase.steady ? ' · pick it up a little' : ' · push'}</span>`
         : tgt.hi && bpm > tgt.hi ? `<span class="hrhigh">Above ${esc(tgt.hi)} · ease off</span>`
         : `<span class="hrok">At target${secs ? ` · ${clock(secs)} this round` : ''}</span>`;
     } else status = `<span class="meta">Target ${esc(HR.targetText(run.cfg.hr))} · ${esc(tgt.lo)}${tgt.hi ? `-${esc(tgt.hi)}` : '+'} bpm</span>`;
@@ -901,47 +937,257 @@ function viewTimer() {
   if (ui.ivLog) return viewIntervalLog(ui.ivLog);
   const d = ivDraft();
   const presets = state.intervals?.presets ?? [];
-  const field = (k, label, val, hint = '') => `<div class="field"><label for="iv-${esc(k)}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
-    <input id="iv-${esc(k)}" class="num" inputmode="${esc(k === 'rounds' || k === 'sets' ? 'numeric' : 'text')}" data-iv="${esc(k)}" value="${esc(val)}"></div>`;
-  const sets = Array.from({ length: d.sets }, (_, i) => `<div class="field"><label for="iv-ex-${esc(i)}">${d.sets > 1 ? `Set ${i + 1}` : 'Exercise'}</label>
-    <select id="iv-ex-${esc(i)}" data-ivex="${esc(i)}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`).join('');
+  const steady = d.mode === 'steady';
+  const field = (k, label, val, hint = '', mode = 'text', ph = '') => `<div class="field"><label for="iv-${esc(k)}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
+    <input id="iv-${esc(k)}" class="num" inputmode="${esc(mode)}" data-iv="${esc(k)}" value="${esc(val)}" ${ph ? `placeholder="${esc(ph)}"` : ''}></div>`;
+  const exSel = (i, label) => `<div class="field"><label for="iv-ex-${esc(i)}">${label}</label>
+    <select id="iv-ex-${esc(i)}" data-ivex="${esc(i)}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`;
+  // Intervals: work, rest and rounds up front; sets of rounds, a rest between them and an exercise per set under More.
+  const main = steady
+    ? `<div class="row2 fields">${field('steadyMin', 'Minutes', d.work ? Math.round(d.work / 60) : '', '', 'numeric', 'until I stop')}${d.hr ? field('goalMin', 'Goal at target', d.hr.goal ?? '', '', 'numeric', 'minutes') : ''}</div>
+      ${exSel(0, 'Exercise')}`
+    : `<div class="row2 fields">${field('work', 'Work', clock(d.work))}${field('rest', 'Rest', clock(d.rest), '0: every minute')}</div>
+      <div class="row2 fields">${field('rounds', 'Rounds', d.rounds, '', 'numeric')}<div class="field">${d.sets === 1 ? exSel(0, 'Exercise').replace(/^<div class="field">|<\/div>$/g, '') : `<label>Exercises</label><p class="meta">one per set, under More</p>`}</div></div>`;
+  const more = `<details class="ivmore" ${ui.ivMore ? 'open' : ''} data-ivmore><summary>More options</summary>
+      ${steady ? '' : `<div class="row2 fields">${field('sets', 'Sets of rounds', d.sets, '', 'numeric')}${field('setRest', 'Rest between sets', clock(d.setRest))}</div>
+      ${d.sets > 1 ? Array.from({ length: d.sets }, (_, i) => exSel(i, `Set ${i + 1}`)).join('') : ''}`}
+      <div class="row2 fields">${field('prep', 'Get ready', clock(d.prep))}<div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div></div>
+    </details>`;
   return `<header class="top"><h1>Timer</h1><div class="hbtns">${hrPill()}</div></header>
     <div class="chips">${presets.map(p => `<button class="chip ${esc(d.presetId === p.id ? 'on' : '')}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
     <div class="card">
-      <div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div>
-      <div class="row2 fields">${field('work', 'Work', clock(d.work))}${field('rest', 'Rest', clock(d.rest), '0 = EMOM')}</div>
-      <div class="row2 fields">${field('rounds', 'Rounds', d.rounds)}${field('sets', 'Sets', d.sets)}</div>
-      <div class="row2 fields">${field('setRest', 'Rest between sets', clock(d.setRest))}${field('prep', 'Get ready', clock(d.prep))}</div>
-      ${sets}
+      <div class="seg ivmode"><button class="${esc(steady ? '' : 'on')}" data-act="ivMode" data-v="intervals">Intervals</button><button class="${esc(steady ? 'on' : '')}" data-act="ivMode" data-v="steady">Steady</button></div>
+      <p class="meta">${steady ? 'One stretch at a steady effort: zone 2, a long ride. Counts your time in the heart-rate target.' : 'Rounds of work and rest: 4 × 4 minutes, Tabata, every minute on the minute.'}</p>
+      ${main}
       ${ivHrFields(d)}
-      <p class="meta">${esc(I.describe(d))}</p>
+      ${more}
+      <p class="meta ivsum">${esc(I.describe(d))}</p>
       <div class="brow"><button class="primary big" data-act="ivStart">Start</button></div>
       <div class="brow"><button class="small" data-act="ivSave">${d.presetId && presets.some(p => p.id === d.presetId && !p.id.startsWith('iv-')) ? 'Save changes' : 'Save as a timer'}</button>
         ${d.presetId && !d.presetId.startsWith('iv-') ? '<button class="small quiet" data-act="ivDel">Delete</button>' : ''}</div>
-    </div>`;
+    </div>
+    ${timerSoundCard()}
+    ${photosCard()}`;
 }
 
-// The timer's heart-rate target: a range for the work intervals, whether the clock waits for you to reach it, and beeps.
-const HR_TARGETS = [['', 'None'], ['60-70', 'Zone 2 · 60-70%'], ['70-80', '70-80%'], ['80', '80%+'], ['85', '85%+'], ['85-95', '85-95%'], ['90', '90%+']];
+// The timer's heart-rate target: a range for the work, whether the clock waits for you to reach it, and beeps.
+const HR_TARGETS = [['', 'None'], ['60-70', 'Zone 2 · 60-70%'], ['70-80', 'Zone 3 · 70-80%'], ['80', '80%+'], ['85', '85%+'], ['85-95', '85-95%'], ['90', '90%+']];
 function ivHrFields(d) {
   if (!HR.supported() && !d.hr) return '';
   const cur = d.hr ? `${d.hr.lo}${d.hr.hi ? `-${d.hr.hi}` : ''}` : '';
   const list = HR_TARGETS.some(([v]) => v === cur) ? HR_TARGETS : [...HR_TARGETS, [cur, `${HR.targetText(d.hr)}`]];
   const b = hrBasis(), tgt = HR.targetBpm(b, d.hr);
   const box = (k, label) => `<label class="ivcheck"><input type="checkbox" data-ivhr="${esc(k)}" ${d.hr?.[k] ? 'checked' : ''}> ${label}</label>`;
-  return `<div class="field"><label for="iv-hr">Heart rate during work</label>
+  return `<div class="field"><label for="iv-hr">Heart-rate target${d.mode === 'steady' ? '' : ' during work'}</label>
       <select id="iv-hr" data-ivhr="target">${opts(list, cur)}</select></div>
     ${d.hr ? `<p class="meta">${tgt ? `${tgt.lo}${tgt.hi ? `-${tgt.hi}` : '+'} bpm for you` : 'Set your max heart rate in Settings → You to use a target.'}</p>
-      ${box('hold', 'Clock runs only at the target')}${box('alert', 'Beep when I drift out of it')}` : ''}`;
+      ${d.mode === 'steady' ? '' : box('hold', 'Clock runs only at the target')}${box('alert', 'Beep when I drift out of it')}` : ''}`;
+}
+
+// ---------- the Heart tab: live heart rate, tracking an activity, and analytics (js/hr.js) ----------
+
+// Who you are, for calories: weight in kg (from Settings → You), age and sex.
+const hrWho = () => { const st = state.settings, w = Number(st.bodyweight); return { kg: w ? (st.unit === 'kg' ? w : w * 0.4536) : null, age: Number(st.hrAge) || null, sex: st.hrSex || null }; };
+// What a recording belongs to, in a few words.
+const hrLabel = s => s.source === 'activity' ? s.activity : s.source === 'interval' ? (s.blocks?.[0]?.interval ?? 'Timer') : 'Workout';
+// A thin bar of the time in each zone.
+const zoneBar = zt => { const t = zt.slice(1).reduce((a, b) => a + b, 0); return t ? `<div class="zbar">${zt.slice(1).map((x, i) => (x ? `<span class="z${i + 1}" style="flex:${esc(x)}"></span>` : '')).join('')}</div>` : ''; };
+// Weeks overlapping [from, to): [{ start, end }].
+function weeksIn(from, to) {
+  const out = [];
+  for (let w = L.weekBounds(state, from).start; w < to; w = L.weekBounds(state, w + 8 * 864e5).start) out.push(L.weekBounds(state, w + 3600e3));
+  return out;
+}
+const ACTIVITIES = ['Volleyball', 'Walk', 'Ride', 'Run', 'Hike'];
+
+function viewHeart() {
+  const hs = (ui.heart ??= { range: '12w', detail: null, activity: 'Volleyball' });
+  if (hs.detail) return viewHeartSession(hs.detail);
+  const b = hrBasis(), tr = state.hrTrack, open = currentSession();
+  let h = `<header class="top"><div><h1>Heart</h1>${b ? `<div class="sub">Max ${esc(b.max)}${b.reserve ? ` · resting ${esc(b.rest)}` : ''} · zones from ${b.reserve ? 'reserve' : 'max'}</div>` : ''}</div><div class="hbtns">${hrPill()}</div></header>`;
+  if (!HR.supported()) h += `<div class="card muted">This browser can't reach Bluetooth. Use Chrome on Android or a computer to connect a strap. What's recorded is still here.</div>`;
+  if (!b) h += `<div class="banner">Set your max heart rate (or your age) in Settings → You → Heart rate for zones, load and calories. <button class="link" data-act="setGo" data-p="you">Settings</button></div>`;
+  h += `<div class="card heartlive" id="heart-live">${heartLiveInner()}</div>`;
+  if (!tr) {
+    h += `<div class="card"><b>Track an activity</b><p class="meta">For anything that isn't a workout here: a volleyball game, a walk. Records your heart rate until you stop${open ? '. (Your open workout is recording already.)' : '.'}</p>
+      <div class="chips">${ACTIVITIES.map(a => `<button class="chip ${esc(hs.activity === a ? 'on' : '')}" data-act="hrActivity" data-v="${esc(a)}">${esc(a)}</button>`).join('')}</div>
+      <div class="field"><label for="hr-act">Or name it</label><input id="hr-act" data-hract value="${esc(ACTIVITIES.includes(hs.activity) ? '' : hs.activity)}" placeholder="Tennis, yard work…"></div>
+      <div class="brow"><button class="primary big" data-act="hrTrackStart">Start tracking ${esc(hs.activity || 'activity')}</button></div></div>`;
+  }
+  return h + heartAnalytics(hs);
+}
+
+// The live card: the bpm, zone and % of max; while tracking, the time, average and peak, calories and zones so far.
+function heartLiveInner() {
+  const b = hrBasis(), tr = state.hrTrack, now = Date.now();
+  const bpm = HR.fresh() ? HR.live.bpm : null, z = HR.zoneOf(b, bpm);
+  const big = bpm ? `<div class="hrbig ${z ? `z${z}` : ''}">♥ ${esc(bpm)}</div>
+      <div class="meta">${b ? `${esc(Math.round(HR.pctOf(b, bpm)))}% of ${b.reserve ? 'reserve' : 'max'}${z ? ` · Z${z} ${esc(HR.ZONES[z - 1].name)}` : ' · below zone 1'}` : ''}</div>`
+    : `<div class="meta">${HR.live.status === 'off' ? 'Not connected. Tap ♥ Heart rate to connect your strap.' : HR.live.status === 'live' ? 'Waiting for a reading…' : 'Connecting…'}</div>`;
+  if (!tr) return big;
+  const sm = HR.summary(tr.hr), zt = HR.zoneTimes(tr.hr, b), kcal = HR.calories(tr.hr, hrWho());
+  return `<div class="trackhead"><b>${esc(tr.activity)}</b><span class="trackclock">${clock(Math.floor((now - tr.startedAt) / 1000))}</span></div>
+    ${big}
+    ${sm ? `<div class="meta">avg ${esc(sm.avg)} · peak ${esc(sm.max)}${kcal != null ? ` · ${esc(kcal)} kcal` : ''}${b ? ` · load ${esc(HR.load(tr.hr, b))}` : ''}</div>` : ''}
+    ${b ? zoneBar(zt) + `<div class="zmins">${zt.slice(1).map((x, i) => `<span><i class="ztag z${i + 1}">Z${i + 1}</i> ${esc(Math.round(x / 60))}m</span>`).join('')}</div>` : ''}
+    <div class="brow"><button class="primary" data-act="hrTrackStop">Stop and save</button><button class="quiet" data-act="hrTrackDiscard">Discard</button></div>`;
+}
+setInterval(() => { const el = ui.tab === 'heart' && state.hrTrack && document.getElementById('heart-live'); if (el) el.innerHTML = heartLiveInner(); }, 1000);
+
+function heartAnalytics(hs) {
+  const b = hrBasis(), who = hrWho();
+  const { from, to } = PG.rangeBounds(state, hs.range === 'all' ? 'all' : hs.range);
+  const recs = state.sessions.filter(s => s.hr && (s.firstSetAt ?? s.checkinAt) < to && (s.hr.t0 + s.hr.v.length * s.hr.step * 1000) >= from)
+    .sort((x, y) => (y.firstSetAt ?? y.checkinAt) - (x.firstSetAt ?? x.checkinAt));
+  let h = `<div class="label">Analytics</div><div class="seg">${PG.RANGES.map(([k, t]) => `<button class="${esc(hs.range === k ? 'on' : '')}" data-act="heartRange" data-v="${esc(k)}">${esc(t)}</button>`).join('')}</div>`;
+  if (!recs.length) return h + '<p class="muted">Nothing recorded in this range. Wear the strap in a workout, a timer or a tracked activity.</p>';
+  const weeks = weeksIn(from, to), nW = Math.max(1, (to - from) / (7 * 864e5));
+  const all = { zt: [0, 0, 0, 0, 0, 0], secs: 0, load: 0, kcal: 0, kcalN: 0 };
+  for (const s of recs) {
+    HR.zoneTimes(s.hr, b, from, to).forEach((x, i) => { all.zt[i] += x; });
+    all.secs += s.hr.v.filter(x => x > 0).length * s.hr.step;
+    if (b) all.load += HR.load(s.hr, b, from, to);
+    const k = HR.calories(s.hr, who, from, to);
+    if (k != null) { all.kcal += k; all.kcalN++; }
+  }
+  const tile = (v, label) => `<div class="tile"><b>${v}</b><span>${label}</span></div>`;
+  h += `<div class="tiles">${tile(`${Math.round(all.secs / 3600 * 10) / 10} h`, 'recorded')}${b ? tile(Math.round(all.zt[2] / 60 / nW), 'zone 2 min a week') + tile(Math.round((all.zt[4] + all.zt[5]) / 60 / nW), '80%+ min a week') + tile(Math.round(all.load / nW), 'load a week') : ''}${all.kcalN ? tile(Math.round(all.kcal / nW), 'kcal a week') : ''}</div>`;
+  if (b) {
+    const zk = HR.ZONES.map(z => [`Z${z.n}`, `Z${z.n} ${z.name.split(' ·')[0]}`]);
+    const wz = weeks.map(w => {
+      const zt = [0, 0, 0, 0, 0, 0];
+      let ld = 0;
+      for (const s of recs) { HR.zoneTimes(s.hr, b, w.start, w.end).forEach((x, i) => { zt[i] += x; }); ld += HR.load(s.hr, b, w.start, w.end); }
+      return { start: w.start, m: zt.map(x => Math.round(x / 60)), load: ld };
+    });
+    h += chartCard('hz-zones', 'Minutes in each zone, per week', `Zone 2 <b>${Math.round(all.zt[2] / 60 / nW)} min</b> a week · 150-180 is a common aerobic-base aim`,
+      CH.columnChart('hz-zones', 'Minutes in each heart-rate zone per week', wz.map(w => ({ t: w.start, parts: zk.map(([k], i) => ({ key: k, v: w.m[i + 1] })), tip: { value: `${w.m.slice(1).reduce((a, c) => a + c, 0)} min`, title: weekLabel(w.start), sub: zk.map(([k], i) => `${k} ${w.m[i + 1]}`).join(' · ') } })), { fmt: v => `${v}` }),
+      { head: ['Week', ...zk.map(([k]) => k)], rows: wz.map(w => [weekLabel(w.start), ...w.m.slice(1)]) }, legend(zk));
+    h += chartCard('hz-load', 'Training load per week', `Avg <b>${Math.round(all.load / nW)}</b> a week · minutes × zone (Edwards TRIMP)`,
+      CH.columnChart('hz-load', 'Training load per week', wz.map(w => ({ t: w.start, parts: [{ key: 'series', v: w.load }], tip: { value: `${w.load}`, title: weekLabel(w.start), sub: `${w.m.slice(1).reduce((a, c) => a + c, 0)} min recorded` } }))),
+      { head: ['Week', 'Load'], rows: wz.map(w => [weekLabel(w.start), w.load]) });
+  }
+  // Recovery: how far your heart rate falls over the rest after an interval, averaged per timer run. Up is fitter.
+  const rec = recs.map(s => { const d = (s.blocks || []).flatMap(x => x.hrRounds ?? []).map(x => x.drop).filter(x => x != null); return d.length ? { t: s.firstSetAt ?? s.checkinAt, v: Math.round(d.reduce((a, c) => a + c, 0) / d.length), n: d.length } : null; })
+    .filter(Boolean).sort((x, y) => x.t - y.t);
+  if (rec.length) {
+    h += chartCard('hz-recovery', 'Heart-rate recovery', `Avg drop over a rest <b>${Math.round(rec.reduce((a, c) => a + c.v, 0) / rec.length)} bpm</b> · bigger is fitter`,
+      CH.lineChart('hz-recovery', 'Average heart-rate drop over the rest after each interval', rec.map(x => ({ t: x.t, v: x.v, tip: { value: `${x.v} bpm`, title: fmtShortDay(x.t), sub: `${x.n} rest${x.n === 1 ? '' : 's'}` } }))),
+      { head: ['Day', 'Avg drop', 'Rests'], rows: rec.map(x => [fmtShortDay(x.t), x.v, x.n]) });
+  }
+  const pk = recs.map(s => ({ t: s.firstSetAt ?? s.checkinAt, ...HR.summary(s.hr) })).filter(x => x.max).sort((x, y) => x.t - y.t);
+  h += chartCard('hz-peak', 'Average and peak per session', `Highest <b>${Math.max(...pk.map(x => x.max))}</b>${b && Math.max(...pk.map(x => x.max)) > b.max ? ' · above your max: update it in Settings' : ''}`,
+    CH.lineChart('hz-peak', 'Peak heart rate per session', pk.map(x => ({ t: x.t, v: x.max, tip: { value: `peak ${x.max}`, title: fmtShortDay(x.t), sub: `avg ${x.avg}` } }))),
+    { head: ['Day', 'Avg', 'Peak'], rows: pk.map(x => [fmtShortDay(x.t), x.avg, x.max]) });
+  // Every recording, newest first.
+  const shown = recs.slice(0, hs.limit ?? 10);
+  h += `<div class="label">Sessions</div><div class="menu">${shown.map(s => {
+    const sm = HR.summary(s.hr), zt = HR.zoneTimes(s.hr, b), mins = Math.round(s.hr.v.filter(x => x > 0).length * s.hr.step / 60);
+    return `<button class="menurow hrsess" data-act="heartOpen" data-id="${esc(s.id)}"><span class="grow"><span class="name">${esc(hrLabel(s))} <span class="meta">${esc(fmtShortDay(s.firstSetAt ?? s.checkinAt))}</span></span>
+      <span class="meta">${esc(mins)} min · avg ${esc(sm?.avg ?? '–')} · peak ${esc(sm?.max ?? '–')}${b ? ` · load ${esc(HR.load(s.hr, b))}` : ''}</span>${b ? zoneBar(zt) : ''}</span><span class="chev">›</span></button>`;
+  }).join('')}</div>${recs.length > shown.length ? `<button class="addblock" data-act="heartMore">Show ${Math.min(10, recs.length - shown.length)} more (${recs.length - shown.length} older)</button>` : ''}`;
+  return h;
+}
+
+// One recording: the heart rate over time, time in each zone, average and peak, load, calories, and drift.
+function viewHeartSession(id) {
+  const s = L.byId(state.sessions, id);
+  if (!s?.hr) { ui.heart.detail = null; return viewHeart(); }
+  const b = hrBasis(), sm = HR.summary(s.hr), zt = HR.zoneTimes(s.hr, b), kcal = HR.calories(s.hr, hrWho()), dr = HR.drift(s.hr);
+  const pts = HR.points(s.hr), t0 = pts[0]?.t ?? s.hr.t0;
+  const mins = Math.round(s.hr.v.filter(x => x > 0).length * s.hr.step / 60);
+  const chart = CH.lineChart('hz-session', 'Heart rate over the session', pts.map(p => ({ t: p.t, v: p.v, tip: { value: `${p.v} bpm`, title: `${clock(Math.round((p.t - t0) / 1000))} in`, sub: b ? `Z${HR.zoneOf(b, p.v) || '–'}` : '' } })),
+    { xfmt: t => `${Math.round((t - t0) / 60e3)} min` });
+  const rows = (s.blocks || []).map(roundsText).filter(Boolean);
+  return `<header class="top sub"><button class="back" data-act="heartBack">‹ Heart</button></header>
+    <h1 class="pagetitle">${esc(hrLabel(s))}</h1><p class="meta pad">${esc(fmtDateTime(s.firstSetAt ?? s.checkinAt))} · ${esc(mins)} min recorded</p>
+    <div class="tiles">${sm ? `<div class="tile"><b>${esc(sm.avg)}</b><span>avg bpm</span></div><div class="tile"><b>${esc(sm.max)}</b><span>peak</span></div>` : ''}
+      ${b ? `<div class="tile"><b>${esc(HR.load(s.hr, b))}</b><span>load</span></div>` : ''}${kcal != null ? `<div class="tile"><b>${esc(kcal)}</b><span>kcal</span></div>` : ''}</div>
+    ${chartCard('hz-session', 'Heart rate', '', chart, { head: ['Time in', 'bpm'], rows: pts.map(p => [clock(Math.round((p.t - t0) / 1000)), p.v]) })}
+    ${b ? `<div class="card"><b>Time in each zone</b>${zoneBar(zt)}<div class="menu flush">${HR.ZONES.map(z => `<div class="frow"><span class="grow"><span class="name"><span class="ztag z${z.n}">Z${z.n}</span> ${esc(z.name)}</span></span><b>${clock(zt[z.n])}</b></div>`).join('')}</div></div>` : ''}
+    ${dr ? `<div class="card"><b>Drift ${dr.pct > 0 ? '+' : ''}${esc(dr.pct)}%</b><p class="meta">Second half ${esc(dr.second)} against ${esc(dr.first)} in the first. For a steady effort, under about 5% means you stayed aerobic; more means it was above your aerobic threshold (or heat or fatigue). For a game or intervals it just shows how the effort went.</p></div>` : ''}
+    ${rows.length ? `<div class="card">${rows.map(t => `<p class="meta">♥ ${esc(t)}</p>`).join('')}</div>` : ''}
+    ${s.source === 'activity' ? `<div class="brow"><button class="danger" data-act="heartDelete" data-id="${esc(s.id)}">Delete this activity</button></div>` : ''}`;
+}
+
+// ---------- photos behind the running timer (js/photos.js) ----------
+// Picked from the phone (Android's picker includes Google Photos), kept on this phone only. They crossfade behind the
+// interval timer while it runs on the Timer tab; "Show the photos bigger" shrinks the timer to make room.
+function photosCard() {
+  const n = ui.photoCount ?? 0, ph = state.settings.photos ?? {};
+  return `<div class="label">Photos behind the timer</div><div class="menu">
+      ${n ? frow('Play them while the timer runs', switchIn('settings.photos.on', ph.on !== false), `${n} photo${n === 1 ? '' : 's'} on this phone`) : ''}
+      ${n ? frow('Change every (seconds)', numIn('settings.photos.every', ph.every ?? 10)) : ''}
+      <label class="menurow"><input type="file" accept="image/*" multiple hidden data-photos>
+        <span class="grow"><span class="name">${ui.photoBusy ? 'Adding photos…' : n ? 'Add more photos' : 'Add photos'}</span><span class="meta">from your gallery or Google Photos · they stay on this phone</span></span></label>
+      ${n ? '<button class="menurow" data-act="photosClear"><span class="grow"><span class="name">Remove all photos</span></span></button>' : ''}</div>`;
+}
+const slidesEl = Object.assign(document.createElement('div'), { id: 'slides', hidden: true });
+slidesEl.setAttribute('aria-hidden', 'true');
+document.body.prepend(slidesEl);
+const slides = { on: false, order: [], i: 0, timer: null };
+// Photos bigger (the timer small at the bottom) unless you chose the timer bigger; remembered.
+const photoFocus = () => state.settings.photos?.focus !== false;
+const slidesOn = () => !!state.intervalRun && ui.tab === 'timer' && !ui.onboard && state.settings.photos?.on !== false && (ui.photoCount ?? 0) > 0;
+// Starts or stops the slideshow to match what's on screen (called after every render).
+async function syncSlides() {
+  const want = slidesOn();
+  document.body.classList.toggle('slideshow', want);
+  document.body.classList.toggle('photofocus', want && photoFocus());
+  if (want === slides.on) return;
+  slides.on = want;
+  clearTimeout(slides.timer);
+  if (!want) {
+    for (const l of slidesEl.children) URL.revokeObjectURL(l.dataset.url);
+    slidesEl.replaceChildren();
+    slidesEl.hidden = true;
+    return;
+  }
+  slides.order = Ph.shuffle(await Ph.ids());
+  slides.i = 0;
+  slidesEl.hidden = false;
+  nextSlide();
+}
+async function nextSlide() {
+  if (!slides.on || !slides.order.length) return;
+  const blob = await Ph.get(slides.order[slides.i++ % slides.order.length]);
+  if (blob && slides.on) {
+    const url = URL.createObjectURL(blob);
+    const layer = document.createElement('div');
+    layer.className = 'slide';
+    layer.dataset.url = url;
+    layer.style.setProperty('--u', `url("${url}")`);
+    const img = new Image();
+    img.alt = '';
+    img.src = url;
+    layer.append(img);
+    slidesEl.append(layer);
+    await img.decode().catch(() => {});
+    requestAnimationFrame(() => layer.classList.add('on'));
+    setTimeout(() => { while (slidesEl.children.length > 1 && slidesEl.firstElementChild !== layer) { URL.revokeObjectURL(slidesEl.firstElementChild.dataset.url); slidesEl.firstElementChild.remove(); } }, 1600);
+  }
+  if (slides.on) slides.timer = setTimeout(nextSlide, Math.max(3, Number(state.settings.photos?.every) || 10) * 1000);
+}
+Ph.count().then(n => { ui.photoCount = n; if (n && (ui.tab === 'timer' || state.intervalRun)) render(); });
+
+// Sound for the timers: beeps loud enough to cut through music, a voice saying what's next, a test.
+function timerSoundCard() {
+  const tc = state.settings.timer;
+  return `<div class="label">Sound</div><div class="menu">
+      ${frow('Loud beeps', switchIn('settings.timer.loud', tc.loud !== false), 'sharp tones that cut through music')}
+      ${frow('Say what’s next', switchIn('settings.timer.voice', !!tc.voice), '“Round 2, go”, “Rest”')}
+      <button class="menurow" data-act="timerTest"><span class="grow"><span class="name">Test the sound</span><span class="meta">play your music too, to check it carries</span></span></button></div>`;
 }
 
 function viewIntervalRun(run) {
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
+  const pics = slidesOn();
   return `<header class="top"><h1>${esc(run.cfg.name)}</h1><div class="hbtns">${hrPill()}</div></header>
     <div class="ivrun ${esc(at?.phase.kind ?? 'done')}" id="iv-run">${ivRunInner(run, list, at)}</div>
     <div class="ivhr" id="iv-hr">${hrBigInner()}</div>
     <div class="brow ivbtns">${run.pausedAt ? '<button class="primary big" data-act="ivResume">Resume</button>' : '<button class="big" data-act="ivPause">Pause</button>'}
-      <button class="big" data-act="ivSkip">Skip</button><button class="big danger" data-act="ivStop">Stop</button></div>`;
+      <button class="big" data-act="ivSkip">Skip</button><button class="big danger" data-act="ivStop">Stop</button></div>
+    ${pics ? `<div class="brow slidesbtn"><button class="small quiet" data-act="slidesFocus">${photoFocus() ? 'Show the timer bigger' : 'Show the photos bigger'}</button></div>` : ''}`;
 }
 
 const IV_LABEL = { prep: 'Get ready', work: 'Work', rest: 'Rest', setRest: 'Rest between sets' };
@@ -949,9 +1195,20 @@ function ivRunInner(run, list, at) {
   if (!at) return '<div class="ivclock">Done</div>';
   const c = run.cfg, p = at.phase;
   const ex = exOf(p.exerciseId)?.name ?? '';
+  const waiting = c.hr?.hold && p.kind === 'work' && HR.fresh() && HR.live.bpm < (HR.targetBpm(hrBasis(), c.hr)?.lo ?? 0);
+  // A steady stretch: its own clock (counting up when it has no length), and the time at the target against any goal.
+  if (p.steady) {
+    const into = Math.floor((I.elapsed(run) - I.phaseStart(list, at.i)) / 1000);
+    const inT = Math.floor((run.inMs || 0) / 1000), goal = c.hr?.goal ? c.hr.goal * 60 : 0;
+    return `<div class="ivfill" style="width:${esc(p.open ? (goal ? Math.min(100, 100 * inT / goal) : 0) : Math.min(100, at.frac * 100))}%"></div>
+      <div class="ivphase">${p.open ? 'Steady' : 'Steady · left'}${run.pausedAt ? ' · paused' : ''}</div>
+      <div class="ivclock">${clock(p.open ? into : at.rem)}</div>
+      <div class="ivsub">${esc(ex)}</div>
+      ${c.hr ? `<div class="ivtarget ${esc(goal && inT >= goal ? 'met' : '')}">${esc(c.hr.lo === 60 && c.hr.hi === 70 ? 'Zone 2' : HR.targetText(c.hr))}: <b>${clock(inT)}</b>${goal ? ` of ${clock(goal)}${inT >= goal ? ' ✓' : ''}` : ''}</div>` : ''}`;
+  }
   const next = at.next ? `Next: ${IV_LABEL[at.next.kind]}${at.next.kind === 'work' ? ` · ${esc(exOf(at.next.exerciseId)?.name ?? '')}` : ''}` : 'Last one';
   return `<div class="ivfill" style="width:${esc(Math.min(100, at.frac * 100))}%"></div>
-    <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}${run.cfg.hr?.hold && p.kind === 'work' && HR.fresh() && HR.live.bpm < (HR.targetBpm(hrBasis(), run.cfg.hr)?.lo ?? 0) ? ' · waiting' : ''}</div>
+    <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}${waiting ? ' · waiting' : ''}</div>
     <div class="ivclock">${clock(at.rem)}</div>
     <div class="ivsub">${p.kind === 'prep' ? esc(ex) : `${esc(ex)} · round ${p.round} of ${c.rounds}${c.sets > 1 ? ` · set ${p.set} of ${c.sets}` : ''}`}</div>
     <div class="ivnext">${next}</div>`;
@@ -968,11 +1225,11 @@ function viewIntervalLog(lg) {
     ${done.map(d => {
       const ex = exOf(d.exerciseId);
       const unitWord = ex?.repUnit ?? (ex?.metric === 'time' ? null : 'reps');
-      return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')} · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}</label>
+      return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')}${lg.cfg.mode === 'steady' ? '' : ` · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}`}</label>
         ${unitWord ? `<input id="iv-total-${esc(d.set)}" class="num" inputmode="numeric" data-ivtotal="${esc(d.set)}" value="${esc(lg.totals?.[d.set] ?? '')}" placeholder="total ${esc(unitWord)}">` : `<span class="meta">${lg.cfg.work}s a round</span>`}</div>`;
     }).join('')}
     ${ivRoundsTable(lg)}
-    <div class="brow"><button class="primary big" data-act="ivLog">Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
+    <div class="brow"><button class="primary big" data-act="ivLog">${lg.cfg.mode === 'steady' ? `Log ${clock(Math.round(lg.ms / 1000))}` : `Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds`}</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
 }
 
 // The run's heart rate, round by round (with a recording): average, time at the target, and the drop over the rest.
@@ -992,7 +1249,13 @@ function ivRoundsTable(lg) {
 }
 
 // A scheme for a block of timer rounds (kept, so the block has one; never suggested: manualOnly).
-function intervalScheme(cfg, tier, reps) {
+function intervalScheme(cfg, tier, reps, ms = 0) {
+  if (cfg.mode === 'steady') {
+    const m = Math.max(1, Math.round(ms / 60000)), id = `s-i-steady-${m}-${tier}`;
+    let st = schOf(id);
+    if (!st) { st = { id, name: `Steady ${m} min`, sets: 1, reps: reps || 1, restSec: 0, minutes: m, tiers: [tier], manualOnly: true }; state.schemes.push(st); }
+    return st;
+  }
   const id = `s-i-${cfg.rounds}x${cfg.work}-${cfg.rest}-${tier}`;
   let sc = schOf(id);
   if (!sc) {
@@ -1011,14 +1274,14 @@ function logIntervals(lg) {
   const open = currentSession();
   const stats = ivStats(lg);
   const s = open ?? { id: L.uid(), day: L.dayKey(lg.startedAt), checkinAt: lg.startedAt, firstSetAt: null, status: 'done', source: 'interval',
-    locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round(I.totalSecs(cfg) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
+    locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round((cfg.mode === 'steady' ? lg.ms / 1000 : I.totalSecs(cfg)) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
   let n = 0;
   for (const d of done) {
     const ex = exOf(d.exerciseId);
     if (!ex) continue;
     const tier = tierFor(ex, 'T3');
     const reps = I.spread(lg.totals?.[d.set], d.rounds.length);
-    const sc = intervalScheme(cfg, tier, reps[0]);
+    const sc = intervalScheme(cfg, tier, reps[0], lg.ms);
     const b = { id: L.uid(), tier, slotId: slotIdFor(ex.id, tier), exerciseId: ex.id, schemeId: sc.id, swaps: [], interval: cfg.name };
     // Heart rate per round, kept on the block: { round, avg, max, atTarget (s), secs, drop }.
     const mine = stats.filter(x => x.set === d.set && x.avg).map(({ set, ...x }) => x);
@@ -1026,8 +1289,8 @@ function logIntervals(lg) {
     s.blocks.push(b);
     d.rounds.forEach((r, i) => {
       state.sets.push({ id: L.uid(), sessionId: s.id, blockId: b.id, exerciseId: ex.id, tier, schemeId: sc.id, load: null,
-        reps: ['reps', 'load_reps'].includes(ex.metric) ? reps[i] : null, time: ex.metric === 'time' ? cfg.work : null, distance: null,
-        done: true, loggedAt: lg.startedAt + r.endMs, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}) });
+        reps: ['reps', 'load_reps'].includes(ex.metric) ? reps[i] : null, time: ex.metric === 'time' ? (cfg.mode === 'steady' ? Math.round(lg.ms / 1000) : cfg.work) : null, distance: null,
+        done: true, loggedAt: cfg.mode === 'steady' && lg.endAt ? lg.endAt : lg.startedAt + r.endMs, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}) });
       n++;
     });
   }
@@ -1053,17 +1316,27 @@ function tickInterval() {
     const bpm = HR.live.bpm;
     if (run.cfg.hr.hold && bpm < tgt.lo) run.pausedMs = (run.pausedMs || 0) + dt;
     const out = bpm < tgt.lo || (tgt.hi && bpm > tgt.hi);
+    if (!out) run.inMs = (run.inMs || 0) + dt; // time at the target, counted as it happens
     if (out && run.cfg.hr.alert) {
       run.outSince ??= now;
-      if (now - run.outSince >= 10e3 && !run.outBeeped) { run.outBeeped = true; beep(2, 440); if (timerCfg().vibrate) navigator.vibrate?.([400, 150, 400]); }
+      if (now - run.outSince >= 10e3 && !run.outBeeped) {
+        run.outBeeped = true; beep(2, 440); say(bpm < tgt.lo ? 'Heart rate low' : 'Heart rate high');
+        if (timerCfg().vibrate) navigator.vibrate?.([400, 150, 400]);
+      }
     } else { run.outSince = null; run.outBeeped = false; }
+    // A goal for minutes at the target, reached: a fanfare; the run carries on until you stop it.
+    if (run.cfg.hr.goal && !run.goalMet && (run.inMs || 0) >= run.cfg.hr.goal * 60e3) {
+      run.goalMet = true; beep(4, 1320); say(`${run.cfg.hr.goal} minutes at target. Goal reached`);
+      if (timerCfg().vibrate) navigator.vibrate?.([250, 100, 250, 100, 600]);
+      save();
+    }
   }
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
   // Where each phase began on the clock on the wall (holds and pauses move them), for the rounds' heart-rate results.
   run.marks ??= [];
   if (at && run.marks.at(-1)?.i !== at.i) run.marks.push({ i: at.i, kind: at.phase.kind, set: at.phase.set, round: at.phase.round, at: now });
   if (!at) {
-    beep(3, 880);
+    beep(3, 880); say('Done');
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
     ui.ivLog = { cfg: run.cfg, startedAt: run.startedAt, ms: I.totalSecs(run.cfg) * 1000, totals: {}, hr: run.hr ?? null, marks: run.marks ?? [], endAt: now };
     state.intervalRun = null; ivLast = null;
@@ -1073,12 +1346,15 @@ function tickInterval() {
   }
   if (ivLast !== at.i) {
     if (ivLast != null) {
-      if (at.phase.kind === 'work') { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(250); }
+      const c = run.cfg, p = at.phase;
+      if (p.kind === 'work') { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(250); }
       else { beep(2, 520); if (timerCfg().vibrate) navigator.vibrate?.([120, 80, 120]); }
+      say(p.kind === 'work' ? (p.steady ? 'Go' : c.rounds > 1 ? `${p.round === c.rounds ? 'Last round' : `Round ${p.round}`}, go` : 'Go')
+        : p.kind === 'setRest' ? 'Rest. Next set coming' : 'Rest');
     }
     ivLast = at.i;
   }
-  if (at.rem <= 3 && run.beeped !== `${at.i}:${at.rem}`) { run.beeped = `${at.i}:${at.rem}`; beep(1, 660); }
+  if (at.rem <= 3 && !at.phase.open && run.beeped !== `${at.i}:${at.rem}`) { run.beeped = `${at.i}:${at.rem}`; beep(1, 660); }
   const el = document.getElementById('iv-run');
   if (el && ui.tab === 'timer') { el.className = `ivrun ${at.phase.kind}`; el.innerHTML = ivRunInner(run, list, at); }
   const hrEl = document.getElementById('iv-hr');
@@ -1863,6 +2139,7 @@ function historyEntries(q) {
       groups.get(k).sets.push(st);
     }
     const mob = mobLines(s.mobility);
+    if (s.source === 'activity') { if (match(s.activity)) out.push({ s, at: s.firstSetAt ?? s.checkinAt, end: (s.firstSetAt ?? s.checkinAt) + (s.durationMin || 0) * 60e3, sets: 0, groups: [], mob: [] }); continue; }
     if (!groups.size && !mob.length) continue;
     const times = [...sets.map(x => x.loggedAt), ...(s.mobility || []).flatMap(it => it.sets.filter(x => x.done).map(x => x.at))].filter(Boolean);
     out.push({ s, at: times.length ? Math.min(...times) : s.checkinAt, end: times.length ? Math.max(...times) : s.checkinAt, sets: sets.filter(x => !x.warmup).length, groups: [...groups.values()], mob });
@@ -2100,9 +2377,10 @@ function viewHistory(hs) {
           <span class="meta">${esc(ex ? M.itemText(ex, it, unit()) : '')}${it.note ? ` · “${esc(it.note)}”` : ''}</span></span></div>`;
       }).join('');
     const rounds = (s?.blocks || []).map(roundsText).filter(Boolean).map(t => `<div class="meta hrrounds">♥ ${esc(t)}</div>`).join('');
-    const editable = s && s.status !== 'open' && s.status !== 'paused';
+    const editable = s && s.status !== 'open' && s.status !== 'paused' && s.source !== 'activity';
+    if (s?.source === 'activity') bits.unshift(s.activity);
     return `<div class="card hist"><div class="histhead"><b>${esc(dateText(e.at))}</b><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span>
-      ${editable ? `<span class="brow">${s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${esc(s.id)}">Continue</button>` : ''}<button class="small" data-act="histEdit" data-id="${esc(s.id)}">Edit</button></span>` : ''}</div>${lines}${rounds}</div>`;
+      ${editable || s?.hr ? `<span class="brow">${s?.hr ? `<button class="small" data-act="heartOpen" data-id="${esc(s.id)}" aria-label="Heart rate">♥</button>` : ''}${editable && s.status === 'done' && s.source !== 'imported' ? `<button class="small" data-act="sessionContinue" data-id="${esc(s.id)}">Continue</button>` : ''}${editable ? `<button class="small" data-act="histEdit" data-id="${esc(s.id)}">Edit</button>` : ''}</span>` : ''}</div>${lines}${rounds}</div>`;
   };
   return `<header class="top sub"><button class="back" data-act="histClose">‹ This week</button></header><h1 class="pagetitle">History</h1>
     ${histTabs(hs.mode)}
@@ -2422,6 +2700,9 @@ function hrSettingsRows() {
   const rows = [
     frow('Max heart rate', numIn('settings.hrMax', st.hrMax, 'data-rerender placeholder="—"'), top ? `highest the strap has seen: ${top}` : 'or about 208 − 0.7 × your age'),
     top && top !== st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(top)}"><span class="grow"><span class="name">Use ${esc(top)} as your max</span></span></button>` : '',
+    frow('Age', numIn('settings.hrAge', st.hrAge, 'data-rerender placeholder="—"'), 'for calories, and to estimate your max'),
+    HR.maxFromAge(st.hrAge) && !st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(HR.maxFromAge(st.hrAge))}"><span class="grow"><span class="name">Use ${esc(HR.maxFromAge(st.hrAge))} as your max</span><span class="meta">208 − 0.7 × age; the strap's highest is better once you've pushed hard</span></span></button>` : '',
+    frow('Sex', `<select data-bind="settings.hrSex" data-rerender>${opts([['', '—'], ['m', 'Male'], ['f', 'Female']], st.hrSex ?? '')}</select>`, 'for calories'),
     frow('Resting heart rate', numIn('settings.hrRest', st.hrRest, 'data-rerender placeholder="—"'), 'first thing in the morning'),
     frow('Zones from', `<select data-bind="settings.hrMethod" data-rerender>${opts([['max', '% of max'], ['reserve', '% of reserve (needs resting)']], st.hrMethod ?? 'max')}</select>`),
   ];
@@ -2452,6 +2733,8 @@ function settingsTimer() {
   return `<div class="menu">
       ${sw('autoStart', 'Start when I log a set')}
       ${sw('sound', 'Beep when rest is over')}
+      ${frow('Loud beeps', switchIn('settings.timer.loud', tc.loud !== false), 'sharp tones that cut through music')}
+      ${sw('voice', 'Say what’s next', '“Rest over”, “Round 2, go”')}
       ${sw('warn10', 'Beep at 10 seconds left')}
       ${sw('vibrate', 'Vibrate when rest is over', 'Android only')}
       ${sw('keepAwake', 'Keep the screen on')}
@@ -4056,6 +4339,48 @@ const actions = {
     toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}` : 'Nothing to log');
   },
   ivDiscard: () => { ui.ivLog = null; render(); },
+  // Intervals or one steady stretch. Steady starts as zone 2 until you stop; intervals as 4 rounds of 4 minutes on, 1 off.
+  ivMode: d => {
+    const v = ivDraft();
+    if ((v.mode ?? 'intervals') === d.v) return;
+    const ex = v.exercises;
+    ui.iv = d.v === 'steady'
+      ? { ...I.clean({ mode: 'steady', name: 'Zone 2', work: 0, prep: v.prep, exercises: ex, hr: { lo: 60, hi: 70, alert: true } }), presetId: null }
+      : { ...I.clean({ name: 'Intervals', work: 240, rest: 60, rounds: 4, sets: 1, prep: v.prep, exercises: ex, hr: v.hr && { ...v.hr, goal: null } }), presetId: null };
+    render();
+  },
+  photosClear: () => askConfirm('Remove all the photos?', 'Only from this app: your gallery and Google Photos keep them.', 'Remove', async () => {
+    await Ph.clear(); ui.photoCount = 0; render(); toast('Photos removed');
+  }),
+  slidesFocus: () => { (state.settings.photos ??= {}).focus = !photoFocus(); save(); render(); },
+  hrActivity: d => { ui.heart.activity = d.v; render(); },
+  hrTrackStart: () => {
+    const name = (ui.heart?.activity || 'Activity').trim().slice(0, 40) || 'Activity';
+    state.hrTrack = { id: L.uid(), activity: name, startedAt: Date.now(), hr: null };
+    setWakeLock(true); unlockAudio();
+    save(); render(); window.scrollTo(0, 0);
+    if (HR.live.status === 'off') toast('Tracking. Connect your strap with ♥ Heart rate.');
+  },
+  hrTrackStop: () => {
+    const tr = state.hrTrack;
+    if (!tr) return;
+    const end = Date.now();
+    if (!HR.summary(tr.hr)) return askConfirm('Nothing recorded', 'The strap didn’t send any readings. Discard it?', 'Discard', () => actions.hrTrackDiscard());
+    state.sessions.push({ id: tr.id, day: L.dayKey(tr.startedAt), checkinAt: tr.startedAt, firstSetAt: tr.startedAt, status: 'done', source: 'activity', activity: tr.activity,
+      locationId: null, minutes: Math.max(1, Math.round((end - tr.startedAt) / 60e3)), durationMin: Math.max(1, Math.round((end - tr.startedAt) / 60e3)), blocks: [], hr: tr.hr });
+    state.hrTrack = null;
+    setWakeLock(false);
+    save(); ui.heart.detail = tr.id; render(); window.scrollTo(0, 0);
+    toast(`${tr.activity} saved`);
+  },
+  hrTrackDiscard: () => { state.hrTrack = null; setWakeLock(false); save(); render(); },
+  heartRange: d => { ui.heart.range = d.v; ui.heart.limit = 10; render(); },
+  heartMore: () => { ui.heart.limit = (ui.heart.limit ?? 10) + 10; render(); },
+  heartOpen: d => { ui.heart ??= { range: '12w', activity: 'Volleyball' }; ui.heart.detail = d.id; ui.tab = 'heart'; ui.history = null; render(); window.scrollTo(0, 0); },
+  heartBack: () => { ui.heart.detail = null; render(); window.scrollTo(0, 0); },
+  heartDelete: d => askConfirm('Delete this activity?', 'Its heart-rate recording goes with it.', 'Delete', () => {
+    state.sessions = state.sessions.filter(x => x.id !== d.id); ui.heart.detail = null; save(); render();
+  }),
   hrUseTop: d => { state.settings.hrMax = Number(d.v); save(); render(); toast(`Max heart rate ${d.v}`); },
   // The heart-rate pill: connect the strap (Chrome's device list), or once it's on, offer to disconnect it.
   hrTap: async () => {
@@ -4376,6 +4701,7 @@ const actions = {
     const was = timerCfg().sound;
     timerCfg().sound = true;
     beep(3, 880);
+    say('Round 2, go');
     timerCfg().sound = was;
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250]);
   },
@@ -4714,6 +5040,8 @@ const actions = {
 
   locAdd: () => { state.locations.push({ id: L.uid(), name: 'New location', equipment: [] }); save(); render(); },
 
+  // From another tab straight to a Settings page.
+  setGo: d => { ui.tab = 'more'; actions.setPage(d); },
   setPage: d => {
     ui.setPage = d.p || null;
     if (d.p === 'fitnotes' && (!ui.fn || ui.fn.stage === 'done')) ui.fn = { stage: 'pick' };
@@ -5106,9 +5434,21 @@ document.addEventListener('change', e => {
     const v = ivDraft();
     if (d.iv === 'name') v.name = el.value;
     else if (['work', 'rest', 'setRest', 'prep'].includes(d.iv)) v[d.iv] = /^\s*0+(:0+)?\s*$/.test(el.value) ? 0 : parseMSS(el.value) ?? v[d.iv];
+    else if (d.iv === 'steadyMin') v.work = Number(el.value) > 0 ? Math.round(Number(el.value) * 60) : 0; // blank: until you stop
+    else if (d.iv === 'goalMin') { if (v.hr) v.hr = { ...v.hr, goal: Number(el.value) > 0 ? Math.round(Number(el.value)) : null }; }
     else v[d.iv] = Number(el.value) || v[d.iv];
     Object.assign(v, I.clean(v), { presetId: v.presetId });
     render();
+  } else if (el.hasAttribute('data-hract')) {
+    if (el.value.trim()) { ui.heart.activity = el.value.trim(); render(); }
+  } else if (el.hasAttribute('data-photos')) {
+    const files = [...(el.files || [])];
+    if (!files.length) return;
+    ui.photoBusy = true; render();
+    Ph.add(files).then(async r => {
+      ui.photoBusy = false; ui.photoCount = await Ph.count(); render();
+      toast(`${r.added} photo${r.added === 1 ? '' : 's'} added${r.failed ? ` · ${r.failed} couldn’t be read` : ''}${r.full ? ` · the limit is ${Ph.MAX_PHOTOS}` : ''}`);
+    });
   } else if (d.ivhr !== undefined) {
     const v = ivDraft();
     if (d.ivhr === 'target') {
@@ -5242,6 +5582,7 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('toggle', e => {
   if (e.target.hasAttribute?.('data-why')) ui.whyOpen = e.target.open;
+  if (e.target.hasAttribute?.('data-ivmore')) ui.ivMore = e.target.open;
   if (e.target.hasAttribute?.('data-mix')) ui.mixOpen = e.target.open;
   if (e.target.hasAttribute?.('data-skip')) ui.skipOpen = e.target.open;
 }, true);
@@ -5381,5 +5722,6 @@ if (O.isNewUser(state)) ui.onboard = O.startDraft(state);
 render();
 if (!ui.onboard) requestPersist();
 Sync.start(handleSync);
+if (wantAwake()) setWakeLock(true); // opened again mid-workout, mid-timer or mid-activity
 if (state.settings.hrStrap && HR.supported()) HR.reconnect(state.settings.hrStrap).then(ok => { if (ok) render(); });
 if (ui.setPage === 'data') openDataPage();
