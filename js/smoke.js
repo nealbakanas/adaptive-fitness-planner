@@ -1596,7 +1596,22 @@ try {
   click('[data-act=nav][data-tab=heart]');
   check('the Heart tab: live bpm in its zone, and tracking an activity', /♥ 125/.test(q('#heart-live')?.textContent ?? '') && /Z2/.test(q('#heart-live')?.textContent ?? '') && !!q('[data-act=hrTrackStart]'), text().slice(0, 300));
   click('[data-act=hrActivity][data-v=Volleyball]');
+  // A stand-in wake lock: the browser drops it whenever the page is hidden.
+  const wl = { held: 0, asked: 0 }, realWL = Object.getOwnPropertyDescriptor(Navigator.prototype, 'wakeLock');
+  Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => {
+    wl.asked++; wl.held++; const s = new EventTarget(); s.release = async () => { wl.held--; s.dispatchEvent(new Event('release')); }; wl.sentinel = s; return s; } } });
+  let vis = 'visible';
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => vis });
   click('[data-act=hrTrackStart]');
+  await tick(50);
+  check('tracking keeps the screen on', wl.held === 1, JSON.stringify(wl));
+  vis = 'hidden'; await wl.sentinel.release(); document.dispatchEvent(new Event('visibilitychange'));
+  vis = 'visible'; document.dispatchEvent(new Event('visibilitychange'));
+  await tick(50);
+  check('and takes the lock again after you switch to another app and back', wl.held === 1 && wl.asked === 2, JSON.stringify(wl));
+  delete document.visibilityState;
+  delete navigator.wakeLock;
+  if (realWL) void realWL;
   check('tracking: the activity, a clock, and Stop', /Volleyball/.test(q('#heart-live')?.textContent ?? '') && !!q('[data-act=hrTrackStop]') && !!S().hrTrack);
   strap.beat(150);
   check('readings go on the activity, not a workout', HR_max(S().hrTrack) === 150);

@@ -485,9 +485,13 @@ function say(text) {
   } catch { /* no voice here */ }
 }
 
+// Something on screen that you'd want to see without touching the phone: a rest timer, a workout, an interval timer, or
+// an activity you're tracking (its heart-rate readings stop when Chrome is hidden). The lock is let go only when none is.
+const wantAwake = () => !!(state.timer || currentSession() || state.intervalRun || state.hrTrack);
 async function setWakeLock(on) {
+  if (!on && wantAwake()) on = true;
   try {
-    if (on && !wakeLock && timerCfg().keepAwake && 'wakeLock' in navigator) {
+    if (on && !wakeLock && timerCfg().keepAwake && 'wakeLock' in navigator && document.visibilityState === 'visible') {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => { wakeLock = null; });
     } else if (!on && wakeLock) {
@@ -707,7 +711,7 @@ function renderWork(t) {
 setInterval(tickTimer, 250);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return syncTimerToWorker(true);
-  if (state.timer || currentSession()) setWakeLock(true); // the browser drops the lock when hidden
+  if (wantAwake()) setWakeLock(true); // the browser drops the lock when the page is hidden: take it again on the way back
   tickTimer();
 });
 
@@ -5718,5 +5722,6 @@ if (O.isNewUser(state)) ui.onboard = O.startDraft(state);
 render();
 if (!ui.onboard) requestPersist();
 Sync.start(handleSync);
+if (wantAwake()) setWakeLock(true); // opened again mid-workout, mid-timer or mid-activity
 if (state.settings.hrStrap && HR.supported()) HR.reconnect(state.settings.hrStrap).then(ok => { if (ok) render(); });
 if (ui.setPage === 'data') openDataPage();
