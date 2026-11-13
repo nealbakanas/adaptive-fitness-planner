@@ -1,9 +1,9 @@
 // Offline support and rest-timer notifications.
 
-const CACHE = 'afp-v47'; // bump with every release: the page shows it under Settings, so you can tell which version you're on
+const CACHE = 'afp-v48'; // bump with every release: the page shows it under Settings, so you can tell which version you're on
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json',
-  'js/app.js', 'js/logic.js', 'js/store.js', 'js/seed.js', 'js/fitnotes.js', 'js/goals.js', 'js/mobility.js', 'js/programs.js', 'js/library.js', 'js/onboard.js', 'js/vault.js', 'js/cloud.js', 'js/cloud-config.js', 'js/sync.js', 'js/merge.js', 'js/taste.js', 'js/pace.js', 'js/review.js', 'js/interval.js', 'js/thp.js', 'js/categories.js', 'js/morning.js', 'js/block.js', 'js/progress.js', 'js/charts.js', 'js/hr.js',
+  'js/app.js', 'js/logic.js', 'js/store.js', 'js/seed.js', 'js/fitnotes.js', 'js/goals.js', 'js/mobility.js', 'js/programs.js', 'js/library.js', 'js/onboard.js', 'js/vault.js', 'js/cloud.js', 'js/cloud-config.js', 'js/sync.js', 'js/merge.js', 'js/taste.js', 'js/pace.js', 'js/review.js', 'js/interval.js', 'js/thp.js', 'js/categories.js', 'js/morning.js', 'js/block.js', 'js/progress.js', 'js/charts.js', 'js/hr.js', 'js/photos.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 const NETWORK_TIMEOUT = 2500; // slow gym signal: fall back to cache after this

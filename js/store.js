@@ -371,6 +371,19 @@ export function migrate(s) {
     for (const p of DEFAULT_PRESETS) if (p.hr && !presets.some(x => x.id === p.id)) presets.push(structuredClone(p));
     s.version = 32;
   }
+  if (s.version < 33) {
+    // v33: steady timers (one stretch, a length or until you stop). The zone 2 timer from v32 becomes one, unless you
+    // changed it; "Zone 2 · until I stop" goes in before it.
+    const presets = s.intervals?.presets;
+    if (presets) {
+      const i = presets.findIndex(p => p.id === 'iv-z2-45');
+      const z = presets[i];
+      if (z && !z.mode && z.work === 2700 && z.rounds === 1 && !z.rest) z.mode = 'steady';
+      const open = DEFAULT_PRESETS.find(p => p.id === 'iv-z2-open');
+      if (open && !presets.some(p => p.id === open.id)) presets.splice(i >= 0 ? i : presets.length, 0, structuredClone(open));
+    }
+    s.version = 33;
+  }
   return s;
 }
 

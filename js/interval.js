@@ -1,5 +1,7 @@
-// The interval timer (the Timer tab): Tabata, EMOM, 30/30 and anything between. Pure: no DOM, no storage.
-// A config is { name, work, rest, rounds, sets, setRest, prep, exercises, hr } (seconds; `exercises`: an exercise id per set,
+// The interval timer (the Timer tab): Tabata, EMOM, 30/30 and anything between, or one steady stretch (zone 2 for 45
+// minutes, or until you stop). Pure: no DOM, no storage.
+// A config is { name, mode, work, rest, rounds, sets, setRest, prep, exercises, hr }. `mode` 'steady' is one work stretch
+// of `work` seconds, 0 meaning until you stop (and `hr.goal`: minutes at the heart-rate target to aim for). (seconds; `exercises`: an exercise id per set,
 // repeating when there are fewer than sets; `hr`: a heart-rate target for the work, { lo, hi } in % of max with a heart-rate
 // strap, plus `hold` (the work clock only runs at the target) and `alert` (beep when you drift out of it)). A run is laid out as phases ahead of time, so where you are is just a
 // matter of how long it has been running (pauses aside): it survives a reload or a locked phone.
@@ -10,7 +12,8 @@ export const DEFAULT_PRESETS = [
   { id: 'iv-emom-10', name: 'EMOM 10', work: 60, rest: 0, rounds: 10, sets: 1, setRest: 0, prep: 10 },
   { id: 'iv-30-30', name: '30/30 × 10', work: 30, rest: 30, rounds: 10, sets: 1, setRest: 0, prep: 10 },
   // With a heart-rate strap: long steady aerobic work, and intervals held at 80% of max and up.
-  { id: 'iv-z2-45', name: 'Zone 2 · 45 min', work: 2700, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: 10, hr: { lo: 60, hi: 70, alert: true } },
+  { id: 'iv-z2-open', name: 'Zone 2 · until I stop', mode: 'steady', work: 0, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: 10, hr: { lo: 60, hi: 70, alert: true } },
+  { id: 'iv-z2-45', name: 'Zone 2 · 45 min', mode: 'steady', work: 2700, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: 10, hr: { lo: 60, hi: 70, alert: true } },
   { id: 'iv-4x4-80', name: '4 × 4 min at 80%+', work: 240, rest: 60, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 80, hi: null, hold: true } },
   { id: 'iv-4x4-nor', name: 'Norwegian 4 × 4', work: 240, rest: 180, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 85, hi: 95 } },
 ];
@@ -19,15 +22,28 @@ export function cleanHr(hr) {
   const lo = Math.round(Number(hr?.lo));
   if (!(lo >= 40 && lo <= 100)) return null;
   const hi = Math.round(Number(hr?.hi));
-  return { lo, hi: hi > lo && hi <= 100 ? hi : null, hold: !!hr.hold, alert: !!hr.alert };
+  const goal = Math.round(Number(hr?.goal));
+  return { lo, hi: hi > lo && hi <= 100 ? hi : null, hold: !!hr.hold, alert: !!hr.alert, ...(goal >= 1 && goal <= 600 ? { goal } : {}) };
 }
+// A steady run with no length runs until you stop it (this long at most).
+export const OPEN_SECS = 6 * 3600;
 
 const n = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
 
 // A config with every number in range (work at least 5 s; rest, set rest and prep may be 0).
 export function clean(cfg = {}) {
+  if (cfg.mode === 'steady') {
+    // One stretch: no rest, rounds or sets. Clock runs only at the target makes no sense here (nothing to wait for).
+    const hr = cleanHr(cfg.hr);
+    return {
+      name: String(cfg.name ?? '').trim() || 'Steady', mode: 'steady',
+      work: Number(cfg.work) > 0 ? n(cfg.work, 60, OPEN_SECS, 2700) : 0, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: n(cfg.prep, 0, 60, 10),
+      exercises: Array.isArray(cfg.exercises) ? cfg.exercises.filter(Boolean).slice(0, 1) : [],
+      hr: hr && { ...hr, hold: false },
+    };
+  }
   return {
-    name: String(cfg.name ?? '').trim() || 'Intervals',
+    name: String(cfg.name ?? '').trim() || 'Intervals', mode: 'intervals',
     work: n(cfg.work, 5, 3600, 20), rest: n(cfg.rest, 0, 3600, 10),
     rounds: n(cfg.rounds, 1, 100, 8), sets: n(cfg.sets, 1, 20, 1),
     setRest: n(cfg.setRest, 0, 3600, 60), prep: n(cfg.prep, 0, 60, 10),
@@ -39,10 +55,15 @@ export function clean(cfg = {}) {
 export const exerciseFor = (cfg, set) => (cfg.exercises?.length ? cfg.exercises[(set - 1) % cfg.exercises.length] : null);
 
 // The run, phase by phase: [{ kind: 'prep' | 'work' | 'rest' | 'setRest', secs, set, round, exerciseId }]. No rest after
-// a set's last round (the rest between sets, if any, comes instead) and nothing after the last.
+// a set's last round (the rest between sets, if any, comes instead) and nothing after the last. A steady run with no
+// length is one `open` work phase (its clock counts up).
 export function phases(raw) {
   const cfg = clean(raw), out = [];
   if (cfg.prep) out.push({ kind: 'prep', secs: cfg.prep, set: 1, round: 1, exerciseId: exerciseFor(cfg, 1) });
+  if (cfg.mode === 'steady') {
+    out.push({ kind: 'work', secs: cfg.work || OPEN_SECS, set: 1, round: 1, exerciseId: exerciseFor(cfg, 1), steady: true, ...(cfg.work ? {} : { open: true }) });
+    return out;
+  }
   for (let set = 1; set <= cfg.sets; set++) {
     for (let round = 1; round <= cfg.rounds; round++) {
       out.push({ kind: 'work', secs: cfg.work, set, round, exerciseId: exerciseFor(cfg, set) });
@@ -72,14 +93,15 @@ export function phaseAt(list, ms) {
 // Start of phase i, in ms from the start of the run.
 export const phaseStart = (list, i) => list.slice(0, i).reduce((t, p) => t + p.secs * 1000, 0);
 
-// The rounds a run got through, per set: a work interval counts once it's over, or at least half done when you stopped.
+// The rounds a run got through, per set: a work interval counts once it's over, or at least half done when you stopped
+// (a steady stretch: a minute is enough, however long it was meant to be).
 // Returns [{ set, exerciseId, rounds: [{ round, endMs }] }] for sets with at least one round.
 export function roundsDone(list, ms) {
   const sets = new Map();
   let at = 0;
   for (const p of list) {
     const end = at + p.secs * 1000;
-    if (p.kind === 'work' && (end <= ms || ms - at >= p.secs * 500)) {
+    if (p.kind === 'work' && (end <= ms || ms - at >= (p.steady ? 60e3 : p.secs * 500))) {
       if (!sets.has(p.set)) sets.set(p.set, { set: p.set, exerciseId: p.exerciseId, rounds: [] });
       sets.get(p.set).rounds.push({ round: p.round, endMs: Math.min(end, ms) });
     }
@@ -99,6 +121,10 @@ export function spread(total, rounds) {
 const clock = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 export function describe(raw) {
   const c = clean(raw);
+  if (c.mode === 'steady') {
+    const t = c.hr ? ` at ${c.hr.hi ? `${c.hr.lo}-${c.hr.hi}%` : `${c.hr.lo}%+`} of max${c.hr.goal ? `, aiming for ${c.hr.goal} min there` : ''}` : '';
+    return `${c.work ? `${Math.round(c.work / 60)} min` : 'Until you stop'}${t}`;
+  }
   const secs = x => (x >= 60 ? clock(x) : `${x}s`);
   const each = c.rounds === 1 && !c.rest ? clock(c.work) : c.rest ? `${secs(c.work)} on / ${secs(c.rest)} off × ${c.rounds}` : `every ${clock(c.work)} × ${c.rounds}`;
   const hr = c.hr ? ` at ${c.hr.hi ? `${c.hr.lo}-${c.hr.hi}%` : `${c.hr.lo}%+`} of max${c.hr.hold ? ' (clock runs at target)' : ''}` : '';

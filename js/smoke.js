@@ -1564,6 +1564,34 @@ try {
   click('[data-act=histClose]');
   S().sessions = S().sessions.filter(x => x !== lb);
   S().sets = S().sets.filter(x => x.sessionId !== lb?.id);
+  // Steady: zone 2 until you stop, time in the zone counted live, a goal for minutes there.
+  click('[data-act=nav][data-tab=timer]');
+  click('[data-act=ivMode][data-v=steady]');
+  check('Steady starts as zone 2 until you stop', q('#iv-hr')?.value === '60-70' && q('#iv-steadyMin')?.value === '' && /Until you stop at 60-70% of max/.test(text()), text().slice(0, 500));
+  check('with More options folded away', !!q('details.ivmore:not([open])') && !q('#iv-rest'));
+  const goal = q('#iv-goalMin'); goal.value = '1'; goal.dispatchEvent(new Event('change', { bubbles: true }));
+  check('a goal for minutes at the target', /aiming for 1 min there/.test(text()));
+  click('[data-act=ivStart]');
+  click('[data-act=ivSkip]');
+  strap.beat(125);
+  await tick(1300); strap.beat(126);
+  const sr = S().intervalRun;
+  check('in zone 2 the time counts up, live', sr.inMs >= 700 && /Zone 2: 0:0[1-2]/.test(q('#iv-run')?.textContent ?? '') && /Steady/.test(q('#iv-run')?.textContent ?? ''), `${sr.inMs} ${q('#iv-run')?.textContent}`);
+  strap.beat(150);
+  const was = sr.inMs; await tick(800);
+  check('above it, it doesn\'t', sr.inMs - was < 300, `${sr.inMs - was}`);
+  strap.beat(125); sr.inMs = 59.9e3; await tick(600);
+  check('the goal reached: marked, and the run carries on', sr.goalMet && /✓/.test(q('#iv-run')?.textContent ?? '') && !!S().intervalRun, q('#iv-run')?.textContent);
+  sr.pausedMs = (sr.pausedMs || 0) - 120e3; // two minutes in
+  click('[data-act=ivStop]');
+  check('stopping offers to log the time', /Log 2:\d\d/.test(q('[data-act=ivLog]')?.textContent ?? ''), q('[data-act=ivLog]')?.textContent);
+  click('[data-act=ivLog]');
+  const sl = S().sessions.filter(x => x.source === 'interval').at(-1);
+  check('logged as a steady stretch', /^Steady 2 min$/.test(S().schemes.find(x => x.id === sl?.blocks[0]?.schemeId)?.name ?? ''), JSON.stringify(sl?.blocks));
+  S().sessions = S().sessions.filter(x => x !== sl);
+  S().sets = S().sets.filter(x => x.sessionId !== sl?.id);
+  click('[data-act=ivMode][data-v=intervals]');
+  check('back to intervals: 4 × 4 minutes on, 1 off', q('#iv-work')?.value === '4:00' && q('#iv-rest')?.value === '1:00' && q('#iv-rounds')?.value === '4');
   S().settings.hrMax = null;
   click('[data-act=nav][data-tab=timer]');
   click(pill()); click('#sheet [data-act=confirmYes]');
@@ -1578,6 +1606,44 @@ try {
 function L0() { const r = store.state.intervalRun; return r ? Date.now() - r.startedAt - (r.pausedMs || 0) : 0; }
 function HR_avg(s) { const v = (s?.hr?.v ?? []).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; }
 function HR_max(s) { return s?.hr?.max ?? 0; }
+
+// ---------- photos behind the timer (js/photos.js) and the sound card ----------
+try {
+  const S = () => store.state, Ph = await import('./photos.js');
+  await Ph.clear();
+  click('[data-act=nav][data-tab=timer]');
+  check('the Timer has a sound card: loud beeps on, voice off', q('input[data-bind="settings.timer.loud"]')?.checked === true && q('input[data-bind="settings.timer.voice"]')?.checked === false);
+  check('and offers photos', /Add photos/.test(text()) && !!q('input[data-photos]'));
+  const c = document.createElement('canvas'); c.width = 900; c.height = 1200;
+  const g = c.getContext('2d'); g.fillStyle = '#3a7'; g.fillRect(0, 0, 900, 1200);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg'));
+  const dt = new DataTransfer();
+  dt.items.add(new File([blob], 'one.jpg', { type: 'image/jpeg' })); dt.items.add(new File([blob], 'two.jpg', { type: 'image/jpeg' }));
+  const input = q('input[data-photos]'); input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true }));
+  for (let i = 0; i < 40 && !/2 photos on this phone/.test(text()); i++) await tick(100);
+  check('picked photos are kept on the phone', /2 photos on this phone/.test(text()) && (await Ph.count()) === 2, text().slice(-400));
+  click('[data-act=ivPreset][data-id=iv-tabata]');
+  click('[data-act=ivStart]');
+  for (let i = 0; i < 30 && !q('#slides .slide.on'); i++) await tick(100);
+  check('a running timer plays them behind it', !q('#slides').hidden && !!q('#slides .slide.on img') && document.body.classList.contains('slideshow'));
+  check('photos big, the timer small at the bottom, to start with', document.body.classList.contains('photofocus') && /Show the timer bigger/.test(text()));
+  click('[data-act=slidesFocus]');
+  check('the timer bigger, remembered', !document.body.classList.contains('photofocus') && S().settings.photos.focus === false && /Show the photos bigger/.test(text()));
+  click('[data-act=slidesFocus]');
+  click('[data-act=nav][data-tab=today]');
+  check('leaving the Timer tab stops them', q('#slides').hidden && !document.body.classList.contains('slideshow'));
+  click('[data-act=nav][data-tab=timer]');
+  click('[data-act=ivStop]');
+  click('[data-act=ivDiscard]');
+  check('so does stopping the timer', q('#slides').hidden);
+  click('[data-act=photosClear]'); click('#sheet [data-act=confirmYes]');
+  for (let i = 0; i < 20 && (await Ph.count()); i++) await tick(50);
+  check('Remove all photos', (await Ph.count()) === 0 && !/photos on this phone/.test(text()));
+  S().intervalRun = null;
+  click('[data-act=nav][data-tab=today]');
+} catch (e) {
+  out.push(['FAIL', `photos — ${e.message}`]);
+}
 
 // ---------- backup and data (async: the second copy lives in IndexedDB) ----------
 const V = await import('./vault.js');

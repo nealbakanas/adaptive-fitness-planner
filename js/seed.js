@@ -228,7 +228,7 @@ export function seed() {
   ];
 
   return splitCategories({
-    version: 32,
+    version: 33,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -247,7 +247,8 @@ export function seed() {
       paceSince: null,   // Reset sets this: older workouts don't count toward your pace
       changeover: 2, // minutes per exercise for moving, loading and setting up, on top of each scheme and its warm-up
       lastExportAt: null,
-      timer: { autoStart: true, sound: true, vibrate: true, warn10: true, keepAwake: true, notify: false, prep: 5 },
+      timer: { autoStart: true, sound: true, loud: true, voice: false, vibrate: true, warn10: true, keepAwake: true, notify: false, prep: 5 },
+      photos: { on: true, every: 10 }, // photos behind the running interval timer (js/photos.js; the photos stay on the phone)
     },
     locations: [
       { id: 'loc-office', name: 'Office', equipment: ['pullup-bar', 'rings', 'dip-belt', 'kettlebell', 'ab-wheel'] },

@@ -12,6 +12,7 @@ import * as Mo from './morning.js';
 import * as PG from './progress.js';
 import * as CH from './charts.js';
 import * as HR from './hr.js';
+import * as Ph from './photos.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -442,19 +443,46 @@ function unlockAudio() {
   } catch { /* no audio support */ }
 }
 
+// Loud beeps (on unless you turn them off): a square wave with a fifth above it, an octave and more higher (2-3 kHz, where
+// the ear is keenest and most music is thinnest), squeezed by a compressor so it plays at full level. The phone's media
+// volume still caps it: the beeps and your music share that slider.
+let loudOut = null;
 function beep(count = 1, freq = 880) {
   if (!audioCtx || !timerCfg().sound) return;
-  const t0 = audioCtx.currentTime;
-  for (let i = 0; i < count; i++) {
-    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.0001, t0 + i * 0.3);
-    gain.gain.exponentialRampToValueAtTime(0.4, t0 + i * 0.3 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.3 + 0.2);
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start(t0 + i * 0.3);
-    osc.stop(t0 + i * 0.3 + 0.22);
+  const loud = timerCfg().loud !== false;
+  if (loud && !loudOut) {
+    const comp = audioCtx.createDynamicsCompressor();
+    comp.threshold.value = -30; comp.knee.value = 0; comp.ratio.value = 20; comp.attack.value = 0.001; comp.release.value = 0.1;
+    const make = audioCtx.createGain(); make.gain.value = 2.5;
+    comp.connect(make).connect(audioCtx.destination);
+    loudOut = comp;
   }
+  const t0 = audioCtx.currentTime, f = loud ? Math.min(3200, freq * 2.6) : freq, len = loud ? 0.26 : 0.2, gap = loud ? 0.34 : 0.3;
+  for (let i = 0; i < count; i++) {
+    const at = t0 + i * gap;
+    for (const [mult, level] of loud ? [[1, 0.9], [1.5, 0.5]] : [[1, 0.4]]) {
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = loud ? 'square' : 'sine';
+      osc.frequency.value = f * mult;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(level, at + 0.01);
+      gain.gain.setValueAtTime(level, at + len - 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + len);
+      osc.connect(gain).connect(loud ? loudOut : audioCtx.destination);
+      osc.start(at);
+      osc.stop(at + len + 0.02);
+    }
+  }
+}
+// Says it out loud (Timer → Say what's next), cutting off anything it was still saying. Android lowers your music for it.
+function say(text) {
+  if (!timerCfg().voice || !timerCfg().sound || !globalThis.speechSynthesis) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.1; u.volume = 1;
+    speechSynthesis.speak(u);
+  } catch { /* no voice here */ }
 }
 
 async function setWakeLock(on) {
@@ -638,7 +666,7 @@ function tickTimer() {
   }
   if (!t.alerted && rem <= 0) {
     t.alerted = true;
-    beep(3, 880);
+    beep(3, 880); say(t.next ? `Rest over. ${t.next}` : 'Rest over');
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
     save();
   }
@@ -699,6 +727,7 @@ function render() {
   appEl.innerHTML = globalBanners() + views[ui.tab]();
   renderSheet();
   renderTimer();
+  syncSlides();
   if (ui.focus) {
     const el = appEl.querySelector(ui.focus);
     if (el) { el.focus(); el.setSelectionRange?.(el.value.length, el.value.length); }
@@ -858,8 +887,8 @@ function hrBigInner() {
     const at = I.phaseAt(I.phases(run.cfg), I.elapsed(run));
     const mark = run.marks?.at(-1);
     if (at?.phase.kind === 'work') {
-      const secs = mark?.kind === 'work' ? HR.secondsIn(hrTarget()?.hr, tgt.lo, tgt.hi, mark.at, Date.now() + 1) : 0;
-      status = bpm < tgt.lo ? `<span class="hrlow">Below ${esc(tgt.lo)}${run.cfg.hr.hold ? ' · clock waits for you' : ' · push'}</span>`
+      const secs = !at.phase.steady && mark?.kind === 'work' ? HR.secondsIn(hrTarget()?.hr, tgt.lo, tgt.hi, mark.at, Date.now() + 1) : 0;
+      status = bpm < tgt.lo ? `<span class="hrlow">Below ${esc(tgt.lo)}${run.cfg.hr.hold ? ' · clock waits for you' : at.phase.steady ? ' · pick it up a little' : ' · push'}</span>`
         : tgt.hi && bpm > tgt.hi ? `<span class="hrhigh">Above ${esc(tgt.hi)} · ease off</span>`
         : `<span class="hrok">At target${secs ? ` · ${clock(secs)} this round` : ''}</span>`;
     } else status = `<span class="meta">Target ${esc(HR.targetText(run.cfg.hr))} · ${esc(tgt.lo)}${tgt.hi ? `-${esc(tgt.hi)}` : '+'} bpm</span>`;
@@ -901,47 +930,131 @@ function viewTimer() {
   if (ui.ivLog) return viewIntervalLog(ui.ivLog);
   const d = ivDraft();
   const presets = state.intervals?.presets ?? [];
-  const field = (k, label, val, hint = '') => `<div class="field"><label for="iv-${esc(k)}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
-    <input id="iv-${esc(k)}" class="num" inputmode="${esc(k === 'rounds' || k === 'sets' ? 'numeric' : 'text')}" data-iv="${esc(k)}" value="${esc(val)}"></div>`;
-  const sets = Array.from({ length: d.sets }, (_, i) => `<div class="field"><label for="iv-ex-${esc(i)}">${d.sets > 1 ? `Set ${i + 1}` : 'Exercise'}</label>
-    <select id="iv-ex-${esc(i)}" data-ivex="${esc(i)}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`).join('');
+  const steady = d.mode === 'steady';
+  const field = (k, label, val, hint = '', mode = 'text', ph = '') => `<div class="field"><label for="iv-${esc(k)}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
+    <input id="iv-${esc(k)}" class="num" inputmode="${esc(mode)}" data-iv="${esc(k)}" value="${esc(val)}" ${ph ? `placeholder="${esc(ph)}"` : ''}></div>`;
+  const exSel = (i, label) => `<div class="field"><label for="iv-ex-${esc(i)}">${label}</label>
+    <select id="iv-ex-${esc(i)}" data-ivex="${esc(i)}">${ivExerciseOptions(I.exerciseFor(d, i + 1))}</select></div>`;
+  // Intervals: work, rest and rounds up front; sets of rounds, a rest between them and an exercise per set under More.
+  const main = steady
+    ? `<div class="row2 fields">${field('steadyMin', 'Minutes', d.work ? Math.round(d.work / 60) : '', '', 'numeric', 'until I stop')}${d.hr ? field('goalMin', 'Goal at target', d.hr.goal ?? '', '', 'numeric', 'minutes') : ''}</div>
+      ${exSel(0, 'Exercise')}`
+    : `<div class="row2 fields">${field('work', 'Work', clock(d.work))}${field('rest', 'Rest', clock(d.rest), '0: every minute')}</div>
+      <div class="row2 fields">${field('rounds', 'Rounds', d.rounds, '', 'numeric')}<div class="field">${d.sets === 1 ? exSel(0, 'Exercise').replace(/^<div class="field">|<\/div>$/g, '') : `<label>Exercises</label><p class="meta">one per set, under More</p>`}</div></div>`;
+  const more = `<details class="ivmore" ${ui.ivMore ? 'open' : ''} data-ivmore><summary>More options</summary>
+      ${steady ? '' : `<div class="row2 fields">${field('sets', 'Sets of rounds', d.sets, '', 'numeric')}${field('setRest', 'Rest between sets', clock(d.setRest))}</div>
+      ${d.sets > 1 ? Array.from({ length: d.sets }, (_, i) => exSel(i, `Set ${i + 1}`)).join('') : ''}`}
+      <div class="row2 fields">${field('prep', 'Get ready', clock(d.prep))}<div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div></div>
+    </details>`;
   return `<header class="top"><h1>Timer</h1><div class="hbtns">${hrPill()}</div></header>
     <div class="chips">${presets.map(p => `<button class="chip ${esc(d.presetId === p.id ? 'on' : '')}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
     <div class="card">
-      <div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div>
-      <div class="row2 fields">${field('work', 'Work', clock(d.work))}${field('rest', 'Rest', clock(d.rest), '0 = EMOM')}</div>
-      <div class="row2 fields">${field('rounds', 'Rounds', d.rounds)}${field('sets', 'Sets', d.sets)}</div>
-      <div class="row2 fields">${field('setRest', 'Rest between sets', clock(d.setRest))}${field('prep', 'Get ready', clock(d.prep))}</div>
-      ${sets}
+      <div class="seg ivmode"><button class="${esc(steady ? '' : 'on')}" data-act="ivMode" data-v="intervals">Intervals</button><button class="${esc(steady ? 'on' : '')}" data-act="ivMode" data-v="steady">Steady</button></div>
+      <p class="meta">${steady ? 'One stretch at a steady effort: zone 2, a long ride. Counts your time in the heart-rate target.' : 'Rounds of work and rest: 4 × 4 minutes, Tabata, every minute on the minute.'}</p>
+      ${main}
       ${ivHrFields(d)}
-      <p class="meta">${esc(I.describe(d))}</p>
+      ${more}
+      <p class="meta ivsum">${esc(I.describe(d))}</p>
       <div class="brow"><button class="primary big" data-act="ivStart">Start</button></div>
       <div class="brow"><button class="small" data-act="ivSave">${d.presetId && presets.some(p => p.id === d.presetId && !p.id.startsWith('iv-')) ? 'Save changes' : 'Save as a timer'}</button>
         ${d.presetId && !d.presetId.startsWith('iv-') ? '<button class="small quiet" data-act="ivDel">Delete</button>' : ''}</div>
-    </div>`;
+    </div>
+    ${timerSoundCard()}
+    ${photosCard()}`;
 }
 
-// The timer's heart-rate target: a range for the work intervals, whether the clock waits for you to reach it, and beeps.
-const HR_TARGETS = [['', 'None'], ['60-70', 'Zone 2 · 60-70%'], ['70-80', '70-80%'], ['80', '80%+'], ['85', '85%+'], ['85-95', '85-95%'], ['90', '90%+']];
+// The timer's heart-rate target: a range for the work, whether the clock waits for you to reach it, and beeps.
+const HR_TARGETS = [['', 'None'], ['60-70', 'Zone 2 · 60-70%'], ['70-80', 'Zone 3 · 70-80%'], ['80', '80%+'], ['85', '85%+'], ['85-95', '85-95%'], ['90', '90%+']];
 function ivHrFields(d) {
   if (!HR.supported() && !d.hr) return '';
   const cur = d.hr ? `${d.hr.lo}${d.hr.hi ? `-${d.hr.hi}` : ''}` : '';
   const list = HR_TARGETS.some(([v]) => v === cur) ? HR_TARGETS : [...HR_TARGETS, [cur, `${HR.targetText(d.hr)}`]];
   const b = hrBasis(), tgt = HR.targetBpm(b, d.hr);
   const box = (k, label) => `<label class="ivcheck"><input type="checkbox" data-ivhr="${esc(k)}" ${d.hr?.[k] ? 'checked' : ''}> ${label}</label>`;
-  return `<div class="field"><label for="iv-hr">Heart rate during work</label>
+  return `<div class="field"><label for="iv-hr">Heart-rate target${d.mode === 'steady' ? '' : ' during work'}</label>
       <select id="iv-hr" data-ivhr="target">${opts(list, cur)}</select></div>
     ${d.hr ? `<p class="meta">${tgt ? `${tgt.lo}${tgt.hi ? `-${tgt.hi}` : '+'} bpm for you` : 'Set your max heart rate in Settings → You to use a target.'}</p>
-      ${box('hold', 'Clock runs only at the target')}${box('alert', 'Beep when I drift out of it')}` : ''}`;
+      ${d.mode === 'steady' ? '' : box('hold', 'Clock runs only at the target')}${box('alert', 'Beep when I drift out of it')}` : ''}`;
+}
+
+// ---------- photos behind the running timer (js/photos.js) ----------
+// Picked from the phone (Android's picker includes Google Photos), kept on this phone only. They crossfade behind the
+// interval timer while it runs on the Timer tab; "Show the photos bigger" shrinks the timer to make room.
+function photosCard() {
+  const n = ui.photoCount ?? 0, ph = state.settings.photos ?? {};
+  return `<div class="label">Photos behind the timer</div><div class="menu">
+      ${n ? frow('Play them while the timer runs', switchIn('settings.photos.on', ph.on !== false), `${n} photo${n === 1 ? '' : 's'} on this phone`) : ''}
+      ${n ? frow('Change every (seconds)', numIn('settings.photos.every', ph.every ?? 10)) : ''}
+      <label class="menurow"><input type="file" accept="image/*" multiple hidden data-photos>
+        <span class="grow"><span class="name">${ui.photoBusy ? 'Adding photos…' : n ? 'Add more photos' : 'Add photos'}</span><span class="meta">from your gallery or Google Photos · they stay on this phone</span></span></label>
+      ${n ? '<button class="menurow" data-act="photosClear"><span class="grow"><span class="name">Remove all photos</span></span></button>' : ''}</div>`;
+}
+const slidesEl = Object.assign(document.createElement('div'), { id: 'slides', hidden: true });
+slidesEl.setAttribute('aria-hidden', 'true');
+document.body.prepend(slidesEl);
+const slides = { on: false, order: [], i: 0, timer: null };
+// Photos bigger (the timer small at the bottom) unless you chose the timer bigger; remembered.
+const photoFocus = () => state.settings.photos?.focus !== false;
+const slidesOn = () => !!state.intervalRun && ui.tab === 'timer' && !ui.onboard && state.settings.photos?.on !== false && (ui.photoCount ?? 0) > 0;
+// Starts or stops the slideshow to match what's on screen (called after every render).
+async function syncSlides() {
+  const want = slidesOn();
+  document.body.classList.toggle('slideshow', want);
+  document.body.classList.toggle('photofocus', want && photoFocus());
+  if (want === slides.on) return;
+  slides.on = want;
+  clearTimeout(slides.timer);
+  if (!want) {
+    for (const l of slidesEl.children) URL.revokeObjectURL(l.dataset.url);
+    slidesEl.replaceChildren();
+    slidesEl.hidden = true;
+    return;
+  }
+  slides.order = Ph.shuffle(await Ph.ids());
+  slides.i = 0;
+  slidesEl.hidden = false;
+  nextSlide();
+}
+async function nextSlide() {
+  if (!slides.on || !slides.order.length) return;
+  const blob = await Ph.get(slides.order[slides.i++ % slides.order.length]);
+  if (blob && slides.on) {
+    const url = URL.createObjectURL(blob);
+    const layer = document.createElement('div');
+    layer.className = 'slide';
+    layer.dataset.url = url;
+    layer.style.setProperty('--u', `url("${url}")`);
+    const img = new Image();
+    img.alt = '';
+    img.src = url;
+    layer.append(img);
+    slidesEl.append(layer);
+    await img.decode().catch(() => {});
+    requestAnimationFrame(() => layer.classList.add('on'));
+    setTimeout(() => { while (slidesEl.children.length > 1 && slidesEl.firstElementChild !== layer) { URL.revokeObjectURL(slidesEl.firstElementChild.dataset.url); slidesEl.firstElementChild.remove(); } }, 1600);
+  }
+  if (slides.on) slides.timer = setTimeout(nextSlide, Math.max(3, Number(state.settings.photos?.every) || 10) * 1000);
+}
+Ph.count().then(n => { ui.photoCount = n; if (n && (ui.tab === 'timer' || state.intervalRun)) render(); });
+
+// Sound for the timers: beeps loud enough to cut through music, a voice saying what's next, a test.
+function timerSoundCard() {
+  const tc = state.settings.timer;
+  return `<div class="label">Sound</div><div class="menu">
+      ${frow('Loud beeps', switchIn('settings.timer.loud', tc.loud !== false), 'sharp tones that cut through music')}
+      ${frow('Say what’s next', switchIn('settings.timer.voice', !!tc.voice), '“Round 2, go”, “Rest”')}
+      <button class="menurow" data-act="timerTest"><span class="grow"><span class="name">Test the sound</span><span class="meta">play your music too, to check it carries</span></span></button></div>`;
 }
 
 function viewIntervalRun(run) {
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
+  const pics = slidesOn();
   return `<header class="top"><h1>${esc(run.cfg.name)}</h1><div class="hbtns">${hrPill()}</div></header>
     <div class="ivrun ${esc(at?.phase.kind ?? 'done')}" id="iv-run">${ivRunInner(run, list, at)}</div>
     <div class="ivhr" id="iv-hr">${hrBigInner()}</div>
     <div class="brow ivbtns">${run.pausedAt ? '<button class="primary big" data-act="ivResume">Resume</button>' : '<button class="big" data-act="ivPause">Pause</button>'}
-      <button class="big" data-act="ivSkip">Skip</button><button class="big danger" data-act="ivStop">Stop</button></div>`;
+      <button class="big" data-act="ivSkip">Skip</button><button class="big danger" data-act="ivStop">Stop</button></div>
+    ${pics ? `<div class="brow slidesbtn"><button class="small quiet" data-act="slidesFocus">${photoFocus() ? 'Show the timer bigger' : 'Show the photos bigger'}</button></div>` : ''}`;
 }
 
 const IV_LABEL = { prep: 'Get ready', work: 'Work', rest: 'Rest', setRest: 'Rest between sets' };
@@ -949,9 +1062,20 @@ function ivRunInner(run, list, at) {
   if (!at) return '<div class="ivclock">Done</div>';
   const c = run.cfg, p = at.phase;
   const ex = exOf(p.exerciseId)?.name ?? '';
+  const waiting = c.hr?.hold && p.kind === 'work' && HR.fresh() && HR.live.bpm < (HR.targetBpm(hrBasis(), c.hr)?.lo ?? 0);
+  // A steady stretch: its own clock (counting up when it has no length), and the time at the target against any goal.
+  if (p.steady) {
+    const into = Math.floor((I.elapsed(run) - I.phaseStart(list, at.i)) / 1000);
+    const inT = Math.floor((run.inMs || 0) / 1000), goal = c.hr?.goal ? c.hr.goal * 60 : 0;
+    return `<div class="ivfill" style="width:${esc(p.open ? (goal ? Math.min(100, 100 * inT / goal) : 0) : Math.min(100, at.frac * 100))}%"></div>
+      <div class="ivphase">${p.open ? 'Steady' : 'Steady · left'}${run.pausedAt ? ' · paused' : ''}</div>
+      <div class="ivclock">${clock(p.open ? into : at.rem)}</div>
+      <div class="ivsub">${esc(ex)}</div>
+      ${c.hr ? `<div class="ivtarget ${esc(goal && inT >= goal ? 'met' : '')}">${esc(c.hr.lo === 60 && c.hr.hi === 70 ? 'Zone 2' : HR.targetText(c.hr))}: <b>${clock(inT)}</b>${goal ? ` of ${clock(goal)}${inT >= goal ? ' ✓' : ''}` : ''}</div>` : ''}`;
+  }
   const next = at.next ? `Next: ${IV_LABEL[at.next.kind]}${at.next.kind === 'work' ? ` · ${esc(exOf(at.next.exerciseId)?.name ?? '')}` : ''}` : 'Last one';
   return `<div class="ivfill" style="width:${esc(Math.min(100, at.frac * 100))}%"></div>
-    <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}${run.cfg.hr?.hold && p.kind === 'work' && HR.fresh() && HR.live.bpm < (HR.targetBpm(hrBasis(), run.cfg.hr)?.lo ?? 0) ? ' · waiting' : ''}</div>
+    <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}${waiting ? ' · waiting' : ''}</div>
     <div class="ivclock">${clock(at.rem)}</div>
     <div class="ivsub">${p.kind === 'prep' ? esc(ex) : `${esc(ex)} · round ${p.round} of ${c.rounds}${c.sets > 1 ? ` · set ${p.set} of ${c.sets}` : ''}`}</div>
     <div class="ivnext">${next}</div>`;
@@ -968,11 +1092,11 @@ function viewIntervalLog(lg) {
     ${done.map(d => {
       const ex = exOf(d.exerciseId);
       const unitWord = ex?.repUnit ?? (ex?.metric === 'time' ? null : 'reps');
-      return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')} · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}</label>
+      return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')}${lg.cfg.mode === 'steady' ? '' : ` · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}`}</label>
         ${unitWord ? `<input id="iv-total-${esc(d.set)}" class="num" inputmode="numeric" data-ivtotal="${esc(d.set)}" value="${esc(lg.totals?.[d.set] ?? '')}" placeholder="total ${esc(unitWord)}">` : `<span class="meta">${lg.cfg.work}s a round</span>`}</div>`;
     }).join('')}
     ${ivRoundsTable(lg)}
-    <div class="brow"><button class="primary big" data-act="ivLog">Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
+    <div class="brow"><button class="primary big" data-act="ivLog">${lg.cfg.mode === 'steady' ? `Log ${clock(Math.round(lg.ms / 1000))}` : `Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds`}</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
 }
 
 // The run's heart rate, round by round (with a recording): average, time at the target, and the drop over the rest.
@@ -992,7 +1116,13 @@ function ivRoundsTable(lg) {
 }
 
 // A scheme for a block of timer rounds (kept, so the block has one; never suggested: manualOnly).
-function intervalScheme(cfg, tier, reps) {
+function intervalScheme(cfg, tier, reps, ms = 0) {
+  if (cfg.mode === 'steady') {
+    const m = Math.max(1, Math.round(ms / 60000)), id = `s-i-steady-${m}-${tier}`;
+    let st = schOf(id);
+    if (!st) { st = { id, name: `Steady ${m} min`, sets: 1, reps: reps || 1, restSec: 0, minutes: m, tiers: [tier], manualOnly: true }; state.schemes.push(st); }
+    return st;
+  }
   const id = `s-i-${cfg.rounds}x${cfg.work}-${cfg.rest}-${tier}`;
   let sc = schOf(id);
   if (!sc) {
@@ -1011,14 +1141,14 @@ function logIntervals(lg) {
   const open = currentSession();
   const stats = ivStats(lg);
   const s = open ?? { id: L.uid(), day: L.dayKey(lg.startedAt), checkinAt: lg.startedAt, firstSetAt: null, status: 'done', source: 'interval',
-    locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round(I.totalSecs(cfg) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
+    locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round((cfg.mode === 'steady' ? lg.ms / 1000 : I.totalSecs(cfg)) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
   let n = 0;
   for (const d of done) {
     const ex = exOf(d.exerciseId);
     if (!ex) continue;
     const tier = tierFor(ex, 'T3');
     const reps = I.spread(lg.totals?.[d.set], d.rounds.length);
-    const sc = intervalScheme(cfg, tier, reps[0]);
+    const sc = intervalScheme(cfg, tier, reps[0], lg.ms);
     const b = { id: L.uid(), tier, slotId: slotIdFor(ex.id, tier), exerciseId: ex.id, schemeId: sc.id, swaps: [], interval: cfg.name };
     // Heart rate per round, kept on the block: { round, avg, max, atTarget (s), secs, drop }.
     const mine = stats.filter(x => x.set === d.set && x.avg).map(({ set, ...x }) => x);
@@ -1026,8 +1156,8 @@ function logIntervals(lg) {
     s.blocks.push(b);
     d.rounds.forEach((r, i) => {
       state.sets.push({ id: L.uid(), sessionId: s.id, blockId: b.id, exerciseId: ex.id, tier, schemeId: sc.id, load: null,
-        reps: ['reps', 'load_reps'].includes(ex.metric) ? reps[i] : null, time: ex.metric === 'time' ? cfg.work : null, distance: null,
-        done: true, loggedAt: lg.startedAt + r.endMs, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}) });
+        reps: ['reps', 'load_reps'].includes(ex.metric) ? reps[i] : null, time: ex.metric === 'time' ? (cfg.mode === 'steady' ? Math.round(lg.ms / 1000) : cfg.work) : null, distance: null,
+        done: true, loggedAt: cfg.mode === 'steady' && lg.endAt ? lg.endAt : lg.startedAt + r.endMs, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}) });
       n++;
     });
   }
@@ -1053,17 +1183,27 @@ function tickInterval() {
     const bpm = HR.live.bpm;
     if (run.cfg.hr.hold && bpm < tgt.lo) run.pausedMs = (run.pausedMs || 0) + dt;
     const out = bpm < tgt.lo || (tgt.hi && bpm > tgt.hi);
+    if (!out) run.inMs = (run.inMs || 0) + dt; // time at the target, counted as it happens
     if (out && run.cfg.hr.alert) {
       run.outSince ??= now;
-      if (now - run.outSince >= 10e3 && !run.outBeeped) { run.outBeeped = true; beep(2, 440); if (timerCfg().vibrate) navigator.vibrate?.([400, 150, 400]); }
+      if (now - run.outSince >= 10e3 && !run.outBeeped) {
+        run.outBeeped = true; beep(2, 440); say(bpm < tgt.lo ? 'Heart rate low' : 'Heart rate high');
+        if (timerCfg().vibrate) navigator.vibrate?.([400, 150, 400]);
+      }
     } else { run.outSince = null; run.outBeeped = false; }
+    // A goal for minutes at the target, reached: a fanfare; the run carries on until you stop it.
+    if (run.cfg.hr.goal && !run.goalMet && (run.inMs || 0) >= run.cfg.hr.goal * 60e3) {
+      run.goalMet = true; beep(4, 1320); say(`${run.cfg.hr.goal} minutes at target. Goal reached`);
+      if (timerCfg().vibrate) navigator.vibrate?.([250, 100, 250, 100, 600]);
+      save();
+    }
   }
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
   // Where each phase began on the clock on the wall (holds and pauses move them), for the rounds' heart-rate results.
   run.marks ??= [];
   if (at && run.marks.at(-1)?.i !== at.i) run.marks.push({ i: at.i, kind: at.phase.kind, set: at.phase.set, round: at.phase.round, at: now });
   if (!at) {
-    beep(3, 880);
+    beep(3, 880); say('Done');
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250, 120, 250]);
     ui.ivLog = { cfg: run.cfg, startedAt: run.startedAt, ms: I.totalSecs(run.cfg) * 1000, totals: {}, hr: run.hr ?? null, marks: run.marks ?? [], endAt: now };
     state.intervalRun = null; ivLast = null;
@@ -1073,12 +1213,15 @@ function tickInterval() {
   }
   if (ivLast !== at.i) {
     if (ivLast != null) {
-      if (at.phase.kind === 'work') { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(250); }
+      const c = run.cfg, p = at.phase;
+      if (p.kind === 'work') { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(250); }
       else { beep(2, 520); if (timerCfg().vibrate) navigator.vibrate?.([120, 80, 120]); }
+      say(p.kind === 'work' ? (p.steady ? 'Go' : c.rounds > 1 ? `${p.round === c.rounds ? 'Last round' : `Round ${p.round}`}, go` : 'Go')
+        : p.kind === 'setRest' ? 'Rest. Next set coming' : 'Rest');
     }
     ivLast = at.i;
   }
-  if (at.rem <= 3 && run.beeped !== `${at.i}:${at.rem}`) { run.beeped = `${at.i}:${at.rem}`; beep(1, 660); }
+  if (at.rem <= 3 && !at.phase.open && run.beeped !== `${at.i}:${at.rem}`) { run.beeped = `${at.i}:${at.rem}`; beep(1, 660); }
   const el = document.getElementById('iv-run');
   if (el && ui.tab === 'timer') { el.className = `ivrun ${at.phase.kind}`; el.innerHTML = ivRunInner(run, list, at); }
   const hrEl = document.getElementById('iv-hr');
@@ -2452,6 +2595,8 @@ function settingsTimer() {
   return `<div class="menu">
       ${sw('autoStart', 'Start when I log a set')}
       ${sw('sound', 'Beep when rest is over')}
+      ${frow('Loud beeps', switchIn('settings.timer.loud', tc.loud !== false), 'sharp tones that cut through music')}
+      ${sw('voice', 'Say what’s next', '“Rest over”, “Round 2, go”')}
       ${sw('warn10', 'Beep at 10 seconds left')}
       ${sw('vibrate', 'Vibrate when rest is over', 'Android only')}
       ${sw('keepAwake', 'Keep the screen on')}
@@ -4056,6 +4201,20 @@ const actions = {
     toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}` : 'Nothing to log');
   },
   ivDiscard: () => { ui.ivLog = null; render(); },
+  // Intervals or one steady stretch. Steady starts as zone 2 until you stop; intervals as 4 rounds of 4 minutes on, 1 off.
+  ivMode: d => {
+    const v = ivDraft();
+    if ((v.mode ?? 'intervals') === d.v) return;
+    const ex = v.exercises;
+    ui.iv = d.v === 'steady'
+      ? { ...I.clean({ mode: 'steady', name: 'Zone 2', work: 0, prep: v.prep, exercises: ex, hr: { lo: 60, hi: 70, alert: true } }), presetId: null }
+      : { ...I.clean({ name: 'Intervals', work: 240, rest: 60, rounds: 4, sets: 1, prep: v.prep, exercises: ex, hr: v.hr && { ...v.hr, goal: null } }), presetId: null };
+    render();
+  },
+  photosClear: () => askConfirm('Remove all the photos?', 'Only from this app: your gallery and Google Photos keep them.', 'Remove', async () => {
+    await Ph.clear(); ui.photoCount = 0; render(); toast('Photos removed');
+  }),
+  slidesFocus: () => { (state.settings.photos ??= {}).focus = !photoFocus(); save(); render(); },
   hrUseTop: d => { state.settings.hrMax = Number(d.v); save(); render(); toast(`Max heart rate ${d.v}`); },
   // The heart-rate pill: connect the strap (Chrome's device list), or once it's on, offer to disconnect it.
   hrTap: async () => {
@@ -4376,6 +4535,7 @@ const actions = {
     const was = timerCfg().sound;
     timerCfg().sound = true;
     beep(3, 880);
+    say('Round 2, go');
     timerCfg().sound = was;
     if (timerCfg().vibrate) navigator.vibrate?.([250, 120, 250]);
   },
@@ -5106,9 +5266,19 @@ document.addEventListener('change', e => {
     const v = ivDraft();
     if (d.iv === 'name') v.name = el.value;
     else if (['work', 'rest', 'setRest', 'prep'].includes(d.iv)) v[d.iv] = /^\s*0+(:0+)?\s*$/.test(el.value) ? 0 : parseMSS(el.value) ?? v[d.iv];
+    else if (d.iv === 'steadyMin') v.work = Number(el.value) > 0 ? Math.round(Number(el.value) * 60) : 0; // blank: until you stop
+    else if (d.iv === 'goalMin') { if (v.hr) v.hr = { ...v.hr, goal: Number(el.value) > 0 ? Math.round(Number(el.value)) : null }; }
     else v[d.iv] = Number(el.value) || v[d.iv];
     Object.assign(v, I.clean(v), { presetId: v.presetId });
     render();
+  } else if (el.hasAttribute('data-photos')) {
+    const files = [...(el.files || [])];
+    if (!files.length) return;
+    ui.photoBusy = true; render();
+    Ph.add(files).then(async r => {
+      ui.photoBusy = false; ui.photoCount = await Ph.count(); render();
+      toast(`${r.added} photo${r.added === 1 ? '' : 's'} added${r.failed ? ` · ${r.failed} couldn’t be read` : ''}${r.full ? ` · the limit is ${Ph.MAX_PHOTOS}` : ''}`);
+    });
   } else if (d.ivhr !== undefined) {
     const v = ivDraft();
     if (d.ivhr === 'target') {
@@ -5242,6 +5412,7 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('toggle', e => {
   if (e.target.hasAttribute?.('data-why')) ui.whyOpen = e.target.open;
+  if (e.target.hasAttribute?.('data-ivmore')) ui.ivMore = e.target.open;
   if (e.target.hasAttribute?.('data-mix')) ui.mixOpen = e.target.open;
   if (e.target.hasAttribute?.('data-skip')) ui.skipOpen = e.target.open;
 }, true);
