@@ -1592,6 +1592,33 @@ try {
   S().sets = S().sets.filter(x => x.sessionId !== sl?.id);
   click('[data-act=ivMode][data-v=intervals]');
   check('back to intervals: 4 × 4 minutes on, 1 off', q('#iv-work')?.value === '4:00' && q('#iv-rest')?.value === '1:00' && q('#iv-rounds')?.value === '4');
+  // The Heart tab: track a volleyball game, then its graph, zones and drift; analytics and the session list.
+  click('[data-act=nav][data-tab=heart]');
+  check('the Heart tab: live bpm in its zone, and tracking an activity', /♥ 125/.test(q('#heart-live')?.textContent ?? '') && /Z2/.test(q('#heart-live')?.textContent ?? '') && !!q('[data-act=hrTrackStart]'), text().slice(0, 300));
+  click('[data-act=hrActivity][data-v=Volleyball]');
+  click('[data-act=hrTrackStart]');
+  check('tracking: the activity, a clock, and Stop', /Volleyball/.test(q('#heart-live')?.textContent ?? '') && !!q('[data-act=hrTrackStop]') && !!S().hrTrack);
+  strap.beat(150);
+  check('readings go on the activity, not a workout', HR_max(S().hrTrack) === 150);
+  const H2 = await import('./hr.js'), tv = S().hrTrack, ta = Date.now() - 40 * 60e3;
+  tv.startedAt = ta; tv.hr = null;
+  for (let x = 0; x < 2400; x += 5) tv.hr = H2.addSample(tv.hr, ta + x * 1000, x % 300 < 60 ? 165 : x < 1200 ? 128 : 142);
+  S().settings.hrAge = 40; S().settings.hrSex = 'm'; S().settings.bodyweight = 200;
+  await tick(1100);
+  check('it shows the zones, load and calories so far', /kcal/.test(q('#heart-live')?.textContent ?? '') && /load \d+/.test(q('#heart-live')?.textContent ?? '') && !!q('#heart-live .zbar'), q('#heart-live')?.textContent);
+  click('[data-act=hrTrackStop]');
+  const vb = S().sessions.find(x => x.source === 'activity');
+  check('stopping saves it and opens its graph', vb?.activity === 'Volleyball' && !!q('svg[data-chart=hz-session]') && /Time in each zone/.test(text()) && /Drift/.test(text()) && !S().hrTrack, text().slice(0, 300));
+  click('[data-act=heartBack]');
+  check('analytics: zone 2 and 80%+ a week, load and calories, zones and load charts, the session list',
+    /zone 2 min a week/.test(text()) && /kcal a week/.test(text()) && !!q('svg[data-chart=hz-zones]') && !!q('svg[data-chart=hz-load]') && !!q('[data-act=heartOpen]'), text().slice(0, 600));
+  click('[data-act=nav][data-tab=week]'); click('[data-act=histOpen]');
+  check('History lists the activity, with its heart rate', /Volleyball/.test(text()) && !!q('.card.hist [data-act=heartOpen]'), text().slice(0, 300));
+  click(qa('.card.hist').find(c => /Volleyball/.test(c.textContent))?.querySelector('[data-act=heartOpen]'));
+  check('and opens its graph from there', ui_tab() === 'heart' && /Volleyball/.test(text()) && !!q('svg[data-chart=hz-session]'), `${ui_tab()} ${text().slice(0, 200)}`);
+  click('[data-act=heartDelete]'); click('#sheet [data-act=confirmYes]');
+  check('an activity can be deleted', !S().sessions.some(x => x.source === 'activity'));
+  S().settings.hrAge = null; S().settings.hrSex = null;
   S().settings.hrMax = null;
   click('[data-act=nav][data-tab=timer]');
   click(pill()); click('#sheet [data-act=confirmYes]');
@@ -1603,6 +1630,7 @@ try {
 } catch (e) {
   out.push(['FAIL', `heart rate — ${e.message}`]);
 }
+function ui_tab() { return q('#nav button.on')?.dataset.tab; }
 function L0() { const r = store.state.intervalRun; return r ? Date.now() - r.startedAt - (r.pausedMs || 0) : 0; }
 function HR_avg(s) { const v = (s?.hr?.v ?? []).filter(x => x > 0); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; }
 function HR_max(s) { return s?.hr?.max ?? 0; }

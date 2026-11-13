@@ -1911,6 +1911,23 @@ atest('photos: added from picked files, shrunk, listed, read back and removed', 
   ok(await Ph.clear());
   eq(await Ph.count(), 0);
 });
+test('heart analytics: training load, calories from heart rate, drift over a steady effort', () => {
+  const b = HR.basis({ hrMax: 190 }), t0 = 1_000_000;
+  let rec = null;
+  for (let s = 0; s < 3600; s += 5) rec = HR.addSample(rec, t0 + s * 1000, s < 1800 ? 125 : 130); // an hour of zone 2
+  eq(HR.load(rec, b), 120, 'an hour in zone 2: 60 min × 2');
+  let hard = null;
+  for (let s = 0; s < 600; s += 5) hard = HR.addSample(hard, t0 + s * 1000, 160);
+  eq(HR.load(hard, b), 40, '10 minutes in zone 4: 10 × 4');
+  eq(HR.calories(rec, { kg: 90, age: 40 }), null, 'calories need sex too');
+  const kcal = HR.calories(rec, { kg: 90, age: 40, sex: 'm' });
+  ok(kcal > 600 && kcal < 800, `an hour at ~127 bpm, 90 kg, 40, male: ${kcal} kcal (Keytel)`);
+  ok(HR.calories(rec, { kg: 65, age: 40, sex: 'f' }) < kcal, 'less for a lighter woman at the same heart rate');
+  eq(HR.calories(HR.addSample(null, t0, 70), { kg: 90, age: 40, sex: 'm' }), 0, 'resting rates add nothing');
+  eq(HR.drift(rec), { first: 125, second: 130, pct: 4 });
+  eq(HR.drift(hard), null, 'under 20 minutes: no drift');
+  eq([HR.maxFromAge(40), HR.maxFromAge(5)], [180, null]);
+});
 test('interval timer: a heart-rate target is kept clean, described, and comes with the new timers', () => {
   eq(IV.cleanHr({ lo: 80, hi: null, hold: 1 }), { lo: 80, hi: null, hold: true, alert: false });
   eq(IV.cleanHr({ lo: 60, hi: 70, goal: 0 }).goal, undefined, 'no goal unless one is set');

@@ -237,7 +237,7 @@ export function seed() {
       increment: 5,
       kettlebells: [30, 40, 45, 53], // loads for kettlebell exercises snap to these
       recovery: { t1AfterT1: true, powerWhenTired: true }, // powerWhenTired off: a low-energy day makes power work technique
-      hrMax: null, hrRest: null, hrMethod: 'max', // heart-rate zones (js/hr.js): your max, resting rate, and % of max or of reserve
+      hrMax: null, hrRest: null, hrMethod: 'max', hrAge: null, hrSex: null, // heart-rate zones (js/hr.js): your max, resting rate, and % of max or of reserve
       t3Areas: false, // T3 goals as areas with no weekly count (logic.js isArea): off for new installs
       week: { workouts: null, minutes: null }, // your usual week for the goal budget; null = from your recent check-ins
       onboarded: false, // a new install starts with the setup (js/onboard.js)
@@ -275,6 +275,7 @@ export function seed() {
     sets: [],
     timer: null, // running rest timer: { endsAt, total, blockId, setId, next, warned, alerted }
     intervals: { presets: DEFAULT_PRESETS.map(p => ({ ...p })), last: null }, // the Timer tab (js/interval.js): saved timers and the last one used
+    hrTrack: null, // an activity being tracked on the Heart tab: { id, activity, startedAt, hr }
     intervalRun: null, // a running interval timer: { cfg, startedAt, pausedAt, pausedMs }
     morning: { parts: [], log: [] }, // the morning check (js/morning.js): tracked body parts, and energy and pain each day
     block: null, // the running program block (js/block.js)
