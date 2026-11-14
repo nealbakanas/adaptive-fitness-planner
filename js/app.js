@@ -913,12 +913,34 @@ function zoneText(rec) {
 }
 // This week's heart-rate work: "Zone 2 42 min · 80%+ 12 min this week" ('' with none).
 function zoneWeekText(from, to) {
-  const b = hrBasis();
-  if (!b) return '';
+  const b = hrBasis(), k = kcalIn(from, to);
   const zt = [0, 0, 0, 0, 0, 0];
-  for (const s of state.sessions) if (s.hr) HR.zoneTimes(s.hr, b, from, to).forEach((x, i) => { zt[i] += x; });
+  if (b) for (const s of state.sessions) if (s.hr) HR.zoneTimes(s.hr, b, from, to).forEach((x, i) => { zt[i] += x; });
   const z2 = Math.round(zt[2] / 60), hi = Math.round((zt[4] + zt[5]) / 60);
-  return z2 || hi ? `Zone 2 ${z2} min · 80%+ ${hi} min this week` : '';
+  return [z2 || hi ? `Zone 2 ${z2} min · 80%+ ${hi} min` : '', k ? `${k.kcal.toLocaleString('en-US')} kcal` : ''].filter(Boolean).join(' · ') + (z2 || hi || k ? ' this week' : '');
+}
+
+// ---------- calories from heart rate ----------
+// Lifting: heart rate climbs with the strain of a heavy set far more than the energy it burns, so calories from heart
+// rate run high. Those numbers are marked rough. (A workout here with sets logged at T1-T3 or technique counts as lifting.)
+const LIFT_TIERS = new Set(['T1', 'T2', 'T3', 'TECH']);
+const isLifting = s => s.source !== 'activity' && s.source !== 'interval' && state.sets.some(x => x.sessionId === s.id && x.done && LIFT_TIERS.has(x.tier));
+// Calories for a session (from its recording), or null without one or without your age, sex and weight: { kcal, rough }.
+function kcalOf(s, from, to) {
+  const k = s?.hr ? HR.calories(s.hr, hrWho(), from, to) : null;
+  return k == null ? null : { kcal: k, rough: isLifting(s) };
+}
+// "520 kcal", or "≈420 kcal (rough: lifting)".
+const kcalText = s => { const k = kcalOf(s); return !k ? '' : k.rough ? `≈${k.kcal} kcal (rough: lifting)` : `${k.kcal} kcal`; };
+// All the calories recorded in [from, to), an activity being tracked included: { kcal, rough (the lifting share) } or null.
+function kcalIn(from, to) {
+  let kcal = 0, rough = 0, any = false;
+  for (const s of [...state.sessions, ...(state.hrTrack ? [{ ...state.hrTrack, source: 'activity' }] : [])]) {
+    const k = kcalOf(s, from, to);
+    if (!k) continue;
+    any = true; kcal += k.kcal; if (k.rough) rough += k.kcal;
+  }
+  return any ? { kcal, rough } : null;
 }
 // One timer block's rounds: "Rounds at 80%+: 3:10 · 3:40 · 4:00 · drop in rest 24 · 26".
 function roundsText(b) {
@@ -1008,6 +1030,7 @@ function viewHeart() {
   if (!HR.supported()) h += `<div class="card muted">This browser can't reach Bluetooth. Use Chrome on Android or a computer to connect a strap. What's recorded is still here.</div>`;
   if (!b) h += `<div class="banner">Set your max heart rate (or your age) in Settings → You → Heart rate for zones, load and calories. <button class="link" data-act="setGo" data-p="you">Settings</button></div>`;
   h += `<div class="card heartlive" id="heart-live">${heartLiveInner()}</div>`;
+  h += heartTodayCard();
   if (!tr) {
     h += `<div class="card"><b>Track an activity</b><p class="meta">For anything that isn't a workout here: a volleyball game, a walk. Records your heart rate until you stop${open ? '. (Your open workout is recording already.)' : '.'}</p>
       <div class="chips">${ACTIVITIES.map(a => `<button class="chip ${esc(hs.activity === a ? 'on' : '')}" data-act="hrActivity" data-v="${esc(a)}">${esc(a)}</button>`).join('')}</div>
@@ -1015,6 +1038,29 @@ function viewHeart() {
       <div class="brow"><button class="primary big" data-act="hrTrackStart">Start tracking ${esc(hs.activity || 'activity')}</button></div></div>`;
   }
   return h + heartAnalytics(hs);
+}
+
+// What you'd want to know: what's still needed for calories ('' when nothing is).
+function hrCaloriesMissing() {
+  const w = hrWho(), need = [!w.kg && 'bodyweight', !w.age && 'age', !w.sex && 'sex'].filter(Boolean);
+  return need.length ? `For calories, add your ${need.join(', ').replace(/, ([^,]*)$/, ' and $1')} in Settings → You.` : '';
+}
+// Today: calories, time recorded, load and zone 2, across workouts, timers and activities (one being tracked included).
+function heartTodayCard() {
+  const from = L.startOfDay(), to = from + 864e5, b = hrBasis();
+  const recs = [...state.sessions, ...(state.hrTrack ? [{ ...state.hrTrack, source: 'activity' }] : [])].filter(s => s.hr && HR.summary(s.hr, from, to));
+  if (!recs.length) return '';
+  let secs = 0, load = 0, z2 = 0;
+  for (const s of recs) {
+    secs += s.hr.v.filter((x, i) => x > 0 && s.hr.t0 + i * s.hr.step * 1000 >= from && s.hr.t0 + i * s.hr.step * 1000 < to).length * s.hr.step;
+    if (b) { load += HR.load(s.hr, b, from, to); z2 += HR.zoneTimes(s.hr, b, from, to)[2]; }
+  }
+  const k = kcalIn(from, to);
+  const tile = (v, label) => `<div class="tile"><b>${v}</b><span>${label}</span></div>`;
+  return `<div class="label">Today</div><div class="tiles">
+      ${k ? tile(`${k.rough ? '≈' : ''}${esc(k.kcal.toLocaleString('en-US'))}`, `kcal${k.rough ? ` · ${k.rough === k.kcal ? 'all' : esc(k.rough)} from lifting, rough` : ''}`) : ''}
+      ${tile(`${esc(Math.round(secs / 60))} min`, 'recorded')}${b ? tile(esc(load), 'load') + tile(`${esc(Math.round(z2 / 60))} min`, 'zone 2') : ''}</div>
+    ${k ? '' : `<p class="meta pad">${hrCaloriesMissing()}</p>`}`;
 }
 
 // The live card: the bpm, zone and % of max; while tracking, the time, average and peak, calories and zones so far.
@@ -1102,7 +1148,8 @@ function viewHeartSession(id) {
   return `<header class="top sub"><button class="back" data-act="heartBack">‹ Heart</button></header>
     <h1 class="pagetitle">${esc(hrLabel(s))}</h1><p class="meta pad">${esc(fmtDateTime(s.firstSetAt ?? s.checkinAt))} · ${esc(mins)} min recorded</p>
     <div class="tiles">${sm ? `<div class="tile"><b>${esc(sm.avg)}</b><span>avg bpm</span></div><div class="tile"><b>${esc(sm.max)}</b><span>peak</span></div>` : ''}
-      ${b ? `<div class="tile"><b>${esc(HR.load(s.hr, b))}</b><span>load</span></div>` : ''}${kcal != null ? `<div class="tile"><b>${esc(kcal)}</b><span>kcal</span></div>` : ''}</div>
+      ${b ? `<div class="tile"><b>${esc(HR.load(s.hr, b))}</b><span>load</span></div>` : ''}${kcal != null ? `<div class="tile"><b>${isLifting(s) ? '≈' : ''}${esc(kcal)}</b><span>kcal${isLifting(s) ? ' · rough for lifting' : ''}</span></div>` : ''}</div>
+    ${kcal == null ? `<p class="meta pad">${hrCaloriesMissing()}</p>` : isLifting(s) ? '<p class="meta pad">Calories from heart rate run high for lifting: a heavy set pushes your heart rate up more than the energy it burns. Good for comparing your own workouts, not for counting.</p>' : ''}
     ${chartCard('hz-session', 'Heart rate', '', chart, { head: ['Time in', 'bpm'], rows: pts.map(p => [clock(Math.round((p.t - t0) / 1000)), p.v]) })}
     ${b ? `<div class="card"><b>Time in each zone</b>${zoneBar(zt)}<div class="menu flush">${HR.ZONES.map(z => `<div class="frow"><span class="grow"><span class="name"><span class="ztag z${z.n}">Z${z.n}</span> ${esc(z.name)}</span></span><b>${clock(zt[z.n])}</b></div>`).join('')}</div></div>` : ''}
     ${dr ? `<div class="card"><b>Drift ${dr.pct > 0 ? '+' : ''}${esc(dr.pct)}%</b><p class="meta">Second half ${esc(dr.second)} against ${esc(dr.first)} in the first. For a steady effort, under about 5% means you stayed aerobic; more means it was above your aerobic threshold (or heat or fatigue). For a game or intervals it just shows how the effort went.</p></div>` : ''}
@@ -2363,7 +2410,7 @@ function viewHistory(hs) {
         if (mins > 0) bits.push(`${mins} min`);
       }
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
-      if (s.hr) bits.push(hrText(s.hr), zoneText(s.hr));
+      if (s.hr) bits.push(hrText(s.hr), zoneText(s.hr), kcalText(s));
       if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
     } else {
       bits.push(progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
@@ -3153,12 +3200,28 @@ function fnSet(id, k, el) {
 // ---------- sheets ----------
 
 function openSheet(s) { ui.sheet = s; renderSheet(); }
+
+// After a workout with the strap on: what it took, in time, sets, heart rate and calories.
+function sheetWorkoutDone(sh) {
+  const s = L.byId(state.sessions, sh.id);
+  if (!s) return '<p>Saved.</p>';
+  const b = hrBasis(), sm = HR.summary(s.hr), zt = HR.zoneTimes(s.hr, b), k = kcalOf(s);
+  const sets = state.sets.filter(x => x.sessionId === s.id && x.done && !x.warmup).length;
+  const mins = loggedMinutes(s);
+  const tile = (v, label) => `<div class="tile"><b>${v}</b><span>${label}</span></div>`;
+  return `<h3>Workout saved</h3><p class="meta">${[mins ? `${mins} min` : '', `${sets} set${sets === 1 ? '' : 's'}`, sh.rest].filter(Boolean).map(esc).join(' · ')}</p>
+    <div class="tiles">${k ? tile(`${k.rough ? '≈' : ''}${esc(k.kcal)}`, `kcal${k.rough ? ' · rough for lifting' : ''}`) : ''}
+      ${sm ? tile(esc(sm.avg), 'avg bpm') + tile(esc(sm.max), 'peak') : ''}${b ? tile(esc(HR.load(s.hr, b)), 'load') : ''}</div>
+    ${b ? zoneBar(zt) + `<div class="zmins">${zt.slice(1).map((x, i) => `<span><i class="ztag z${i + 1}">Z${i + 1}</i> ${esc(Math.round(x / 60))}m</span>`).join('')}</div>` : ''}
+    ${k ? '' : `<p class="meta">${hrCaloriesMissing()}</p>`}
+    <div class="brow"><button class="primary" data-act="sheetClose">Done</button><button data-act="heartOpen" data-id="${esc(s.id)}">Heart-rate details</button></div>`;
+}
 function closeSheet() { ui.sheet = null; renderSheet(); }
 
 function renderSheet() {
   const s = ui.sheet;
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
-  const body = { swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
+  const body = { workoutDone: sheetWorkoutDone, swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, reviewText: sheetReviewText, pasteImport: sheetPasteImport,
     addEx: sheetAddEx, category: sheetCategory, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist, cloudAsk: sheetCloudAsk }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
@@ -4136,7 +4199,10 @@ const actions = {
     state.timer = null;
     ui.sheet = null; renderSheet();
     setWakeLock(false);
-    save(); render(); toast(rest ? `Session saved · ${rest.text}` : 'Session saved');
+    save(); render();
+    // With the strap on, a summary: time, sets, heart rate, calories, load and zones. Otherwise the toast as before.
+    if (s.hr && HR.summary(s.hr) && state.sessions.includes(s)) openSheet({ type: 'workoutDone', id: s.id, rest: rest?.text ?? null });
+    else toast(rest ? `Session saved · ${rest.text}` : 'Session saved');
   },
   pause: () => {
     const s = currentSession();
@@ -4336,7 +4402,8 @@ const actions = {
     const n = logIntervals(lg);
     ui.ivLog = null;
     save(); render();
-    toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}` : 'Nothing to log');
+    const kc = lg.hr && lg.marks?.length ? HR.calories(lg.hr, hrWho(), lg.marks[0].at, (lg.endAt ?? Date.now()) + 1) : null;
+    toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}${kc ? ` · ${kc} kcal` : ''}` : 'Nothing to log');
   },
   ivDiscard: () => { ui.ivLog = null; render(); },
   // Intervals or one steady stretch. Steady starts as zone 2 until you stop; intervals as 4 rounds of 4 minutes on, 1 off.
@@ -4376,7 +4443,7 @@ const actions = {
   hrTrackDiscard: () => { state.hrTrack = null; setWakeLock(false); save(); render(); },
   heartRange: d => { ui.heart.range = d.v; ui.heart.limit = 10; render(); },
   heartMore: () => { ui.heart.limit = (ui.heart.limit ?? 10) + 10; render(); },
-  heartOpen: d => { ui.heart ??= { range: '12w', activity: 'Volleyball' }; ui.heart.detail = d.id; ui.tab = 'heart'; ui.history = null; render(); window.scrollTo(0, 0); },
+  heartOpen: d => { ui.heart ??= { range: '12w', activity: 'Volleyball' }; ui.heart.detail = d.id; ui.tab = 'heart'; ui.history = null; ui.sheet = null; render(); window.scrollTo(0, 0); },
   heartBack: () => { ui.heart.detail = null; render(); window.scrollTo(0, 0); },
   heartDelete: d => askConfirm('Delete this activity?', 'Its heart-rate recording goes with it.', 'Delete', () => {
     state.sessions = state.sessions.filter(x => x.id !== d.id); ui.heart.detail = null; save(); render();
