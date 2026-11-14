@@ -154,7 +154,7 @@ export const fresh = (t = Date.now()) => live.status === 'live' && live.bpm != n
 // an hour; 80% and up is threshold and VO2-max work.
 export const ZONES = [
   { n: 1, lo: 50, hi: 60, name: 'Recovery' },
-  { n: 2, lo: 60, hi: 70, name: 'Zone 2 · aerobic base' },
+  { n: 2, lo: 60, hi: 70, name: 'Aerobic base' },
   { n: 3, lo: 70, hi: 80, name: 'Tempo' },
   { n: 4, lo: 80, hi: 90, name: 'Threshold' },
   { n: 5, lo: 90, hi: 100, name: 'VO2 max' },
