@@ -904,13 +904,6 @@ function hrBigInner() {
     ${b ? `<span class="meta">${esc(Math.round(HR.pctOf(b, bpm)))}% ${b.reserve ? 'of reserve' : 'of max'}${z ? ` · Z${z} ${esc(HR.ZONES[z - 1].name)}` : ''}</span>` : ''}
     ${status}${sm ? `<span class="meta">avg ${esc(sm.avg)} · peak ${esc(sm.max)}</span>` : ''}`;
 }
-// Minutes in zone 2 and at 80% and up, for a recording: "Z2 32 min · 80%+ 9 min" ('' without a max or the minutes).
-function zoneText(rec) {
-  const b = hrBasis();
-  if (!b || !rec) return '';
-  const zt = HR.zoneTimes(rec, b), m = s => Math.round(s / 60);
-  return [m(zt[2]) ? `Z2 ${m(zt[2])} min` : '', m(zt[4] + zt[5]) ? `80%+ ${m(zt[4] + zt[5])} min` : ''].filter(Boolean).join(' · ');
-}
 // This week's heart-rate work: "Zone 2 42 min · 80%+ 12 min this week" ('' with none).
 function zoneWeekText(from, to) {
   const b = hrBasis(), k = kcalIn(from, to);
@@ -930,8 +923,8 @@ function kcalOf(s, from, to) {
   const k = s?.hr ? HR.calories(s.hr, hrWho(), from, to) : null;
   return k == null ? null : { kcal: k, rough: isLifting(s) };
 }
-// "520 kcal", or "≈420 kcal (rough: lifting)".
-const kcalText = s => { const k = kcalOf(s); return !k ? '' : k.rough ? `≈${k.kcal} kcal (rough: lifting)` : `${k.kcal} kcal`; };
+// History's one item for a recording: "♥ 131 avg · ≈674 kcal" (the ♥ button opens the rest).
+const hrBrief = s => { const sm = HR.summary(s.hr), k = kcalOf(s); return sm ? `♥ ${sm.avg} avg${k ? ` · ${k.rough ? '≈' : ''}${k.kcal} kcal` : ''}` : ''; };
 // All the calories recorded in [from, to), an activity being tracked included: { kcal, rough (the lifting share) } or null.
 function kcalIn(from, to) {
   let kcal = 0, rough = 0, any = false;
@@ -951,8 +944,6 @@ function roundsText(b) {
   const drops = r.map(x => x.drop).filter(x => x != null);
   return `Rounds ${tt}: ${vals}${drops.length ? ` · drop in rest ${drops.join(' · ')}` : ''}`;
 }
-// "♥ 138 avg · 171 peak" for a workout that has a recording, else ''.
-const hrText = rec => { const sm = HR.summary(rec); return sm ? `♥ ${sm.avg} avg · ${sm.max} peak` : ''; };
 
 function viewTimer() {
   if (state.intervalRun) return viewIntervalRun(state.intervalRun);
@@ -979,7 +970,7 @@ function viewTimer() {
     <div class="chips">${presets.map(p => `<button class="chip ${esc(d.presetId === p.id ? 'on' : '')}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
     <div class="card">
       <div class="seg ivmode"><button class="${esc(steady ? '' : 'on')}" data-act="ivMode" data-v="intervals">Intervals</button><button class="${esc(steady ? 'on' : '')}" data-act="ivMode" data-v="steady">Steady</button></div>
-      <p class="meta">${steady ? 'One stretch at a steady effort: zone 2, a long ride. Counts your time in the heart-rate target.' : 'Rounds of work and rest: 4 × 4 minutes, Tabata, every minute on the minute.'}</p>
+      <p class="meta">${steady ? 'One steady stretch, timing you in your target.' : 'Rounds of work and rest.'}</p>
       ${main}
       ${ivHrFields(d)}
       ${more}
@@ -1027,12 +1018,12 @@ function viewHeart() {
   if (hs.detail) return viewHeartSession(hs.detail);
   const b = hrBasis(), tr = state.hrTrack, open = currentSession();
   let h = `<header class="top"><div><h1>Heart</h1>${b ? `<div class="sub">Max ${esc(b.max)}${b.reserve ? ` · resting ${esc(b.rest)}` : ''} · zones from ${b.reserve ? 'reserve' : 'max'}</div>` : ''}</div><div class="hbtns">${hrPill()}</div></header>`;
-  if (!HR.supported()) h += `<div class="card muted">This browser can't reach Bluetooth. Use Chrome on Android or a computer to connect a strap. What's recorded is still here.</div>`;
-  if (!b) h += `<div class="banner">Set your max heart rate (or your age) in Settings → You → Heart rate for zones, load and calories. <button class="link" data-act="setGo" data-p="you">Settings</button></div>`;
+  if (!HR.supported()) h += `<div class="card muted">No Bluetooth in this browser: use Chrome on Android to connect a strap.</div>`;
+  if (!b) h += `<div class="banner">Add your max heart rate or age for zones and calories. <button class="link" data-act="setGo" data-p="you">Settings</button></div>`;
   h += `<div class="card heartlive" id="heart-live">${heartLiveInner()}</div>`;
   h += heartTodayCard();
   if (!tr) {
-    h += `<div class="card"><b>Track an activity</b><p class="meta">For anything that isn't a workout here: a volleyball game, a walk. Records your heart rate until you stop${open ? '. (Your open workout is recording already.)' : '.'}</p>
+    h += `<div class="card"><b>Track an activity</b>${open ? '<p class="meta">Your open workout is already recording.</p>' : ''}
       <div class="chips">${ACTIVITIES.map(a => `<button class="chip ${esc(hs.activity === a ? 'on' : '')}" data-act="hrActivity" data-v="${esc(a)}">${esc(a)}</button>`).join('')}</div>
       <div class="field"><label for="hr-act">Or name it</label><input id="hr-act" data-hract value="${esc(ACTIVITIES.includes(hs.activity) ? '' : hs.activity)}" placeholder="Tennis, yard work…"></div>
       <div class="brow"><button class="primary big" data-act="hrTrackStart">Start tracking ${esc(hs.activity || 'activity')}</button></div></div>`;
@@ -1069,7 +1060,7 @@ function heartLiveInner() {
   const bpm = HR.fresh() ? HR.live.bpm : null, z = HR.zoneOf(b, bpm);
   const big = bpm ? `<div class="hrbig ${z ? `z${z}` : ''}">♥ ${esc(bpm)}</div>
       <div class="meta">${b ? `${esc(Math.round(HR.pctOf(b, bpm)))}% of ${b.reserve ? 'reserve' : 'max'}${z ? ` · Z${z} ${esc(HR.ZONES[z - 1].name)}` : ' · below zone 1'}` : ''}</div>`
-    : `<div class="meta">${HR.live.status === 'off' ? 'Not connected. Tap ♥ Heart rate to connect your strap.' : HR.live.status === 'live' ? 'Waiting for a reading…' : 'Connecting…'}</div>`;
+    : `<div class="meta">${HR.live.status === 'off' ? 'Not connected' : HR.live.status === 'live' ? 'Waiting for a reading…' : 'Connecting…'}</div>`;
   if (!tr) return big;
   const sm = HR.summary(tr.hr), zt = HR.zoneTimes(tr.hr, b), kcal = HR.calories(tr.hr, hrWho());
   return `<div class="trackhead"><b>${esc(tr.activity)}</b><span class="trackclock">${clock(Math.floor((now - tr.startedAt) / 1000))}</span></div>
@@ -1086,7 +1077,7 @@ function heartAnalytics(hs) {
   const recs = state.sessions.filter(s => s.hr && (s.firstSetAt ?? s.checkinAt) < to && (s.hr.t0 + s.hr.v.length * s.hr.step * 1000) >= from)
     .sort((x, y) => (y.firstSetAt ?? y.checkinAt) - (x.firstSetAt ?? x.checkinAt));
   let h = `<div class="label">Analytics</div><div class="seg">${PG.RANGES.map(([k, t]) => `<button class="${esc(hs.range === k ? 'on' : '')}" data-act="heartRange" data-v="${esc(k)}">${esc(t)}</button>`).join('')}</div>`;
-  if (!recs.length) return h + '<p class="muted">Nothing recorded in this range. Wear the strap in a workout, a timer or a tracked activity.</p>';
+  if (!recs.length) return h + '<p class="muted">Nothing recorded in this range.</p>';
   const weeks = weeksIn(from, to), nW = Math.max(1, (to - from) / (7 * 864e5));
   const all = { zt: [0, 0, 0, 0, 0, 0], secs: 0, load: 0, kcal: 0, kcalN: 0 };
   for (const s of recs) {
@@ -1106,10 +1097,10 @@ function heartAnalytics(hs) {
       for (const s of recs) { HR.zoneTimes(s.hr, b, w.start, w.end).forEach((x, i) => { zt[i] += x; }); ld += HR.load(s.hr, b, w.start, w.end); }
       return { start: w.start, m: zt.map(x => Math.round(x / 60)), load: ld };
     });
-    h += chartCard('hz-zones', 'Minutes in each zone, per week', `Zone 2 <b>${Math.round(all.zt[2] / 60 / nW)} min</b> a week · 150-180 is a common aerobic-base aim`,
+    h += chartCard('hz-zones', 'Minutes in each zone, per week', `Zone 2 <b>${Math.round(all.zt[2] / 60 / nW)} min</b> a week`,
       CH.columnChart('hz-zones', 'Minutes in each heart-rate zone per week', wz.map(w => ({ t: w.start, parts: zk.map(([k], i) => ({ key: k, v: w.m[i + 1] })), tip: { value: `${w.m.slice(1).reduce((a, c) => a + c, 0)} min`, title: weekLabel(w.start), sub: zk.map(([k], i) => `${k} ${w.m[i + 1]}`).join(' · ') } })), { fmt: v => `${v}` }),
       { head: ['Week', ...zk.map(([k]) => k)], rows: wz.map(w => [weekLabel(w.start), ...w.m.slice(1)]) }, legend(zk));
-    h += chartCard('hz-load', 'Training load per week', `Avg <b>${Math.round(all.load / nW)}</b> a week · minutes × zone (Edwards TRIMP)`,
+    h += chartCard('hz-load', 'Training load per week', `Avg <b>${Math.round(all.load / nW)}</b> a week · minutes × zone`,
       CH.columnChart('hz-load', 'Training load per week', wz.map(w => ({ t: w.start, parts: [{ key: 'series', v: w.load }], tip: { value: `${w.load}`, title: weekLabel(w.start), sub: `${w.m.slice(1).reduce((a, c) => a + c, 0)} min recorded` } }))),
       { head: ['Week', 'Load'], rows: wz.map(w => [weekLabel(w.start), w.load]) });
   }
@@ -1117,7 +1108,7 @@ function heartAnalytics(hs) {
   const rec = recs.map(s => { const d = (s.blocks || []).flatMap(x => x.hrRounds ?? []).map(x => x.drop).filter(x => x != null); return d.length ? { t: s.firstSetAt ?? s.checkinAt, v: Math.round(d.reduce((a, c) => a + c, 0) / d.length), n: d.length } : null; })
     .filter(Boolean).sort((x, y) => x.t - y.t);
   if (rec.length) {
-    h += chartCard('hz-recovery', 'Heart-rate recovery', `Avg drop over a rest <b>${Math.round(rec.reduce((a, c) => a + c.v, 0) / rec.length)} bpm</b> · bigger is fitter`,
+    h += chartCard('hz-recovery', 'Heart-rate recovery', `Avg drop in a rest <b>${Math.round(rec.reduce((a, c) => a + c.v, 0) / rec.length)} bpm</b> · bigger is fitter`,
       CH.lineChart('hz-recovery', 'Average heart-rate drop over the rest after each interval', rec.map(x => ({ t: x.t, v: x.v, tip: { value: `${x.v} bpm`, title: fmtShortDay(x.t), sub: `${x.n} rest${x.n === 1 ? '' : 's'}` } }))),
       { head: ['Day', 'Avg drop', 'Rests'], rows: rec.map(x => [fmtShortDay(x.t), x.v, x.n]) });
   }
@@ -1149,10 +1140,10 @@ function viewHeartSession(id) {
     <h1 class="pagetitle">${esc(hrLabel(s))}</h1><p class="meta pad">${esc(fmtDateTime(s.firstSetAt ?? s.checkinAt))} · ${esc(mins)} min recorded</p>
     <div class="tiles">${sm ? `<div class="tile"><b>${esc(sm.avg)}</b><span>avg bpm</span></div><div class="tile"><b>${esc(sm.max)}</b><span>peak</span></div>` : ''}
       ${b ? `<div class="tile"><b>${esc(HR.load(s.hr, b))}</b><span>load</span></div>` : ''}${kcal != null ? `<div class="tile"><b>${isLifting(s) ? '≈' : ''}${esc(kcal)}</b><span>kcal${isLifting(s) ? ' · rough for lifting' : ''}</span></div>` : ''}</div>
-    ${kcal == null ? `<p class="meta pad">${hrCaloriesMissing()}</p>` : isLifting(s) ? '<p class="meta pad">Calories from heart rate run high for lifting: a heavy set pushes your heart rate up more than the energy it burns. Good for comparing your own workouts, not for counting.</p>' : ''}
+    ${kcal == null ? `<p class="meta pad">${hrCaloriesMissing()}</p>` : isLifting(s) ? '<p class="meta pad">Rough: lifting raises heart rate more than the energy it burns, so this runs high.</p>' : ''}
     ${chartCard('hz-session', 'Heart rate', '', chart, { head: ['Time in', 'bpm'], rows: pts.map(p => [clock(Math.round((p.t - t0) / 1000)), p.v]) })}
     ${b ? `<div class="card"><b>Time in each zone</b>${zoneBar(zt)}<div class="menu flush">${HR.ZONES.map(z => `<div class="frow"><span class="grow"><span class="name"><span class="ztag z${z.n}">Z${z.n}</span> ${esc(z.name)}</span></span><b>${clock(zt[z.n])}</b></div>`).join('')}</div></div>` : ''}
-    ${dr ? `<div class="card"><b>Drift ${dr.pct > 0 ? '+' : ''}${esc(dr.pct)}%</b><p class="meta">Second half ${esc(dr.second)} against ${esc(dr.first)} in the first. For a steady effort, under about 5% means you stayed aerobic; more means it was above your aerobic threshold (or heat or fatigue). For a game or intervals it just shows how the effort went.</p></div>` : ''}
+    ${dr ? `<div class="card"><b>Drift ${dr.pct > 0 ? '+' : ''}${esc(dr.pct)}%</b><p class="meta">${esc(dr.first)} → ${esc(dr.second)} bpm, first half to second. Under 5% on a steady effort: you stayed aerobic.</p></div>` : ''}
     ${rows.length ? `<div class="card">${rows.map(t => `<p class="meta">♥ ${esc(t)}</p>`).join('')}</div>` : ''}
     ${s.source === 'activity' ? `<div class="brow"><button class="danger" data-act="heartDelete" data-id="${esc(s.id)}">Delete this activity</button></div>` : ''}`;
 }
@@ -1163,10 +1154,10 @@ function viewHeartSession(id) {
 function photosCard() {
   const n = ui.photoCount ?? 0, ph = state.settings.photos ?? {};
   return `<div class="label">Photos behind the timer</div><div class="menu">
-      ${n ? frow('Play them while the timer runs', switchIn('settings.photos.on', ph.on !== false), `${n} photo${n === 1 ? '' : 's'} on this phone`) : ''}
+      ${n ? frow('Play behind the timer', switchIn('settings.photos.on', ph.on !== false), `${n} photo${n === 1 ? '' : 's'} on this phone`) : ''}
       ${n ? frow('Change every (seconds)', numIn('settings.photos.every', ph.every ?? 10)) : ''}
       <label class="menurow"><input type="file" accept="image/*" multiple hidden data-photos>
-        <span class="grow"><span class="name">${ui.photoBusy ? 'Adding photos…' : n ? 'Add more photos' : 'Add photos'}</span><span class="meta">from your gallery or Google Photos · they stay on this phone</span></span></label>
+        <span class="grow"><span class="name">${ui.photoBusy ? 'Adding photos…' : n ? 'Add more photos' : 'Add photos'}</span><span class="meta">gallery or Google Photos · kept on this phone</span></span></label>
       ${n ? '<button class="menurow" data-act="photosClear"><span class="grow"><span class="name">Remove all photos</span></span></button>' : ''}</div>`;
 }
 const slidesEl = Object.assign(document.createElement('div'), { id: 'slides', hidden: true });
@@ -1222,8 +1213,8 @@ function timerSoundCard() {
   const tc = state.settings.timer;
   return `<div class="label">Sound</div><div class="menu">
       ${frow('Loud beeps', switchIn('settings.timer.loud', tc.loud !== false), 'sharp tones that cut through music')}
-      ${frow('Say what’s next', switchIn('settings.timer.voice', !!tc.voice), '“Round 2, go”, “Rest”')}
-      <button class="menurow" data-act="timerTest"><span class="grow"><span class="name">Test the sound</span><span class="meta">play your music too, to check it carries</span></span></button></div>`;
+      ${frow('Say what’s next', switchIn('settings.timer.voice', !!tc.voice))}
+      <button class="menurow" data-act="timerTest"><span class="grow"><span class="name">Test the sound</span><span class="meta">with your music on</span></span></button></div>`;
 }
 
 function viewIntervalRun(run) {
@@ -1292,7 +1283,7 @@ function ivRoundsTable(lg) {
   return `<div class="label">Heart rate${sm ? ` · avg ${esc(sm.avg)} · peak ${esc(sm.max)}` : ''}</div>
     <table class="hrtable"><thead><tr><th>Round</th><th>Avg</th><th>Peak</th>${t ? `<th>At ${esc(HR.targetText(t))}</th>` : ''}<th>Drop</th></tr></thead>
     <tbody>${st.map(x => `<tr><td>${lg.cfg.sets > 1 ? `${esc(x.set)}.` : ''}${esc(x.round)}</td><td>${esc(x.avg)}</td><td>${esc(x.max)}</td>${t ? `<td>${x.atTarget != null ? clock(x.atTarget) : '–'} of ${clock(x.secs)}</td>` : ''}<td>${x.drop != null ? esc(x.drop) : '–'}</td></tr>`).join('')}</tbody></table>
-    <p class="meta">Drop: how far your heart rate fell over the rest after the round. A bigger drop as you get fitter is a good sign.</p>`;
+    <p class="meta">Drop: how far your heart rate fell over the rest. Bigger is fitter.</p>`;
 }
 
 // A scheme for a block of timer rounds (kept, so the block has one; never suggested: manualOnly).
@@ -2410,7 +2401,7 @@ function viewHistory(hs) {
         if (mins > 0) bits.push(`${mins} min`);
       }
       if (e.sets) bits.push(`${e.sets} set${e.sets === 1 ? '' : 's'}`);
-      if (s.hr) bits.push(hrText(s.hr), zoneText(s.hr), kcalText(s));
+      if (s.hr) bits.push(hrBrief(s));
       if (s.status === 'open' || s.status === 'paused') bits.push(s.status === 'open' ? 'in progress' : 'paused');
     } else {
       bits.push(progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Mobility'));
@@ -2513,27 +2504,8 @@ function viewProgress() {
     CH.lineChart('energy', 'Energy by day', en.map(e => ({ t: e.t, v: e.v, tip: { value: `${e.v} / 5`, title: fmtShortDay(e.t), sub: e.source === 'morning' ? 'morning check' : 'check-in' } })), { domain: [1, 5], fmt: v => String(v) }),
     { head: ['Day', 'Energy', 'From'], rows: en.map(e => [fmtShortDay(e.t), e.v, e.source]) });
 
-  // Heart rate per workout (a strap was on): average and peak.
-  const hrs = state.sessions.filter(s => s.hr && (s.firstSetAt ?? s.checkinAt) >= from && (s.firstSetAt ?? s.checkinAt) < to)
-    .map(s => ({ t: s.firstSetAt ?? s.checkinAt, ...HR.summary(s.hr) })).filter(x => x.avg).sort((a, b) => a.t - b.t);
-  if (hrs.length) {
-    h += chartCard('hr', 'Heart rate per workout', `Avg <b>${Math.round(hrs.reduce((x, w) => x + w.avg, 0) / hrs.length)} bpm</b> · highest peak ${Math.max(...hrs.map(w => w.max))}`,
-      CH.lineChart('hr', 'Average heart rate per workout', hrs.map(w => ({ t: w.t, v: w.avg, tip: { value: `${w.avg} bpm avg`, title: fmtShortDay(w.t), sub: `peak ${w.max} · ${w.minutes} min recorded` } }))),
-      { head: ['Workout', 'Avg', 'Peak', 'Minutes'], rows: hrs.map(w => [fmtShortDay(w.t), w.avg, w.max, w.minutes]) });
-    const hb = hrBasis();
-    if (hb) {
-      const zk = HR.ZONES.map(z => [`Z${z.n}`, `Z${z.n} ${z.name.split(' ·')[0]}`]);
-      const wz = PG.weekly(state, from, to).map(w => {
-        const zt = [0, 0, 0, 0, 0, 0];
-        for (const s of state.sessions) if (s.hr) HR.zoneTimes(s.hr, hb, w.start, w.end).forEach((x, i) => { zt[i] += x; });
-        return { start: w.start, m: zt.map(x => Math.round(x / 60)) };
-      });
-      const avgZ2 = Math.round(wz.reduce((x, w) => x + w.m[2], 0) / Math.max(1, wz.length)), avgHi = Math.round(wz.reduce((x, w) => x + w.m[4] + w.m[5], 0) / Math.max(1, wz.length));
-      h += chartCard('zones', 'Minutes by heart-rate zone, per week', `Zone 2 avg <b>${avgZ2} min</b> a week · 80%+ ${avgHi} min`,
-        CH.columnChart('zones', 'Minutes in each heart-rate zone per week', wz.map(w => ({ t: w.start, parts: zk.map(([k], i) => ({ key: k, v: w.m[i + 1] })), tip: { value: `${w.m.slice(1).reduce((a, b) => a + b, 0)} min`, title: weekLabel(w.start), sub: zk.map(([k], i) => `${k} ${w.m[i + 1]}`).join(' · ') } })), { fmt: v => `${v}` }),
-        { head: ['Week', ...zk.map(([k]) => k)], rows: wz.map(w => [weekLabel(w.start), ...w.m.slice(1)]) }, legend(zk));
-    }
-  }
+  // Heart rate has its own tab.
+  if (state.sessions.some(x => x.hr)) h += `<button class="menurow" data-act="nav" data-tab="heart"><span class="grow"><span class="name">Heart rate, zones and calories</span></span><span class="chev">›</span></button>`;
 
   // Week by week: sets by tier, and how much of your goals you hit.
   const wk = PG.weekly(state, from, to);
@@ -2747,8 +2719,8 @@ function hrSettingsRows() {
   const rows = [
     frow('Max heart rate', numIn('settings.hrMax', st.hrMax, 'data-rerender placeholder="—"'), top ? `highest the strap has seen: ${top}` : 'or about 208 − 0.7 × your age'),
     top && top !== st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(top)}"><span class="grow"><span class="name">Use ${esc(top)} as your max</span></span></button>` : '',
-    frow('Age', numIn('settings.hrAge', st.hrAge, 'data-rerender placeholder="—"'), 'for calories, and to estimate your max'),
-    HR.maxFromAge(st.hrAge) && !st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(HR.maxFromAge(st.hrAge))}"><span class="grow"><span class="name">Use ${esc(HR.maxFromAge(st.hrAge))} as your max</span><span class="meta">208 − 0.7 × age; the strap's highest is better once you've pushed hard</span></span></button>` : '',
+    frow('Age', numIn('settings.hrAge', st.hrAge, 'data-rerender placeholder="—"'), 'for calories'),
+    HR.maxFromAge(st.hrAge) && !st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(HR.maxFromAge(st.hrAge))}"><span class="grow"><span class="name">Use ${esc(HR.maxFromAge(st.hrAge))} as your max</span><span class="meta">estimated from your age</span></span></button>` : '',
     frow('Sex', `<select data-bind="settings.hrSex" data-rerender>${opts([['', '—'], ['m', 'Male'], ['f', 'Female']], st.hrSex ?? '')}</select>`, 'for calories'),
     frow('Resting heart rate', numIn('settings.hrRest', st.hrRest, 'data-rerender placeholder="—"'), 'first thing in the morning'),
     frow('Zones from', `<select data-bind="settings.hrMethod" data-rerender>${opts([['max', '% of max'], ['reserve', '% of reserve (needs resting)']], st.hrMethod ?? 'max')}</select>`),

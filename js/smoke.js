@@ -1515,9 +1515,9 @@ try {
   click('#sheet [data-act=sheetClose]');
   click('[data-act=nav][data-tab=week]');
   click('[data-act=histOpen]');
-  check('History shows the workout\'s average and peak', /♥ \d+ avg · 140 peak/.test(text()), text().slice(0, 300));
+  check('History shows the workout\'s average heart rate, with ♥ to the rest', /♥ \d+ avg/.test(text()) && !!q('.card.hist [data-act=heartOpen]'), text().slice(0, 300));
   click('[data-act=histMode][data-v=progress]');
-  check('Progress has a heart-rate chart', /Heart rate per workout/.test(text()));
+  check('Progress points to the Heart tab for heart rate', !!q('[data-act=nav][data-tab=heart].menurow') && !q('svg[data-chart=hr]'));
   click('[data-act=histClose]');
   // The interval timer with no workout open: the readings go with the run, onto the workout it logs.
   click('[data-act=nav][data-tab=timer]');
@@ -1534,7 +1534,7 @@ try {
   check('Settings offers the highest heart rate seen as your max', !!q('[data-act=hrUseTop][data-v="160"]'), text().slice(0, 400));
   const mx = q('input[data-bind="settings.hrMax"]');
   mx.value = '190'; mx.dispatchEvent(new Event('change', { bubbles: true }));
-  check('and lists your zones in bpm', /Zone 2 · aerobic base/.test(text()) && /114-133/.test(text()) && S().settings.hrMax === 190, text().slice(0, 600));
+  check('and lists your zones in bpm', /Aerobic base/.test(text()) && /114-133/.test(text()) && S().settings.hrMax === 190, text().slice(0, 600));
   click('[data-act=nav][data-tab=timer]');
   click('[data-act=ivPreset][data-id=iv-4x4-80]');
   check('the 4 × 4 timer has its heart-rate target, in your bpm', q('#iv-hr')?.value === '80' && /152\+ bpm for you/.test(text()) && q('[data-ivhr=hold]')?.checked, text().slice(0, 500));
@@ -1561,8 +1561,6 @@ try {
   check('the Week tab shows this week\'s zone minutes', /80%\+ \d+ min this week/.test(text()), text().slice(0, 300));
   click('[data-act=histOpen]');
   check('History shows the rounds at the target', /Rounds at 80%\+: 3:00/.test(text()), text().slice(0, 400));
-  click('[data-act=histMode][data-v=progress]');
-  check('Progress has minutes by zone per week', /Minutes by heart-rate zone/.test(text()));
   click('[data-act=histClose]');
   S().sessions = S().sessions.filter(x => x !== lb);
   S().sets = S().sets.filter(x => x.sessionId !== lb?.id);
@@ -1633,7 +1631,7 @@ try {
     /zone 2 min a week/.test(text()) && /kcal a week/.test(text()) && !!q('svg[data-chart=hz-zones]') && !!q('svg[data-chart=hz-load]') && !!q('[data-act=heartOpen]'), text().slice(0, 600));
   click('[data-act=nav][data-tab=week]'); click('[data-act=histOpen]');
   check('History lists the activity, with its heart rate', /Volleyball/.test(text()) && !!q('.card.hist [data-act=heartOpen]'), text().slice(0, 300));
-  check('and calories on every workout with the strap on, rough for lifting', /Volleyball[^\n]*\d+ kcal/.test(text()) && /≈\d+ kcal \(rough: lifting\)/.test(text()), text().slice(0, 900));
+  check('and calories on every workout with the strap on, ≈ for lifting', /Volleyball[^\n]*♥ \d+ avg · \d+ kcal/.test(text()) && /♥ \d+ avg · ≈\d+ kcal/.test(text()), text().slice(0, 900));
   click(qa('.card.hist').find(c => /Volleyball/.test(c.textContent))?.querySelector('[data-act=heartOpen]'));
   check('and opens its graph from there', ui_tab() === 'heart' && /Volleyball/.test(text()) && !!q('svg[data-chart=hz-session]'), `${ui_tab()} ${text().slice(0, 200)}`);
   click('[data-act=heartDelete]'); click('#sheet [data-act=confirmYes]');
