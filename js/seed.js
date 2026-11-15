@@ -1,6 +1,7 @@
 // Seed data: real lifts from the PRD plus placeholder T3 work. Everything is editable in-app.
 
 import { mobilitySeed } from './mobility.js';
+import { addFoot } from './foot.js';
 import { DEFAULT_PRESETS } from './interval.js';
 export { DEFAULT_PRESETS };
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
@@ -227,8 +228,8 @@ export function seed() {
     { id: 'sl-t2-hams', familyId: 'fam-hams', exerciseId: 'ex-deficit-rdl', tier: 'T2', quota: 1, priority: 2 },
   ];
 
-  return splitCategories({
-    version: 33,
+  const s = splitCategories({
+    version: 34,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday
@@ -283,4 +284,6 @@ export function seed() {
     reviews: [], // weekly reviews (js/review.js): { id, weekStart, summary, proposals: [{ id, kind, text, status }], status }, newest 26
     imports: {}, // history brought in from other apps, e.g. fitnotes: { at, cutoff, map: { fitnotesExerciseId: exerciseId } }
   });
+  addFoot(s); // the foot strength routine (js/foot.js), with its morning-check part
+  return s;
 }

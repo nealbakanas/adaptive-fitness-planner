@@ -16,6 +16,7 @@ const keyTime = k => new Date(`${k}T12:00`).getTime();
 // the part's pain stops jumping. Parts that match nothing are tracked and flagged only.
 export const RELIEF = [
   { match: /knee|patell|quad|tendon/i, jumps: true, holds: ['mob-spanish-squat-hold'] },
+  { match: /toe|bunion|hallux/i, jumps: true, holds: ['foot-toe-press'] }, // before feet: a sore big toe gets its own press
   { match: /ankle|achilles|calf|calves|foot|feet|shin|heel/i, jumps: true, holds: ['mob-calf-iso-hold'] },
   { match: /back|spine|lumbar/i, jumps: true, holds: ['mob-mcgill-curl-up', 'mob-mcgill-side-plank', 'mob-mcgill-bird-dog'] },
   { match: /hip|groin|glute/i, jumps: true, holds: [] },

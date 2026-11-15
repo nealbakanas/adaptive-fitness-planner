@@ -20,6 +20,7 @@ import * as CH from './charts.js';
 import * as CAT from './categories.js';
 import * as HR from './hr.js';
 import * as Ph from './photos.js';
+import * as Ft from './foot.js';
 import { installFakeBluetooth } from './fake-bluetooth.js';
 
 const results = [];
@@ -232,7 +233,7 @@ test('v5 data upgrades to v6 without losing anything', () => {
   s.exercises.push({ id: 'custom1', name: 'Seated Broad Jump', familyId: 'fam-squat', rank: 9, metric: 'reps', equipment: [] });
   s.slots.push({ id: 'mine', familyId: 'fam-squat', tier: 'T1', quota: 3, priority: 3 }); // user's own goal
   const m = migrate(s);
-  eq(m.version, 33);
+  eq(m.version, 34);
   ok(m.tiers.TECH && m.families.some(f => f.id === 'fam-jumps'));
   eq(m.exercises.find(e => e.id === 'ex-back-squat').region, 'lower');
   ok(m.exercises.find(e => e.id === 'ex-power-clean').explosive);
@@ -251,7 +252,7 @@ test('a backup without a version number still gets every upgrade', () => {
   delete s.tiers.TECH;
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-jumps');
   const m = migrate(s);
-  eq(m.version, 33);
+  eq(m.version, 34);
   ok(m.tiers.TECH, 'technique tier added');
 });
 test('v6 data gets the jumps cap without touching an edited goal', () => {
@@ -524,7 +525,7 @@ test('v7 data gets the Hyper Pro movements without doubling ones you already hav
   s.exercises.push({ id: 'my-nordic', name: '20 Nordic Curls', familyId: 'my-hams', rank: 1, metric: 'reps', equipment: [] });
   s.exercises.push({ id: 'my-ghr', name: 'Glute-Ham Raise', familyId: 'my-hams', rank: 2, metric: 'reps', equipment: [] });
   const m = migrate(s);
-  eq(m.version, 33);
+  eq(m.version, 34);
   ok(m.locations.find(l => l.id === 'loc-basement').equipment.includes('leg-developer'), 'gear at the Basement');
   eq(m.exercises.filter(e => /glute-?ham/i.test(e.name)).length, 1, 'no second GHR');
   eq(m.exercises.find(e => e.id === 'my-ghr').equipment, ['hyper-pro'], 'your GHR now needs the Hyper Pro');
@@ -631,8 +632,8 @@ test('T3s superset with each other; main lifts stay free; an odd T3 makes a gian
 // ---------- mobility ----------
 test('mobility starter library: your 4 routines, 16 exercises, 9 Garage Strength drills and the McGill Big 3, outside the strength library', () => {
   const s = seed();
-  eq([s.mobility.routines.length, s.mobility.exercises.length], [5, 28]);
-  ok(s.mobility.routines.every(r => r.items.length === (r.id === 'mobr-mcgill-big3' ? 3 : 4) && r.items.every(id => s.mobility.exercises.some(e => e.id === id))), 'routines resolve');
+  eq([s.mobility.routines.length, s.mobility.exercises.length], [6, 35]); // (with foot strength: 7 exercises, a routine)
+  ok(s.mobility.routines.every(r => r.items.length === ({ 'mobr-mcgill-big3': 3, 'mobr-foot': 7 }[r.id] ?? 4) && r.items.every(id => s.mobility.exercises.some(e => e.id === id))), 'routines resolve');
   ok(s.mobility.exercises.filter(e => e.id.startsWith('mob-mcgill-')).every(e => /^https:\/\/www\.youtube\.com\//.test(e.video)), 'Big 3 videos');
   ok(s.mobility.exercises.every(e => e.parts.length && e.parts.every(p => M.BODY_PARTS.includes(p))), 'body parts');
   ok(!s.exercises.some(e => e.id.startsWith('mob-')), 'not in the strength library');
@@ -688,11 +689,11 @@ test('v8 data gets the mobility suite and keeps everything else', () => {
   delete s.mobility;
   s.plans.push({ id: 'p', name: 'mine', items: [] });
   const m = migrate(s);
-  eq(m.version, 33);
-  eq(m.mobility.routines.length, 6, 'the four routines, McGill Big 3, plus THP daily isos (v27)');
+  eq(m.version, 34);
+  eq(m.mobility.routines.length, 7, 'the four routines, McGill Big 3, THP daily isos (v27) and foot strength (v34)');
   ok(m.plans.some(p => p.id === 'p'));
   const again = migrate(structuredClone(m));
-  eq(again.mobility.exercises.length, 30, 'idempotent (16 plus the 9 Garage Strength drills, the Big 3, and the 2 THP holds)');
+  eq(again.mobility.exercises.length, 37, 'idempotent (16 plus the 9 Garage Strength drills, the Big 3, the 2 THP holds and the 7 foot exercises)');
 });
 
 test('v28: the McGill Big 3 joins existing mobility, reusing one you already have by name', () => {
@@ -702,7 +703,7 @@ test('v28: the McGill Big 3 joins existing mobility, reusing one you already hav
   s.mobility.routines = s.mobility.routines.filter(r => r.id !== 'mobr-mcgill-big3');
   s.mobility.exercises.push({ ...s.mobility.exercises[0], id: 'mine', name: 'McGill Bird-Dog' });
   const m = migrate(s);
-  eq(m.version, 33);
+  eq(m.version, 34);
   eq(m.mobility.routines.find(r => r.id === 'mobr-mcgill-big3').items, ['mob-mcgill-curl-up', 'mob-mcgill-side-plank', 'mine']);
   eq(m.mobility.exercises.filter(e => /mcgill/i.test(e.name)).length, 3);
   const again = migrate(structuredClone(m));
@@ -729,7 +730,7 @@ test('v9 data gets deficit RDLs and the T2 goal, reusing what you already have',
   s.exercises = s.exercises.filter(e => e.id !== 'ex-deficit-rdl');
   s.slots = s.slots.filter(x => x.id !== 'sl-t2-hams');
   const m = migrate(structuredClone(s));
-  eq(m.version, 33);
+  eq(m.version, 34);
   const rdl = m.exercises.find(e => e.id === 'ex-deficit-rdl');
   ok(rdl && rdl.familyId === 'fam-hams', 'added to Hamstrings');
   ok(m.slots.some(x => x.exerciseId === rdl.id && x.tier === 'T2'), 'goal added');
@@ -1263,7 +1264,7 @@ test('v18: jumps move out of T2 into their own tier; goals keep their reps and t
   s.sessions.push({ id: 'open1', status: 'open', blocks: [{ id: 'bj', tier: 'T2', exerciseId: 'ex-box-jump', schemeId: 's-t2-4x3' }, { id: 'pc', tier: 'T2', exerciseId: 'ex-power-clean', schemeId: 's-t2-5x3' }] });
   s.plans.push({ id: 'p', items: [{ tier: 'T2', exerciseId: 'ex-jump-squat', schemeId: 's-t2-4x3' }] });
   const m = migrate(s);
-  eq(m.version, 33);
+  eq(m.version, 34);
   ok(m.tiers.JUMP && L.schemeOptions(m, 'JUMP').length >= 5, 'tier and schemes');
   eq([goal.tier, goal.repMin, goal.repMax], ['JUMP', 12, 20]);
   ok(m.sets.filter(x => x.exerciseId === 'ex-broad-jump').every(x => x.tier === 'JUMP') && m.sets.filter(x => x.exerciseId === 'ex-power-clean').every(x => x.tier === 'T2'), 'jump sets move, cleans stay');
@@ -1422,7 +1423,7 @@ test('v10 data gets the new T3 schemes and rep caps, keeping caps you set', () =
   for (const e of s.exercises) if (['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].includes(e.id)) e.maxReps = null;
   s.exercises.find(e => e.id === 'ex-ghr').maxReps = 6;
   const m = migrate(s);
-  eq(m.version, 33);
+  eq(m.version, 34);
   ok(m.schemes.some(x => x.id === 's-t3-6x5') && m.schemes.some(x => x.id === 's-t3-4x8'));
   eq(['ex-nordic', 'ex-ghr', 'ex-reverse-nordic'].map(id => m.exercises.find(e => e.id === id).maxReps), [5, 6, 10], 'your own GHR cap of 6 kept');
   eq(migrate(structuredClone(m)).schemes.filter(x => x.id === 's-t3-6x5').length, 1, 'idempotent');
@@ -1515,10 +1516,10 @@ test('v19: data saved before it opens with savedAt unset, and the summary counts
   s.version = 18;
   delete s.savedAt;
   const m = migrate(s);
-  eq([m.version, m.savedAt], [33, null]);
+  eq([m.version, m.savedAt], [34, null]);
   s.sessions.push({ id: 'x', firstSetAt: 1 }, { id: 'y', firstSetAt: null });
   s.sets.push({ done: true, warmup: false }, { done: true, warmup: true }, { done: false });
-  eq(V.summaryOf(s), { version: 33, workouts: 1, sets: 1 });
+  eq(V.summaryOf(s), { version: 34, workouts: 1, sets: 1 });
 });
 atest('the vault: a second copy, snapshots that list newest first, and pruning', async () => {
   if (!V.available()) return; // no IndexedDB here (the rules also run outside a browser)
@@ -1681,7 +1682,7 @@ test('merge: settings merge key by key; whole states keep both devices\' work an
   eq(m.sessions.map(x => x.id), ['ls', 'rs']);
   ok(!m.exercises.some(e => e.id === 'ex-nordic'), 'the remote deletion carried over');
   ok(m.equipment.includes('sled') && m.savedAt === 2000 && m.timer.endsAt === 1);
-  eq(migrate(m).version, 33);
+  eq(migrate(m).version, 34);
 });
 test('sync plan: what to do for each situation', () => {
   const P = o => Sync.planSync({ hasBase: true, baseRev: 3, remote: { rev: 3 }, localChanged: false, localEmpty: false, baseHadData: true, remoteEmpty: false, ...o }).action;
@@ -1911,6 +1912,80 @@ atest('photos: added from picked files, shrunk, listed, read back and removed', 
   ok(await Ph.clear());
   eq(await Ph.count(), 0);
 });
+// ---------- foot strength (js/foot.js) ----------
+// A logged foot item: `sets` as [side, reps, hold] (done at `t`).
+const footItem = (exerciseId, t, sets, extra = {}) => ({ id: L.uid(), exerciseId, note: '', ...extra,
+  sets: sets.map(([side, reps, hold]) => ({ id: L.uid(), done: true, at: t, side, reps, hold })) });
+const footSession = (s, t, items) => s.mobility.sessions.push({ id: L.uid(), day: L.dayKey(t), startedAt: t, status: 'done', routineId: Ft.ROUTINE_ID, items });
+test('foot strength: seven exercises in order, every one with a video; v34 adds them, the routine and the toe', () => {
+  const s = seed();
+  const r = s.mobility.routines.find(x => x.id === Ft.ROUTINE_ID);
+  eq(r.items.map(id => s.mobility.exercises.find(e => e.id === id).name), ['Big toe mobility', 'Toe yoga', 'Big toe abduction', 'Short foot (arch doming)', 'Big toe isometric press', 'Single-leg balance', 'Single-leg calf raise (3s down)']);
+  ok(r.items.every(id => M.videoSearch(s.mobility.exercises.find(e => e.id === id).video)?.startsWith('https://www.youtube.com/')), 'videos');
+  eq([r.weekly, s.morning.parts], [5, ['Left big toe']]);
+  const old = seed(); old.version = 33; old.mobility.routines = old.mobility.routines.filter(x => x.id !== Ft.ROUTINE_ID);
+  old.mobility.exercises = old.mobility.exercises.filter(e => !e.id.startsWith('foot-')); old.morning.parts = ['Knee'];
+  const m = migrate(old);
+  eq([m.mobility.routines.some(x => x.id === Ft.ROUTINE_ID), m.mobility.exercises.filter(e => e.id.startsWith('foot-')).length, m.morning.parts], [true, 7, ['Knee', 'Left big toe']]);
+  eq(M.doseText(s.mobility.exercises.find(e => e.id === 'foot-balance')), '2 × 30–45s · per foot');
+});
+test('foot strength: left and right logged apart, each row labelled, an optional extra left set, last level kept', () => {
+  const s = seed();
+  const ex = id => s.mobility.exercises.find(e => e.id === id);
+  const it = M.newItem(s, ex('foot-toe-mobility'));
+  eq(it.sets.map(x => [x.side, x.label, x.hold, !!x.optional]), [['L', 'Circles ↻', 30, false], ['R', 'Circles ↻', 30, false], ['L', 'Circles ↺', 30, false], ['R', 'Circles ↺', 30, false],
+    ['L', 'Traction × 3', 10, false], ['R', 'Traction × 3', 10, false], ['L', 'Extra', 10, true]]);
+  eq(M.setText(ex('foot-short-foot'), { side: 'L', reps: 10, hold: 8 }), 'L 10 8s');
+  footSession(s, Date.now() - 864e5, [footItem('foot-toe-yoga', Date.now() - 864e5, [['L', 10], ['R', 10]], { level: 1, control: 4 })]);
+  eq(M.newItem(s, ex('foot-toe-yoga')).level, 1, 'starts at last time\'s level');
+  const calf = M.newItem(s, ex('foot-calf-raise'));
+  eq(calf.sets.map(x => [x.side, x.reps]), [['L', 20], ['R', 20], ['L', 20]]);
+});
+test('foot strength: the next level after 3 sessions of control 4+, or 45 s on both feet; calf load and a lagging left', () => {
+  const s = seed(), ex = id => s.mobility.exercises.find(e => e.id === id), day = n => Date.now() - n * 864e5;
+  for (const [n, c] of [[3, 4], [2, 5]]) footSession(s, day(n), [footItem('foot-toe-yoga', day(n), [['L', 10], ['R', 10]], { level: 0, control: c })]);
+  eq(Ft.readyForNext(s, ex('foot-toe-yoga')), null, 'two good sessions: not yet');
+  footSession(s, day(1), [footItem('foot-toe-yoga', day(1), [['L', 10], ['R', 10]], { level: 0, control: 4 })]);
+  eq(Ft.readyForNext(s, ex('foot-toe-yoga'))?.next, 1, 'three: unassisted next');
+  eq(Ft.readyForNext(s, ex('foot-toe-yoga'), 2), null, 'standing is the last level');
+  footSession(s, day(1), [footItem('foot-balance', day(1), [['L', null, 45], ['R', null, 40], ['L', null, 45], ['R', null, 45]], { level: 0 })]);
+  eq(Ft.readyForNext(s, ex('foot-balance')), null, '40 s on the right once: not yet');
+  footSession(s, day(0), [footItem('foot-balance', day(0), [['L', null, 45], ['R', null, 46], ['L', null, 50], ['R', null, 45]], { level: 0 })]);
+  eq(Ft.readyForNext(s, ex('foot-balance'))?.next, 1, '45 s everywhere: eyes closed next');
+  footSession(s, day(0), [footItem('foot-calf-raise', day(0), [['L', 15], ['R', 20]])]);
+  eq([Ft.calfReport(s).addLoad, Ft.calfReport(s).lagging], [false, 5], 'left 15, right 20: lagging by 5');
+  footSession(s, day(0) + 1, [footItem('foot-calf-raise', day(0) + 1, [['L', 20], ['R', 22]])]);
+  eq([Ft.calfReport(s).addLoad, Ft.calfReport(s).lagging], [true, 0], '20 on the left: add load; 2 behind is fine');
+});
+test('foot strength: a day counts when every exercise is done, in chunks or several times; the calf raise can be skipped', () => {
+  const s = seed(), r = s.mobility.routines.find(x => x.id === Ft.ROUTINE_ID);
+  const { start, end } = L.weekBounds(s, Date.now());
+  const t = L.startOfDay(Date.now()) + 9 * 3600e3;
+  eq(Ft.remainingToday(s, t), r.items, 'nothing yet: all of it');
+  footSession(s, t, ['foot-toe-yoga', 'foot-toe-abduction', 'foot-short-foot', 'foot-toe-press'].map(id => footItem(id, t, [['L', 10], ['R', 10]])));
+  eq(Ft.remainingToday(s, t + 1), ['foot-toe-mobility', 'foot-balance', 'foot-calf-raise'], 'after the desk part: the rest');
+  eq(Ft.remainingToday(s, t + 1, true), ['foot-toe-mobility', 'foot-balance'], 'calf work today: no calf raise');
+  eq(Ft.week(s, start, end, t + 1).doneToday, false);
+  footSession(s, t + 3600e3, ['foot-toe-mobility', 'foot-balance'].map(id => footItem(id, t + 3600e3, [['L', null, 30], ['R', null, 30]])));
+  const w = Ft.week(s, start, end, t + 3600e3 + 1);
+  eq([w.days, w.doneToday, w.target], [1, true, 5], 'done in two chunks, calf raise skipped');
+  footSession(s, t + 7200e3, r.items.map(id => footItem(id, t + 7200e3, [['L', 10], ['R', 10]])));
+  eq(Ft.week(s, start, end, t + 7200e3 + 1).days, 1, 'a second round the same day is still one day');
+  eq(Ft.remainingToday(s, t + 7200e3 + 1), r.items, 'and a new round offers all of it');
+});
+test('foot strength: the toe over 3/10 two mornings running is flagged, and stops jumps like any sore part', () => {
+  const s = seed(), now = Date.now(), d = n => L.dayKey(now - n * 864e5);
+  s.morning.log = [{ day: d(0), pain: { 'Left big toe': 5 } }, { day: d(1), pain: { 'Left big toe': 3 } }];
+  eq(Ft.toeWarning(s, now), null, '3 yesterday is not over the limit');
+  s.morning.log[1].pain['Left big toe'] = 4;
+  eq(Ft.toeWarning(s, now), [5, 4]);
+  s.morning.log = [{ day: d(1), pain: { 'Left big toe': 6 } }, { day: d(2), pain: { 'Left big toe': 5 } }];
+  eq(Ft.toeWarning(s, now), [6, 5], 'yesterday and the day before still warn before today\'s check');
+  s.morning.log = [{ day: d(0), pain: { 'Left big toe': 6 } }, { day: d(2), pain: { 'Left big toe': 5 } }];
+  eq(Ft.toeWarning(s, now), null, 'not running');
+  s.morning.log = [{ id: 'x', day: d(0), at: now, energy: null, pain: { 'Left big toe': 5 } }];
+  eq(Mo.jumpPain(s, now).map(x => [x.part, x.relief.holds]), [['Left big toe', ['foot-toe-press']]]);
+});
 test('heart analytics: training load, calories from heart rate, drift over a steady effort', () => {
   const b = HR.basis({ hrMax: 190 }), t0 = 1_000_000;
   let rec = null;
@@ -1943,7 +2018,7 @@ test('interval timer: a heart-rate target is kept clean, described, and comes wi
   delete old.settings.hrMax; delete old.settings.hrMethod;
   const m = migrate(old);
   eq(m.intervals.presets.map(p => p.id), ['ivu-mine', 'iv-z2-open', 'iv-z2-45', 'iv-4x4-80', 'iv-4x4-nor']);
-  eq([m.settings.hrMax, m.settings.hrMethod, m.version], [null, 'max', 33]);
+  eq([m.settings.hrMax, m.settings.hrMethod, m.version], [null, 'max', 34]);
 });
 atest('heart rate: connects to the strap, follows its readings, reconnects after a drop, disconnects', async () => {
   const strap = installFakeBluetooth();
@@ -2114,7 +2189,7 @@ atest('sync: another device saving mid-push is merged and retried; offline and o
     const future = structuredClone(fake.row(EMAIL).data); future.version = 99; future.savedAt = Date.now() + 10;
     fake.putRow(EMAIL, future);
     const nv = await Sync.sync();
-    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 33);
+    ok(nv.kind === 'error' && /newer version/.test(nv.error.message) && Store.state.version === 34);
   });
 });
 atest('sync: signed out does nothing; signing out forgets the account link but keeps your data', async () => {
@@ -2507,7 +2582,7 @@ test('conditioning: the upgrade adds the bike, its EMOMs and a goal once; scheme
   old.schemes = old.schemes.filter(sc => !sc.tiers.includes('COND')); old.slots = old.slots.filter(sl => sl.tier !== 'COND');
   for (const l of old.locations) l.equipment = l.equipment.filter(q => q !== 'assault-bike');
   const m = migrate(old);
-  eq(m.version, 33);
+  eq(m.version, 34);
   ok(m.tiers.COND.repMin === 90 && m.families.some(f => f.id === 'fam-cond') && L.byId(m.exercises, 'ex-assault-bike').repUnit === 'cal');
   eq(m.schemes.filter(sc => sc.tiers.includes('COND')).length, 6);
   eq(m.slots.filter(sl => sl.tier === 'COND').map(sl => sl.quota), [1]);
@@ -2978,7 +3053,7 @@ test('program blocks: the weekly review lists the program and leaves its goals a
 test('v29: morning check and program blocks start empty; both merge across devices', () => {
   const o = seed(); o.version = 28; delete o.morning; delete o.block; delete o.blocks;
   const m = migrate(o);
-  eq([m.version, m.morning, m.block, m.blocks], [33, { parts: [], log: [] }, null, []]);
+  eq([m.version, m.morning, m.block, m.blocks], [34, { parts: ['Left big toe'], log: [] }, null, []]); // (v34 tracks the toe)
   const base = structuredClone(m);
   const a = structuredClone(m), b = structuredClone(m);
   Mo.setParts(a, ['Knee']); Mo.record(a, { energy: 3, pain: { Knee: 1 } }, NOON(1)); a.savedAt = 1;
@@ -3202,7 +3277,7 @@ test('categories: Arms splits into Biceps and Triceps, Shoulders gets the raises
 test('v31: your library splits once; your own names and categories are left alone', () => {
   const old = unsplit(seed()); old.version = 30;
   const m = migrate(old);
-  eq([m.version, L.byId(m.families, 'fam-arms').name, m.families.filter(f => f.id === 'fam-triceps').length], [33, 'Biceps (pump)', 1]);
+  eq([m.version, L.byId(m.families, 'fam-arms').name, m.families.filter(f => f.id === 'fam-triceps').length], [34, 'Biceps (pump)', 1]);
   ok(m.slots.some(sl => sl.id === 'sl-t3-arms-triceps'));
   const n = m.exercises.length, slots = m.slots.length;
   m.version = 30; const again = migrate(m);
