@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Native app test</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>#out div { font: 13px/1.4 monospace; } .FAIL { color: #f66; } #app { min-height: 200px; }</style>
+</head>
+<body>
+  <h1 id="summary">running…</h1>
+  <div id="out"></div>
+  <main id="app"></main>
+  <div id="timer" hidden></div>
+  <nav id="nav"></nav>
+  <div id="sheet" hidden></div>
+  <script>globalThis.AFP_STORAGE_KEY = 'afp.native'; // its own data, never the real app's
+  globalThis.AFP_VAULT_NAME = 'afp-vault-native'; globalThis.AFP_PHOTOS_NAME = 'afp-photos-native';</script>
+  <script type="module" src="js/native-smoke.js"></script>
+</body>
+</html>

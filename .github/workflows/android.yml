@@ -1,0 +1,63 @@
+# Builds the Android app (Capacitor) and publishes it to the "Android app" release, where the phone downloads it.
+# The app loads the live site, so ordinary changes ship by merging; this runs only when the native side changes (or by
+# hand: Actions → Android app → Run workflow). Signing needs the AFP_KEYSTORE_PASSWORD secret (README → Android app);
+# without it the APK is built unsigned, as a check, and not published.
+name: Android app
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['android/**', 'capacitor.config.json', 'package.json', 'package-lock.json', 'js/native-entry.js', 'scripts/www.mjs', 'offline.html', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SIGNED: ${{ secrets.AFP_KEYSTORE_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - name: The plugin bundle matches its source
+        run: npm run native && git diff --exit-code vendor/capacitor/native.js
+      - run: npm run sync
+      - name: Build
+        env:
+          AFP_KEYSTORE_PASSWORD: ${{ secrets.AFP_KEYSTORE_PASSWORD }}
+          AFP_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          if [ -z "$AFP_KEYSTORE_PASSWORD" ]; then echo "::warning::No AFP_KEYSTORE_PASSWORD secret: building unsigned, not publishing (README → Android app)."; fi
+          cd android && ./gradlew assembleRelease --no-daemon
+          ls -la app/build/outputs/apk/release/
+      - name: Check the signature
+        if: ${{ env.SIGNED == 'true' }}
+        run: |
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs android/app/build/outputs/apk/release/app-release.apk | head -3
+          cp android/app/build/outputs/apk/release/app-release.apk adaptive-fitness.apk
+      - name: Publish to the "Android app" release
+        if: ${{ github.ref == 'refs/heads/main' && env.SIGNED == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android
+          name: Android app
+          make_latest: true
+          body: |
+            The Adaptive Fitness Planner as an Android app. Open this page on the phone, tap adaptive-fitness.apk, and
+            install it (allow installs from your browser the first time). A newer one installs over it and keeps your data.
+            Build ${{ github.run_number }} from ${{ github.sha }}.
+          files: adaptive-fitness.apk
+      - name: Keep the APK with the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: adaptive-fitness-${{ github.run_number }}
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 14
