@@ -21,6 +21,7 @@ import * as CAT from './categories.js';
 import * as HR from './hr.js';
 import * as Ph from './photos.js';
 import * as Ft from './foot.js';
+import * as U from './usage.js';
 import { installFakeBluetooth } from './fake-bluetooth.js';
 
 const results = [];
@@ -1912,6 +1913,29 @@ atest('photos: added from picked files, shrunk, listed, read back and removed', 
   ok(await Ph.clear());
   eq(await Ph.count(), 0);
 });
+// ---------- usage (js/usage.js) ----------
+test('usage: a daily roll-up of screens, taps, sheets backed out of and errors; summed over a range; old days dropped', () => {
+  const log = U.empty(), now = Date.now(), DAY = 864e5;
+  U.addScreen(log, 'today:workout', 0, true, now); U.addScreen(log, 'today:workout', 20 * 60e3, false, now);
+  U.addScreen(log, 'heart', 5 * 60e3, true, now - DAY); U.addScreen(log, 'today:workout', 99 * 60e3, true, now - DAY);
+  U.addAction(log, 'check', now); U.addAction(log, 'check', now); U.addAction(log, 'regen', now - DAY);
+  U.addSheet(log, 'swapEx', true, now); U.addSheet(log, 'swapEx', false, now); U.addSheet(log, 'addEx', false, now);
+  U.addError(log, 'x is not   defined', now); U.addError(log, 'x is not defined', now);
+  U.addAction(log, 'old', now - 200 * DAY);
+  const sum = U.summarize(log, 30, { screens: ['today:workout', 'heart', 'timer:run'], actions: ['check', 'regen', 'footStart'] }, now);
+  eq(sum.days, 2);
+  eq(sum.screens.map(x => [x.name, x.views, Math.round(x.ms / 60e3)]), [['today:workout', 2, 50], ['heart', 1, 5]], 'a screen left open over 30 min counts 30');
+  eq(sum.actions, [{ name: 'check', n: 2 }, { name: 'regen', n: 1 }]);
+  eq(sum.backedOut, [{ name: 'swapEx', opened: 2, out: 1 }], 'addEx was used each time: not listed');
+  eq([sum.unusedScreens, sum.unusedActions], [['timer:run'], ['footStart']]);
+  eq(sum.errors, [{ msg: 'x is not defined', n: 2 }]);
+  eq(U.summarize(log, 1, undefined, now).days, 1, 'one day: today only');
+  U.prune(log, now);
+  ok(!Object.keys(log.days).some(k => k < L.dayKey(now - 181 * DAY)), 'over 180 days old: gone');
+  const text = U.summaryText(sum, 30);
+  ok(/used on 2 days, 55 min/.test(text) && /today:workout: 50 min, 2/.test(text) && /swapEx 1\/2/.test(text) && /Actions never used \(1\): footStart/.test(text), text);
+});
+
 // ---------- foot strength (js/foot.js) ----------
 // A logged foot item: `sets` as [side, reps, hold] (done at `t`).
 const footItem = (exerciseId, t, sets, extra = {}) => ({ id: L.uid(), exerciseId, note: '', ...extra,
