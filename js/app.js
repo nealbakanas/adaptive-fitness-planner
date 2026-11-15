@@ -13,6 +13,7 @@ import * as PG from './progress.js';
 import * as CH from './charts.js';
 import * as HR from './hr.js';
 import * as Ph from './photos.js';
+import * as Ft from './foot.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -776,6 +777,8 @@ function banners() {
   if (!state.settings.bodyweight) {
     h += `<div class="banner">Set your bodyweight in Settings so weighted pull-ups and dips get loads. <button class="link" data-act="nav" data-tab="more">Settings</button></div>`;
   }
+  const toe = Ft.toeWarning(state);
+  if (toe) h += `<div class="banner warn">${esc(Ft.PAIN_PART)} over ${Ft.PAIN_LIMIT}/10 two mornings running (${esc(toe.join(', '))}). Ease off: easier levels, skip calf raises; get it checked if it keeps up.</div>`;
   // Nudge after 3 finished workouts, or 7 days with one, since the last backup off this device (see Vault.backupNudge).
   if (Vault.backupNudge(state)) {
     const n = state.sessions.filter(x => x.status === 'done' && x.firstSetAt && x.firstSetAt > (state.settings.lastExportAt ?? 0)).length;
@@ -1452,7 +1455,7 @@ function viewCheckin() {
   const doneToday = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'done');
   const paused = state.sessions.filter(s => s.day === L.dayKey() && s.status === 'paused');
   let h = `<header class="top"><h1>Check in</h1><button class="small" data-act="tomorrowOpen">Plan tomorrow ›</button></header>`;
-  h += blockReportCard() + plannedCard() + morningCard() + programDayCard();
+  h += blockReportCard() + plannedCard() + morningCard() + (lowEnergy() ? footCard() : '') + programDayCard();
   for (const p of paused) {
     const left = state.sets.filter(x => x.sessionId === p.id && !x.done && !x.warmup).length;
     const at = new Date(p.pausedAt ?? p.checkinAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -1464,6 +1467,7 @@ function viewCheckin() {
     const last = [...doneToday].sort((a, b) => (b.endedAt ?? b.checkinAt) - (a.endedAt ?? a.checkinAt))[0];
     h += `<div class="card muted">Done today · ${sets} sets <button class="link" data-act="sessionContinue" data-id="${esc(last.id)}">Continue</button></div>`;
   }
+  if (!lowEnergy()) h += footCard();
   const where = ci.locationIds?.length ? ci.locationIds : [ci.locationId];
   if (state.locations.length > 1) {
     h += `<div class="field"><label>Where</label><div class="seg">${state.locations.map(l =>
@@ -1921,17 +1925,21 @@ function viewMobItem(item) {
     // A timer only for moves dosed as a hold (couch stretch), not reps with a pause at the top (cobra).
     if (t.hold) h += `${input(st, 'hold', 'numeric')}<span class="u">s</span>${st.done || !ex.hold ? '' : goBtn(`data-act="mworkStart" data-i="${esc(item.id)}" data-s="${esc(st.id)}"`, state.timer?.target?.mset === st.id)}`;
     if (t.extra) h += input(st, 'extra', 'text', t.extra);
-    return `<div class="set ${st.done ? 'done' : ''}"><span class="n">${i + 1}</span>${h}
-      <button class="check" data-act="mcheck" data-i="${esc(item.id)}" data-s="${esc(st.id)}" aria-label="Log set">${st.done ? '✓' : ''}</button></div>`;
+    // Left and right logged apart (foot strength): the side and what the row is, instead of a set number.
+    const n = st.side ? `<span class="n side ${esc(st.side)}">${esc(st.side)}</span>` : `<span class="n">${i + 1}</span>`;
+    return `<div class="set ${st.done ? 'done' : ''} ${st.optional ? 'optional' : ''}">${n}${st.label ? `<span class="slabel">${esc(st.label)}</span>` : ''}${h}
+      <button class="check" data-act="mcheck" data-i="${esc(item.id)}" data-s="${esc(st.id)}" aria-label="Log ${esc(st.side ? `${st.side === 'L' ? 'left' : 'right'} ` : '')}set">${st.done ? '✓' : ''}</button></div>`;
   }).join('');
   const vid = M.videoSearch(ex.video);
   const day = x => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return `<section class="block mob">
     <div class="bhead"><span class="tier MOB">${item.def ? 'JUMP' : 'MOB'}</span><span class="mobname">${esc(ex.name)}</span>
       <button class="icon bremove" data-act="mRemove" data-i="${esc(item.id)}" aria-label="Remove ${esc(ex.name)}" title="Remove exercise">✕</button></div>
-    <div class="meta">${esc([M.doseText(ex), `rest ${clock(ex.restSec || 0)}`].join(' · '))}</div>
-    ${last ? `<div class="dose">Last (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
+    <div class="meta">${esc(ex.sides ? M.doseText(ex) : [M.doseText(ex), `rest ${clock(ex.restSec || 0)}`].join(' · '))}</div>
+    ${footBits(ex, item)}
+    ${last ? `<div class="dose">Last (${day(last.at)}): ${esc(M.itemText(ex, last.item, unit()))}${last.item.control ? ` · control ${esc(last.item.control)}/5` : ''}${last.item.note ? ` · “${esc(last.item.note)}”` : ''}</div>` : ''}
     <div class="sets">${rows}</div>
+    ${ex.rate ? `<div class="ctrl"><span class="meta">Control</span>${[1, 2, 3, 4, 5].map(v => `<button class="chip ${esc(item.control === v ? 'on' : '')}" data-act="mControl" data-i="${esc(item.id)}" data-v="${esc(v)}" aria-label="Control ${esc(v)} of 5">${v}</button>`).join('')}</div>` : ''}
     <input class="mobnote" data-mnote="${esc(item.id)}" value="${esc(item.note)}" placeholder="Notes">
     <div class="brow">
       <button class="small" data-act="mAddSet" data-i="${esc(item.id)}">+ set</button>
@@ -1942,8 +1950,50 @@ function viewMobItem(item) {
   </section>`;
 }
 
+// Foot strength on an exercise card: its level (with the easier and harder versions), and a nudge when you're ready for the
+// next one, ready to add load, or the left lags the right.
+function footBits(ex, item) {
+  const bits = [];
+  if (ex.levels) {
+    const lv = item.level ?? 0, ready = Ft.readyForNext(state, ex, lv);
+    bits.push(`<div class="lvl"><select data-mlevel="${esc(item.id)}" aria-label="Level">${opts(ex.levels.map((l, i) => [i, l]), lv)}</select>
+      ${ready ? `<button class="small good" data-act="mLevel" data-i="${esc(item.id)}" data-v="${esc(ready.next)}">Ready: ${esc(ex.levels[ready.next])} ›</button>` : ''}</div>`);
+  }
+  if (ex.id === 'foot-calf-raise') {
+    const c = Ft.calfReport(state);
+    if (c?.addLoad) bits.push(`<div class="dose">${esc(c.L.reps)} clean reps on the left last time: add load.</div>`);
+    if (c?.lagging) bits.push(`<div class="dose warn">Left ${esc(c.lagging)} reps behind the right (${esc(c.L.reps)} vs ${esc(c.R.reps)}).</div>`);
+  }
+  return bits.join('');
+}
+
+// ---------- foot strength (js/foot.js) ----------
+// Calf work in today's training (logged, or in the open workout): the routine's calf raise is left out today.
+function calfWorkToday() {
+  const from = L.startOfDay(), cur = currentSession();
+  const calf = id => { const e = exOf(id); return !!e && L.movementPattern(state, e) === 'calf'; };
+  return state.sets.some(x => x.done && x.loggedAt >= from && calf(x.exerciseId)) || !!cur?.blocks.some(b => calf(b.exerciseId));
+}
+const lowEnergy = () => (Mo.entryFor(state)?.energy ?? 6 - (ui.ci?.fatigue ?? 2)) <= 2;
+const DESK = ['foot-toe-yoga', 'foot-toe-abduction', 'foot-short-foot', 'foot-toe-press']; // steps 2-5: seated, at a desk
+const pips = (n, of) => `<span class="pips">${Array.from({ length: of }, (_, i) => `<span class="pip ${esc(i < n ? 'on' : '')}"></span>`).join('')}</span>`;
+
+// On the check-in: this week's days, today's progress, and Start (what's left today), the desk part, or progress.
+function footCard() {
+  const r = L.byId(state.mobility.routines, Ft.ROUTINE_ID);
+  if (!r) return '';
+  const { start, end } = L.weekBounds(state);
+  const w = Ft.week(state, start, end), low = lowEnergy();
+  const label = w.doneToday ? 'Again' : w.today ? `Finish it (${w.total - w.today} left)` : 'Start';
+  return `<div class="card foot ${low ? 'low' : ''}"><div class="foothead"><b>Foot strength</b>${pips(Math.min(w.days, w.target), w.target)}
+      <span class="meta">${esc(w.days)}/${esc(w.target)} this week${w.doneToday ? ' · done today ✓' : ''}</span></div>
+    ${low && !w.doneToday ? '<p class="meta">Low energy: a good day for it.</p>' : ''}
+    <div class="brow"><button class="${w.doneToday ? '' : 'primary'}" data-act="footStart" data-v="next">${esc(label)}</button>
+      <button data-act="footStart" data-v="desk">Desk part (2–5)</button><button class="small quiet" data-act="footProgress">Progress</button></div></div>`;
+}
+
 function viewMobSession(m, workoutOpen) {
-  const total = m.items.reduce((n, it) => n + it.sets.length, 0);
+  const total = m.items.reduce((n, it) => n + it.sets.filter(x => !x.optional || x.done).length, 0);
   const done = m.items.reduce((n, it) => n + it.sets.filter(s => s.done).length, 0);
   const title = progLabel(m) ?? L.byId(state.mobility.routines, m.routineId)?.name ?? (m.parts?.length ? m.parts.join(', ') : 'Your picks');
   let h = `<header class="top"><div><h1>${m.program ? 'Jump program' : 'Mobility'}</h1><div class="sub">${esc(title)} · ${done}/${total} sets</div></div></header>`;
@@ -2139,6 +2189,8 @@ function viewWeek() {
     h += `</details>`;
   }
   const mw = M.weekSummary(state, c.start, c.end);
+  const fw = Ft.week(state, c.start, c.end);
+  if (fw) h += `<button class="card row" data-act="footProgress"><span><b>Foot strength</b> ${pips(Math.min(fw.days, fw.target), fw.target)} <span class="meta">${esc(fw.days)}/${esc(fw.target)} days</span></span><span>›</span></button>`;
   if (mw.sessions) h += `<div class="card"><b>Mobility</b> <span class="meta">${mw.sessions} session${mw.sessions === 1 ? '' : 's'}${mw.parts.length ? ` · ${esc(mw.parts.join(', '))}` : ''}</span></div>`;
   for (const d of P.PROGRAMS) {
     const p = P.progress(state, d.id);
@@ -3193,7 +3245,7 @@ function closeSheet() { ui.sheet = null; renderSheet(); }
 function renderSheet() {
   const s = ui.sheet;
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
-  const body = { workoutDone: sheetWorkoutDone, swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
+  const body = { footProgress: sheetFootProgress, workoutDone: sheetWorkoutDone, swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, reviewText: sheetReviewText, pasteImport: sheetPasteImport,
     addEx: sheetAddEx, category: sheetCategory, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist, cloudAsk: sheetCloudAsk }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
@@ -3409,6 +3461,33 @@ function sheetPair(sh) {
 }
 
 const MOB_PICK_TITLE = { new: 'Mobility session', session: 'Add mobility', workout: 'Add mobility to this workout', routine: 'Add to routine' };
+
+// Foot strength over time: days a week, each exercise's level, recent control and what's next; the calf raise by side;
+// the toe's morning scores.
+function sheetFootProgress() {
+  const r = L.byId(state.mobility.routines, Ft.ROUTINE_ID);
+  if (!r) return '<p>No foot routine.</p>';
+  const wk = Array.from({ length: 4 }, (_, i) => { const b = L.weekBounds(state, Date.now() - i * 7 * 864e5); return { start: b.start, w: Ft.week(state, b.start, b.end) }; }).reverse();
+  const rows = r.items.map(mobEx).filter(Boolean).map(ex => {
+    const h = Ft.history(state, ex.id), lv = h[0]?.item.level ?? 0, ready = Ft.readyForNext(state, ex, lv);
+    const ctrl = h.slice(0, 5).map(x => x.item.control).filter(c => c != null).reverse();
+    const bits = [h[0] ? fmtAgo(h[0].at) : 'not yet', ex.levels ? ex.levels[lv] : '', ctrl.length ? `control ${ctrl.join(' · ')}` : ''];
+    if (ex.id === 'foot-balance' && h[0]) { const s = h[0].item.sets.filter(x => x.done); const best = sd => Math.max(0, ...s.filter(x => x.side === sd).map(x => Number(x.hold) || 0)); bits.push(`L ${best('L')}s · R ${best('R')}s`); }
+    let note = ready ? `Ready for ${ex.levels[ready.next]}` : '';
+    if (ex.id === 'foot-calf-raise') {
+      const c = Ft.calfReport(state);
+      if (c) bits.push(`L ${c.L?.reps ?? '–'}${c.L?.load ? ` @ ${c.L.load}` : ''} · R ${c.R?.reps ?? '–'}${c.R?.load ? ` @ ${c.R.load}` : ''}`);
+      note = [c?.addLoad ? 'Add load' : '', c?.lagging ? `Left ${c.lagging} behind` : ''].filter(Boolean).join(' · ');
+    }
+    return `<div class="frow"><span class="grow"><span class="name">${esc(ex.name)}</span><span class="meta">${esc(bits.filter(Boolean).join(' · '))}</span></span>${note ? `<b class="${esc(/behind/.test(note) ? 'warn' : 'good')}">${esc(note)}</b>` : ''}</div>`;
+  }).join('');
+  const toe = (state.morning?.log ?? []).filter(e => e.pain?.[Ft.PAIN_PART] != null).slice(0, 7).reverse();
+  return `<h3>Foot strength</h3>
+    <p class="meta">Days a week: ${wk.map(x => `${esc(x.w.days)}/${esc(x.w.target)}`).join(' · ')} (this week last)</p>
+    <div class="menu flush">${rows}</div>
+    <p class="meta">${esc(Ft.PAIN_PART)}, mornings: ${toe.length ? esc(toe.map(e => e.pain[Ft.PAIN_PART]).join(' · ')) : 'none logged yet (the morning check)'}</p>
+    <div class="brow"><button class="primary" data-act="footStart" data-v="next">Start</button></div>`;
+}
 
 function sheetMobPick(sh) {
   const last = M.lastDoneAt(state);
@@ -4491,6 +4570,21 @@ const actions = {
     save(); render();
   }),
 
+  // Foot strength, whole or in chunks: what's left today ('next'), the desk part (steps 2-5). Into the open mobility session
+  // if there is one. The calf raise stays out on a day with other calf work.
+  footStart: d => {
+    const calf = calfWorkToday();
+    const ids = d.v === 'desk' ? DESK : Ft.remainingToday(state, Date.now(), calf);
+    const items = ids.map(mobEx).filter(e => e && !e.archived).map(e => M.newItem(state, e));
+    ui.sheet = null; renderSheet();
+    const open = currentMobility();
+    if (open) { open.items.push(...items.filter(it => !open.items.some(x => x.exerciseId === it.exerciseId && x.sets.some(st => !st.done)))); ui.showWorkout = false; }
+    else startMobility(items, { routineId: Ft.ROUTINE_ID, ...(d.v === 'desk' ? { chunk: 'desk' } : {}) });
+    ui.tab = 'today';
+    save(); render(); window.scrollTo(0, 0);
+    if (calf && d.v !== 'desk' && L.byId(state.mobility.routines, Ft.ROUTINE_ID)?.items.includes('foot-calf-raise')) toast('Calf raises left out: calf work today');
+  },
+  footProgress: () => openSheet({ type: 'footProgress' }),
   mobPick: d => {
     const ids = items => (items || []).map(i => i.exerciseId);
     const exclude = d.mode === 'session' ? ids(currentMobility()?.items) : d.mode === 'workout' ? ids(currentSession()?.mobility)
@@ -4542,6 +4636,13 @@ const actions = {
     }
     save(); render();
   },
+  mControl: d => {
+    const { item } = findMobItem(d.i);
+    if (!item) return;
+    item.control = item.control === Number(d.v) ? null : Number(d.v);
+    save(); render();
+  },
+  mLevel: d => { const { item } = findMobItem(d.i); if (item) { item.level = Number(d.v); save(); render(); } },
   mAddSet: d => {
     const { item } = findMobItem(d.i);
     const last = item.sets.at(-1);
@@ -4720,7 +4821,7 @@ const actions = {
     const ex = st && itemEx(item);
     if (!ex) return;
     st.hold = Number(st.hold) || ex.holdMax || ex.hold || 30;
-    startWork({ mset: st.id, item: item.id }, ex.name, st.hold, ex.perSide);
+    startWork({ mset: st.id, item: item.id }, st.side ? `${ex.name} · ${st.side === 'L' ? 'left' : 'right'}` : ex.name, st.hold, ex.perSide && !st.side);
     save(); render();
   },
   workAdd: () => {
@@ -5503,6 +5604,9 @@ document.addEventListener('change', e => {
   } else if (d.hdur !== undefined) {
     const s = L.byId(state.sessions, ui.history?.edit), v = Math.round(Number(el.value));
     if (s) { if (el.value.trim() !== '' && v > 0) s.durationMin = v; else delete s.durationMin; save(); }
+  } else if (d.mlevel) {
+    const { item } = findMobItem(d.mlevel);
+    if (item) { item.level = Number(el.value); save(); render(); }
   } else if (d.mset) {
     const [iid, sid] = d.mset.split('|');
     const st = findMobItem(iid).item?.sets.find(x => x.id === sid);

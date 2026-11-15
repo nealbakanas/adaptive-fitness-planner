@@ -5,13 +5,14 @@ import { GS_MOBILITY, gsVideo } from './library.js';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-export const BODY_PARTS = ['Hamstrings', 'Hip flexors', 'Adductors', 'Glutes', 'Quads & knees', 'Calves & ankles', 'Spine', 'Thoracic', 'Shoulders', 'Lats'];
+export const BODY_PARTS = ['Hamstrings', 'Hip flexors', 'Adductors', 'Glutes', 'Quads & knees', 'Calves & ankles', 'Feet & toes', 'Spine', 'Thoracic', 'Shoulders', 'Lats'];
 
 // A search phrase opens YouTube results; a link opens as is.
 export const videoSearch = q => (!q ? null : /^https?:\/\//i.test(q) ? q : `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
 
 // "3 × 10/side", "4 × 30–45s", "3 × 6 · 4s down / 2s hold"
 export function doseText(e) {
+  if (e.dose) return e.dose; // written out where sets × reps can't say it (foot strength)
   const range = (a, b, u = '') => (b && b !== a ? `${a}–${b}${u}` : `${a}${u}`);
   const what = e.hold ? range(e.hold, e.holdMax, 's') : range(e.reps ?? '', e.repsMax);
   return `${e.sets} × ${what}${e.perSide ? '/side' : ''}${e.tempo ? ` · ${e.tempo}` : ''}`;
@@ -48,14 +49,35 @@ export function setText(ex, s, unit = 'lb') {
   if (s.reps != null && s.reps !== '') bits.push(bits.length ? `× ${s.reps}` : `${s.reps}`);
   if (s.hold != null && s.hold !== '') bits.push(`${s.hold}s`);
   if (ex.track?.extra && s.extra != null && s.extra !== '') bits.push(`· ${ex.track.extra} ${s.extra}`);
-  return bits.join(' ') || 'done';
+  // Left or right, logged apart (foot strength), goes first: "L 10 8s".
+  return s.side ? `${s.side} ${bits.join(' ') || 'done'}` : bits.join(' ') || 'done';
 }
 
 export const itemText = (ex, item, unit) => item.sets.filter(s => s.done).map(s => setText(ex, s, unit)).join(', ');
 
+// The sets for an exercise logged left and right apart (`sides`): each of its `rows` for the left then the right, and an
+// optional extra left set when it has `extraLeft` (dropped unless you tick it). Loads come from last time, per side.
+export function sidedSets(ex, lastItem = null) {
+  const rows = ex.rows ?? [{ reps: ex.reps, hold: ex.hold, holdMax: ex.holdMax, repsMax: ex.repsMax }];
+  const mk = (row, side, extra = {}) => ({
+    id: uid(), done: false, side, label: row.label ?? '',
+    reps: ex.track?.reps ? (row.repsMax ?? row.reps ?? null) : null,
+    hold: ex.track?.hold ? (row.holdMax ?? row.hold ?? null) : null,
+    load: ex.track?.load ? (lastItem?.sets?.filter(x => x.done && x.side === side).at(-1)?.load ?? null) : null,
+    extra: null, ...extra,
+  });
+  const out = [];
+  for (const row of rows) out.push(mk(row, 'L'), mk(row, 'R'));
+  if (ex.extraLeft) out.push(mk(rows.at(-1), 'L', { optional: true, label: 'Extra' }));
+  return out;
+}
+
 // A fresh item for a session, with rows prefilled from the dose and from last time's load and extra.
 export function newItem(state, ex) {
-  const last = lastFor(state, ex.id)?.item.sets.filter(s => s.done).at(-1);
+  const prev = lastFor(state, ex.id)?.item;
+  // Left and right apart, at the level you were at last time.
+  if (ex.sides) return { id: uid(), exerciseId: ex.id, sets: sidedSets(ex, prev), note: '', ...(ex.levels ? { level: prev?.level ?? 0 } : {}) };
+  const last = prev?.sets.filter(s => s.done).at(-1);
   const sets = Array.from({ length: Math.max(1, ex.sets || 1) }, () => ({
     id: uid(), done: false,
     reps: ex.track?.reps ? (ex.repsMax ?? ex.reps ?? null) : null,

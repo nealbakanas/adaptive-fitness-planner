@@ -4,6 +4,7 @@ import { addThpPlan } from './thp.js';
 import { splitCategories } from './categories.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises, addMcgill } from './mobility.js';
+import { addFoot } from './foot.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
 import * as Vault from './vault.js';
 import { resample } from './hr.js';
@@ -383,6 +384,12 @@ export function migrate(s) {
       if (open && !presets.some(p => p.id === open.id)) presets.splice(i >= 0 ? i : presets.length, 0, structuredClone(open));
     }
     s.version = 33;
+  }
+  if (s.version < 34) {
+    // v34: the foot strength routine (js/foot.js): seven exercises, the routine (5 days a week), and "Left big toe" in the
+    // morning check.
+    addFoot(s);
+    s.version = 34;
   }
   return s;
 }

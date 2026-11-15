@@ -263,7 +263,7 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
   click('[data-act=nav][data-tab=today]');
   check('check-in no longer lists mobility', !q('[data-act=mobStart]'));
   click('[data-act=nav][data-tab=plans]');
-  check('Plans lists your mobility routines', /Day 1: Long & Strong/.test(text()) && qa('[data-act=mobStart]').length === 5 && /McGill Big 3/.test(text()));
+  check('Plans lists your mobility routines', /Day 1: Long & Strong/.test(text()) && qa('[data-act=mobStart]').length === 6 && /McGill Big 3/.test(text()) && /Foot strength/.test(text()));
   click('[data-act=mobStart][data-id=mobr-day1]');
   check('routine session opens with its 4 moves', /Mobility/.test(q('#app h1').innerText) && qa('section.block.mob').length === 4 && /Jefferson curl/.test(text()));
   check('history notes and video link shown', /Week 1: 70 lb/.test(q('#app').textContent) && qa('section.block.mob a').some(a => a.href.startsWith('https://www.youtube.com/results')));
@@ -303,13 +303,13 @@ step('mobility: routine session, body-part picks, mobility in a workout, library
 
   click('[data-act=nav][data-tab=library]');
   click('[data-act=libMode][data-v=mobility]');
-  check('library mobility tab lists all 28', qa('[data-act=mobExEdit]').length === 28);
+  check('library mobility tab lists all 35', qa('[data-act=mobExEdit]').length === 35);
   click('[data-act=mobExNew]');
   q('#me-name').value = '90/90 hip switch';
   click('[data-act=mobExPart][data-v="Glutes"]');
   check('typed name survives picking a body part', q('#me-name').value === '90/90 hip switch');
   click('[data-act=mobExSave]');
-  check('new mobility exercise saved', qa('[data-act=mobExEdit]').length === 29 && /90\/90 hip switch/.test(text()));
+  check('new mobility exercise saved', qa('[data-act=mobExEdit]').length === 36 && /90\/90 hip switch/.test(text()));
   click('[data-act=libMode][data-v=strength]');
 
   click('[data-act=nav][data-tab=plans]');
@@ -1202,9 +1202,10 @@ step('the morning check: energy and pain, then no jumps on a sore morning', () =
   click('[data-act=nav][data-tab=today]');
   check('the morning check shows on Today', /Morning check/.test(text()) && !!q('[data-act=mornSave]'), text().slice(0, 300));
   click('[data-act=mornPart][data-p="Knee"]');
-  check('tracking a part adds its 0-10 row', st().morning.parts.includes('Knee') && qa('[data-act=mornSet][data-m=pain]').length === 11);
+  check('the left big toe is tracked from the start (foot strength)', st().morning.parts.includes('Left big toe'));
+  check('tracking a part adds its 0-10 row', st().morning.parts.includes('Knee') && qa('[data-act=mornSet][data-m=pain][data-p="Knee"]').length === 11);
   click('[data-act=mornSet][data-m=energy][data-v="4"]');
-  click('[data-act=mornSet][data-m=pain][data-v="6"]');
+  click('[data-act=mornSet][data-m=pain][data-p="Knee"][data-v="6"]');
   click('[data-act=mornSave]');
   const e = st().morning.log[0];
   check('saved for today', e?.energy === 4 && e.pain.Knee === 6 && e.day === L.dayKey());
@@ -1220,9 +1221,60 @@ step('the morning check: energy and pain, then no jumps on a sore morning', () =
   if (q('#sheet [data-act=finishNow]')) click('#sheet [data-act=finishNow]');
   const j2 = q('[data-ci-jumps]'); if (j2?.checked) { j2.checked = false; fire(j2, 'change'); }
   click('[data-act=mornEdit]');
-  click('[data-act=mornSet][data-m=pain][data-v="1"]');
+  click('[data-act=mornSet][data-m=pain][data-p="Knee"][data-v="1"]');
   click('[data-act=mornSave]');
   check('editing it clears the warning', st().morning.log[0].pain.Knee === 1 && !/no jumps today/.test(text()));
+});
+
+step('foot strength: the desk part, then the rest, left and right apart, control, the week, and the toe', () => {
+  const st = () => store.state;
+  const DESKS = ['foot-toe-yoga', 'foot-toe-abduction', 'foot-short-foot', 'foot-toe-press'];
+  click('[data-act=nav][data-tab=today]');
+  if (q('[data-act=recheck]')) click('[data-act=recheck]');
+  const entry = st().morning.log.find(e => e.day === L.dayKey());
+  const was = entry?.energy;
+  if (entry) { entry.energy = 2; click('[data-act=nav][data-tab=today]'); }
+  check('low energy: foot strength first, as a good day for it', /Low energy: a good day for it/.test(text()) && text().indexOf('Foot strength') < text().search(/minutes/i), `${!!entry} ${text().slice(0, 700)}`);
+  if (entry) { entry.energy = was; click('[data-act=nav][data-tab=today]'); }
+  check('the check-in has foot strength: this week, Start, the desk part', /Foot strength/.test(text()) && /0\/5 this week/.test(text()) && !!q('[data-act=footStart][data-v=next]') && !!q('[data-act=footStart][data-v=desk]'));
+  click('[data-act=footStart][data-v=desk]');
+  const m = st().mobility.sessions.filter(x => x.status === 'open').at(-1);
+  check('the desk part: toe yoga, abduction, short foot, the press', m?.items.map(it => it.exerciseId).join() === 'foot-toe-yoga,foot-toe-abduction,foot-short-foot,foot-toe-press', m?.items.map(it => it.exerciseId).join());
+  check('left and right rows, labelled, with an optional extra left set', qa('.block.mob .set .n.side.L').length >= 4 && /Big toe up/.test(text()) && qa('.block.mob .set.optional').length === 4);
+  check('levels to pick, and a control rating', !!q('select[data-mlevel]') && qa('[data-act=mControl]').length === 20);
+  const sel = q('select[data-mlevel]'); sel.value = '1'; fire(sel, 'change');
+  check('a level is kept on the item', m.items[0].level === 1);
+  click(q('[data-act=mControl][data-v="4"]'));
+  for (const b of qa('.block.mob .set:not(.optional):not(.done) [data-act=mcheck]')) click(q(`[data-act=mcheck][data-s="${b.dataset.s}"]`));
+  check('every row ticked, the extra left sets left alone', m.items.every(it => it.sets.every(x => x.done || x.optional)) && m.items[0].control === 4);
+  st().timer = null;
+  click('[data-act=mobFinish]');
+  check('finishing drops the unticked extra sets', st().mobility.sessions.includes(m) && m.items.every(it => it.sets.every(x => x.done)));
+  check('the check-in offers the rest', /Finish it \(\d left\)/.test(text()), text().slice(0, 600));
+  click('[data-act=footStart][data-v=next]');
+  const m2 = st().mobility.sessions.filter(x => x.status === 'open').at(-1);
+  check('the rest: big toe mobility, balance (and the calf raise unless calf work today)', m2.items[0].exerciseId === 'foot-toe-mobility' && m2.items.some(it => it.exerciseId === 'foot-balance') && !m2.items.some(it => DESKS.includes(it.exerciseId)), m2.items.map(it => it.exerciseId).join());
+  for (const b of qa('.block.mob .set:not(.optional):not(.done) [data-act=mcheck]')) click(q(`[data-act=mcheck][data-s="${b.dataset.s}"]`));
+  st().timer = null;
+  click('[data-act=mobFinish]');
+  check('done in two chunks: the day counts', /1\/5 this week · done today ✓/.test(text()) && /Again/.test(q('[data-act=footStart][data-v=next]')?.textContent ?? ''), text().slice(0, 500));
+  click('[data-act=nav][data-tab=week]');
+  check('the Week tab counts it', /Foot strength/.test(text()) && /1\/5 days/.test(text()));
+  click('[data-act=footProgress]');
+  check('progress: each exercise, its level and control', /Toe yoga/.test(q('#sheet')?.textContent ?? '') && /Unassisted/.test(q('#sheet')?.textContent ?? '') && /control 4/.test(q('#sheet')?.textContent ?? ''), q('#sheet')?.textContent.slice(0, 400));
+  click('#sheet [data-act=sheetClose]');
+  // The toe over 3/10 two mornings running.
+  const yday = L.dayKey(Date.now() - 864e5), today = L.dayKey();
+  const saved = structuredClone(st().morning.log);
+  const mk = (day, v) => { let e = st().morning.log.find(x => x.day === day); if (!e) { e = { id: `mc-${day}`, day, at: Date.now(), energy: null, pain: {} }; st().morning.log.push(e); } e.pain['Left big toe'] = v; };
+  mk(today, 5); mk(yday, 4);
+  click('[data-act=nav][data-tab=today]');
+  check('a warning when the toe is over 3/10 two mornings running', /Left big toe over 3\/10 two mornings running \(5, 4\)/.test(text()), text().slice(0, 300));
+  st().morning.log = saved;
+  // Leave no foot sessions behind for the steps after.
+  st().mobility.sessions = st().mobility.sessions.filter(x => x !== m && x !== m2);
+  store.save();
+  click('[data-act=nav][data-tab=today]');
 });
 
 step('jumps: an optional height, and a record for the best', () => {

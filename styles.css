@@ -625,3 +625,20 @@ body.photofocus .slidesbtn { justify-content: center; margin-top: 2px; }
 .hrsess .grow { min-width: 0; }
 .tile b { display: block; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile > span { color: var(--muted); font-size: 13px; }
+
+/* Foot strength: left and right rows, what each row is, an optional extra left set, levels and a control rating. */
+.set .n.side { font-weight: 700; color: var(--text); }
+.set .n.side.L { color: var(--accent); }
+.set .slabel { font-size: 13px; color: var(--muted); min-width: 0; flex: 0 1 auto; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set.optional:not(.done) { opacity: .6; }
+.lvl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.lvl select { flex: 1 1 140px; }
+button.good { color: var(--good); border-color: var(--good); }
+.ctrl { display: flex; align-items: center; gap: 6px; margin: 8px 0 2px; flex-wrap: wrap; }
+.ctrl .chip { min-width: 40px; }
+.card.foot .foothead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.card.foot.low { border-color: var(--accent); }
+.pips { display: inline-flex; gap: 4px; vertical-align: middle; }
+.pips .pip { width: 11px; height: 11px; }
+.banner.warn { border-color: var(--warn); color: var(--warn); }
+b.warn { color: var(--warn); } b.good { color: var(--good); }
