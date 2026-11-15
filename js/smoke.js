@@ -1277,6 +1277,43 @@ step('foot strength: the desk part, then the rest, left and right apart, control
   click('[data-act=nav][data-tab=today]');
 });
 
+const Usage = await import('./usage.js');
+step('usage: screens and taps recorded on the phone, a sheet backed out of, Settings → Usage, the summary, and off', () => {
+  click('[data-act=nav][data-tab=heart]');
+  click('[data-act=nav][data-tab=week]');
+  click('[data-act=nav][data-tab=today]');
+  click('[data-act=footProgress]'); click('#sheet [data-act=sheetClose]');
+  const sum = Usage.summarize(Usage.get(), 1);
+  check('screens and taps are recorded', ['heart', 'week', 'today:checkin'].every(n => sum.screens.some(x => x.name === n)) && sum.actions.some(x => x.name === 'footProgress'), JSON.stringify(sum.screens.map(x => x.name)));
+  check('a sheet closed without doing anything counts as backed out of', sum.backedOut.some(x => x.name === 'footProgress'));
+  Usage.flush();
+  check('kept apart from the training data', !JSON.stringify(store.state).includes('today:checkin') && !!localStorage.getItem(`${globalThis.AFP_STORAGE_KEY}.usage`));
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=usage]');
+  check('Settings → Usage: days, time, screens, most used, backed out of, never used', /days used/.test(text()) && /today:checkin/.test(text()) && /footProgress/.test(text()) && /Opened, then closed/i.test(text()) && /Never used: \d+ screens, \d+ actions/.test(text()), text().slice(0, 600));
+  click('[data-act=usageDays][data-v="7"]');
+  const realClip = Object.getOwnPropertyDescriptor(Navigator.prototype, 'clipboard');
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('blocked')) } });
+  click('[data-act=usageCopy]');
+  delete navigator.clipboard; void realClip;
+  const sw = q('input[data-bind="settings.trackUsage"]'); sw.checked = false; fire(sw, 'change');
+  const before = JSON.stringify(Usage.get());
+  click('[data-act=nav][data-tab=library]'); click('[data-act=nav][data-tab=more]');
+  check('switched off: nothing more is recorded', JSON.stringify(Usage.get()) === before && store.state.settings.trackUsage === false);
+  sw.checked = true; fire(q('input[data-bind="settings.trackUsage"]') ?? sw, 'change');
+  store.state.settings.trackUsage = true; store.save();
+  click('[data-act=nav][data-tab=today]');
+});
+try {
+  click('[data-act=nav][data-tab=more]'); click('[data-act=setPage][data-p=usage]');
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('blocked')) } });
+  click('[data-act=usageCopy]');
+  await new Promise(r => setTimeout(r, 50));
+  check('Copy summary: when the clipboard is blocked, a sheet to copy it from', /App usage, last 7 days: used on 1 day,/.test(q('#sheet textarea')?.value ?? '') && /Copy usage/.test(q('#sheet')?.textContent ?? ''), q('#sheet')?.textContent.slice(0, 200));
+  delete navigator.clipboard;
+  click('#sheet [data-act=sheetClose]');
+  click('[data-act=nav][data-tab=today]');
+} catch (e) { out.push(['FAIL', `usage copy — ${e.message}`]); }
+
 step('jumps: an optional height, and a record for the best', () => {
   const st = () => store.state;
   onlyAt('loc-basement');

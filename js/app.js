@@ -14,6 +14,7 @@ import * as CH from './charts.js';
 import * as HR from './hr.js';
 import * as Ph from './photos.js';
 import * as Ft from './foot.js';
+import * as U from './usage.js';
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -718,12 +719,45 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- views ----------
 
+// What's on screen, for the usage log (Settings → Usage): tab, then the page within it.
+function screenName() {
+  if (ui.onboard) return 'onboarding';
+  switch (ui.tab) {
+    case 'today': {
+      if (ui.tomorrow) return 'today:tomorrow';
+      const s = currentSession(), m = currentMobility();
+      if (m && !(s && ui.showWorkout)) return m.routineId === Ft.ROUTINE_ID ? 'today:foot' : m.program ? 'today:program' : 'today:mobility';
+      return s ? 'today:workout' : 'today:checkin';
+    }
+    case 'week': return ui.history ? (ui.history.edit ? 'week:history-edit' : ui.history.mode === 'progress' ? 'week:progress' : 'week:history')
+      : ui.goalSuggest ? 'week:goal-suggest' : ui.review ? 'week:review' : 'week';
+    case 'timer': return state.intervalRun ? 'timer:run' : ui.ivLog ? 'timer:log' : 'timer:setup';
+    case 'heart': return ui.heart?.detail ? 'heart:session' : state.hrTrack ? 'heart:tracking' : 'heart';
+    case 'library': return ui.libMode === 'mobility' ? 'library:mobility' : 'library';
+    case 'plans': return ui.blockSetup ? 'plans:block-setup' : ui.program ? 'plans:program' : ui.mobRoutine ? 'plans:routine-edit' : ui.plan ? 'plans:plan-edit' : 'plans';
+    case 'more': return ui.setPage ? `settings:${ui.setPage}` : 'settings';
+    default: return ui.tab;
+  }
+}
+// Every screen the app has, for "never opened".
+const SCREENS = () => ['onboarding', 'today:checkin', 'today:workout', 'today:mobility', 'today:foot', 'today:program', 'today:tomorrow', 'week', 'week:history', 'week:history-edit',
+  'week:progress', 'week:review', 'week:goal-suggest', 'timer:setup', 'timer:run', 'timer:log', 'heart', 'heart:tracking', 'heart:session', 'library', 'library:mobility',
+  'plans', 'plans:program', 'plans:routine-edit', 'plans:plan-edit', 'plans:block-setup', 'settings', ...SETTINGS_PAGES.map(([k]) => `settings:${k}`)];
+// Taps that say nothing about what you use.
+const QUIET_ACTS = new Set(['sheetClose', 'confirmYes', 'confirmNo', 'nav']);
+U.init(`${globalThis.AFP_STORAGE_KEY ?? 'afp.v1'}.usage`, () => state.settings.trackUsage !== false);
+addEventListener('error', e => U.error(e.message));
+addEventListener('unhandledrejection', e => U.error(String(e.reason?.message ?? e.reason)));
+document.addEventListener('visibilitychange', () => (document.visibilityState === 'hidden' ? U.pause() : U.resume()));
+addEventListener('pagehide', () => U.pause());
+
 function render() {
   rollDay();
   if (ui.onboard) {
     navEl.hidden = true;
     appEl.innerHTML = globalBanners() + viewOnboard(ui.onboard);
     renderSheet();
+    U.screen('onboarding');
     return;
   }
   navEl.hidden = false;
@@ -733,6 +767,7 @@ function render() {
   renderSheet();
   renderTimer();
   syncSlides();
+  U.screen(screenName());
   if (ui.focus) {
     const el = appEl.querySelector(ui.focus);
     if (el) { el.focus(); el.setSelectionRange?.(el.value.length, el.value.length); }
@@ -2691,13 +2726,14 @@ const SETTINGS_PAGES = [
   ['schemes', 'Schemes'],
   ['data', 'Backup and data'],
   ['fitnotes', 'Import from FitNotes'],
+  ['usage', 'Usage'],
 ];
 
 function viewSettings() {
   const page = ui.setPage;
   if (!page) return viewSettingsMenu();
   const title = SETTINGS_PAGES.find(p => p[0] === page)[1];
-  const body = { you: settingsYou, maxes: settingsMaxes, timer: settingsTimer, locations: settingsLocations, tiers: settingsTiers, schemes: settingsSchemes, data: settingsData, fitnotes: settingsFitnotes }[page]();
+  const body = { usage: settingsUsage, you: settingsYou, maxes: settingsMaxes, timer: settingsTimer, locations: settingsLocations, tiers: settingsTiers, schemes: settingsSchemes, data: settingsData, fitnotes: settingsFitnotes }[page]();
   return `<header class="top sub"><button class="back" data-act="setPage" data-p="">‹ Settings</button></header><h1 class="pagetitle">${title}</h1>${body}`;
 }
 
@@ -2725,7 +2761,7 @@ function viewSettingsMenu() {
       <button class="menurow" data-act="setupAgain"><span class="grow"><span class="name">Set up again</span>
         <span class="meta">replaces your goals</span></span><span class="chev">›</span></button></div>
     <div class="label">App</div>
-    <div class="menu"><button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
+    <div class="menu">${menuRow('usage', 'Usage', state.settings.trackUsage === false ? 'off' : 'what you use, kept on this phone')}<button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
       <span class="meta">${ui.swVersion ? `you have ${esc(String(ui.swVersion).replace(/^afp-/, ''))} · ` : ''}your data stays</span></span></button></div>`;
 }
 
@@ -2780,6 +2816,24 @@ function hrSettingsRows() {
   if (b) rows.push(...HR.ZONES.map(z => `<div class="frow"><span class="grow"><span class="name"><span class="ztag z${z.n}">Z${z.n}</span> ${esc(z.name)}</span>
     <span class="meta">${z.lo}-${z.hi}%</span></span><b>${HR.bpmAt(b, z.lo)}-${HR.bpmAt(b, z.hi)}</b></div>`));
   return rows.join('');
+}
+
+// How you use the app (js/usage.js): days, time, screens, actions, sheets you back out of, what you never use, errors;
+// a summary to copy for Claude.
+const usageKnown = () => ({ screens: SCREENS(), actions: Object.keys(actions).filter(a => !QUIET_ACTS.has(a)) });
+function settingsUsage() {
+  const days = ui.usageDays ?? 30, sum = U.summarize(U.get(), days, usageKnown());
+  const rows = (list, fmt) => list.map(x => `<div class="frow"><span class="grow"><span class="name">${esc(x.name ?? x.msg)}</span></span><b>${esc(fmt(x))}</b></div>`).join('');
+  const off = state.settings.trackUsage === false;
+  return `<div class="menu">${frow('Record usage', switchIn('settings.trackUsage', !off), 'on this phone only, 180 days')}</div>
+    <div class="seg">${[7, 30, 90].map(n => `<button class="${esc(days === n ? 'on' : '')}" data-act="usageDays" data-v="${esc(n)}">${n} days</button>`).join('')}</div>
+    <div class="tiles"><div class="tile"><b>${esc(sum.days)}</b><span>days used</span></div><div class="tile"><b>${esc(U.fmtTime(sum.ms))}</b><span>in the app</span></div></div>
+    ${sum.screens.length ? `<div class="label">Screens</div><div class="menu">${rows(sum.screens.slice(0, 12), x => `${U.fmtTime(x.ms)} · ${x.views}×`)}</div>` : '<p class="muted">Nothing recorded yet.</p>'}
+    ${sum.actions.length ? `<div class="label">Most used</div><div class="menu">${rows(sum.actions.slice(0, 12), x => `${x.n}×`)}</div>` : ''}
+    ${sum.backedOut.length ? `<div class="label">Opened, then closed</div><div class="menu">${rows(sum.backedOut.slice(0, 8), x => `${x.out} of ${x.opened}`)}</div>` : ''}
+    ${sum.errors.length ? `<div class="label">Errors</div><div class="menu">${rows(sum.errors.slice(0, 5), x => `${x.n}×`)}</div>` : ''}
+    ${sum.days ? `<details class="cues"><summary>Never used: ${esc(sum.unusedScreens.length)} screens, ${esc(sum.unusedActions.length)} actions</summary><p class="meta">${esc([...sum.unusedScreens, ...sum.unusedActions].join(', '))}</p></details>` : ''}
+    <div class="actions"><button data-act="usageClear">Clear</button><button class="primary" data-act="usageCopy">Copy summary</button></div>`;
 }
 
 // What the estimates learned: changeover per location, and how many per-set times.
@@ -3244,6 +3298,7 @@ function closeSheet() { ui.sheet = null; renderSheet(); }
 
 function renderSheet() {
   const s = ui.sheet;
+  U.sheetShown(s?.type ?? null);
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
   const body = { footProgress: sheetFootProgress, workoutDone: sheetWorkoutDone, swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, reviewText: sheetReviewText, pasteImport: sheetPasteImport,
@@ -3649,7 +3704,7 @@ function sheetConfirm(sh) {
 }
 
 function sheetReviewText(sh) {
-  return `<h3>Copy review</h3><p class="meta">Select and copy:</p>
+  return `<h3>${esc(sh.title ?? 'Copy review')}</h3><p class="meta">Select and copy:</p>
     <textarea id="review-text" rows="12" readonly>${esc(sh.text)}</textarea>`;
 }
 
@@ -4499,6 +4554,14 @@ const actions = {
   heartDelete: d => askConfirm('Delete this activity?', 'Its heart-rate recording goes with it.', 'Delete', () => {
     state.sessions = state.sessions.filter(x => x.id !== d.id); ui.heart.detail = null; save(); render();
   }),
+  usageDays: d => { ui.usageDays = Number(d.v); render(); },
+  usageCopy: () => {
+    const days = ui.usageDays ?? 30, text = U.summaryText(U.summarize(U.get(), days, usageKnown()), days);
+    const fallback = () => openSheet({ type: 'reviewText', text, title: 'Copy usage' });
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => toast('Usage copied'), fallback);
+    else fallback();
+  },
+  usageClear: () => askConfirm('Clear the usage log?', 'Your training data stays.', 'Clear', () => { U.clear(); render(); }),
   hrUseTop: d => { state.settings.hrMax = Number(d.v); save(); render(); toast(`Max heart rate ${d.v}`); },
   // The heart-rate pill: connect the strap (Chrome's device list), or once it's on, offer to disconnect it.
   hrTap: async () => {
@@ -5492,6 +5555,7 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el) return;
   rollDay(); // before the action looks for today's workout
+  U.action(el.dataset.act, QUIET_ACTS.has(el.dataset.act));
   const fn = actions[el.dataset.act];
   if (fn) { e.preventDefault(); fn(el.dataset, el); }
 });
