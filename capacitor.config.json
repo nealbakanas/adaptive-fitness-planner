@@ -1,0 +1,19 @@
+{
+  "appId": "com.nealbakanas.afp",
+  "appName": "Adaptive Fitness",
+  "webDir": "www",
+  "server": {
+    "url": "https://nealbakanas.github.io/adaptive-fitness-planner/",
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#101317"
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": { "scanning": "Looking for your strap…", "cancel": "Cancel", "availableDevices": "Heart-rate straps", "noDeviceFound": "No strap found. Put it on and wet the pads." }
+    },
+    "LocalNotifications": { "smallIcon": "ic_stat_afp", "iconColor": "#4fb3ff" }
+  }
+}

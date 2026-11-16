@@ -1,5 +1,5 @@
 import { state, save, replaceState, resetState, loadProblem, lastSaveError, resolveLoadProblem, onSaveFail, keepCopy, readCopy, hasCopy, dropCopy,
-  recover, getRecoveryCopy, useRecoveryCopy, dismissRecoveryCopy, snapshotNow, requestPersist, flushVault, slimHistory } from './store.js';
+  recover, getRecoveryCopy, useRecoveryCopy, dismissRecoveryCopy, snapshotNow, requestPersist, flushVault, slimHistory, onSave } from './store.js';
 import * as Vault from './vault.js';
 import * as Cloud from './cloud.js';
 import * as Taste from './taste.js';
@@ -15,6 +15,12 @@ import * as HR from './hr.js';
 import * as Ph from './photos.js';
 import * as Ft from './foot.js';
 import * as U from './usage.js';
+
+// In the Android app (Capacitor), the native plugins: Bluetooth LE, notifications, keep-awake, a foreground service.
+// The browser version never loads them.
+const NATIVE = !!globalThis.Capacitor?.isNativePlatform?.();
+if (NATIVE && !globalThis.AFPNative) { try { await import('../vendor/capacitor/native.js'); } catch (e) { console.warn('Native plugins not loaded', e); } }
+const Nat = () => globalThis.AFPNative ?? null;
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -492,6 +498,11 @@ function say(text) {
 const wantAwake = () => !!(state.timer || currentSession() || state.intervalRun || state.hrTrack);
 async function setWakeLock(on) {
   if (!on && wantAwake()) on = true;
+  // In the app: the keep-awake plugin (no Screen Wake Lock in Android's WebView).
+  if (Nat()?.KeepAwake) {
+    try { if (on && timerCfg().keepAwake) await Nat().KeepAwake.keepAwake(); else if (!on) await Nat().KeepAwake.allowSleep(); } catch { /* not this time */ }
+    return;
+  }
   try {
     if (on && !wakeLock && timerCfg().keepAwake && 'wakeLock' in navigator && document.visibilityState === 'visible') {
       wakeLock = await navigator.wakeLock.request('screen');
@@ -633,6 +644,7 @@ function tickWork(t) {
 // Hand the timer to the service worker so it can notify while the page is hidden.
 let syncedEndsAt;
 function syncTimerToWorker(force = false) {
+  if (Nat()?.LocalNotifications) return nativeTimerAlerts(document.visibilityState !== 'visible');
   const endsAt = state.timer?.endsAt ?? null;
   if (!force && endsAt === syncedEndsAt) return;
   syncedEndsAt = endsAt;
@@ -642,6 +654,109 @@ function syncTimerToWorker(force = false) {
   navigator.serviceWorker.ready.then(reg => reg.active?.postMessage({
     type: 'rest', id: String(endsAt), endsAt: wanted ? endsAt : null, next: state.timer?.next ?? null,
   }));
+}
+
+// ---------- the Android app: notifications, reminders, recording with the screen off, the back button ----------
+// Ids: 7001 rest over; 7010-7059 interval phases; 7101-7107 morning check; 7111-7117 foot strength; 7201 the toe; 7300 recording.
+const N = { rest: 7001, phases: 7010, morning: 7101, foot: 7111, toe: 7201, recording: 7300 };
+const notif = () => Nat()?.LocalNotifications;
+const cancelIds = ids => notif()?.cancel({ notifications: ids.map(id => ({ id })) }).catch(() => {});
+const range = (a, n) => Array.from({ length: n }, (_, i) => a + i);
+async function notifyAt(list) {
+  if (!list.length || !notif()) return;
+  try { await notif().schedule({ notifications: list.map(x => ({ ...x, smallIcon: 'ic_stat_afp', schedule: x.at ? { at: new Date(x.at), allowWhileIdle: true } : x.schedule, at: undefined })) }); }
+  catch (e) { console.warn('notification', e); }
+}
+// With the app in the background (screen off, another app): the rest timer's end, and the interval timer's next phases,
+// as notifications at the right moment (JavaScript doesn't run reliably there). Coming back cancels them.
+async function nativeTimerAlerts(hidden) {
+  await cancelIds([N.rest, ...range(N.phases, 50)]);
+  if (!hidden) return;
+  const t = state.timer, now = Date.now();
+  if (t && t.kind !== 'work' && t.endsAt > now) await notifyAt([{ id: N.rest, title: 'Rest over', body: t.next ? `Next: ${t.next}` : 'Time for your next set', at: t.endsAt }]);
+  const run = state.intervalRun;
+  // (Not while a heart-rate target holds the clock: its timing depends on your heart rate.)
+  if (run && !run.pausedAt && !(run.cfg.hr?.hold && HR.live.status !== 'off')) {
+    const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
+    if (at) {
+      const out = [];
+      let start = now + (I.phaseStart(list, at.i + 1) - ms);
+      for (let i = at.i + 1; i <= list.length && out.length < 50; i++) {
+        const p = list[i];
+        out.push({ id: N.phases + out.length, title: p ? `${IV_LABEL[p.kind]}${p.kind === 'work' && run.cfg.rounds > 1 ? ` · round ${p.round} of ${run.cfg.rounds}` : ''}` : 'Done', body: run.cfg.name, at: start });
+        if (!p) break;
+        start += p.secs * 1000;
+      }
+      await notifyAt(out);
+    }
+  }
+}
+// Reminders (Settings → Reminders): the morning check and foot strength at your times, for the next 7 days, skipping
+// today once it's done. Rescheduled after each save.
+const REMIND = [['morning', 'Morning check', 'Energy and your left big toe: 10 seconds.'], ['foot', 'Foot strength', '12-15 minutes, barefoot. Or the desk part.']];
+function remindDone(k, day) {
+  if (k === 'morning') return (state.morning?.log ?? []).some(e => e.day === L.dayKey(day));
+  const b = L.weekBounds(state, day);
+  return !!Ft.week(state, b.start, b.end, day)?.doneToday;
+}
+let remindTimer = null;
+function scheduleReminders() {
+  clearTimeout(remindTimer);
+  remindTimer = setTimeout(async () => {
+    if (!notif()) return;
+    const r = state.settings.reminders ?? {}, out = [];
+    for (const [k, title, body] of REMIND) {
+      const base = N[k];
+      await cancelIds(range(base, 7));
+      const m = /^(\d{1,2}):(\d{2})$/.exec(r[k] ?? '');
+      if (!m) continue;
+      for (let d = 0; d < 7; d++) {
+        const at = new Date(); at.setDate(at.getDate() + d); at.setHours(Number(m[1]), Number(m[2]), 0, 0);
+        if (at.getTime() <= Date.now() || (d === 0 && remindDone(k, Date.now()))) continue;
+        out.push({ id: base + d, title, body, at: at.getTime() });
+      }
+    }
+    await notifyAt(out);
+  }, 1500);
+}
+// The toe over 3/10 two mornings running: a notification as well as the banner, once a day.
+function toeNotify() {
+  const w = Ft.toeWarning(state);
+  if (!w || !notif() || state.settings.toeNotified === L.dayKey()) return;
+  state.settings.toeNotified = L.dayKey(); save();
+  notifyAt([{ id: N.toe, title: `${Ft.PAIN_PART} over ${Ft.PAIN_LIMIT}/10 two mornings`, body: `${w.join(', ')}. Ease off: easier levels, skip calf raises; get it checked if it keeps up.`, at: Date.now() + 1000 }]);
+}
+// Recording heart rate with the screen off: a foreground service (and its notification) while the strap is connected
+// and something is recording: an activity, a timer or a workout.
+let recording = false;
+function syncRecording() {
+  const fs = Nat()?.ForegroundService;
+  if (!fs) return;
+  const want = HR.live.status !== 'off' && !!(state.hrTrack || state.intervalRun || currentSession());
+  if (want === recording) return;
+  recording = want;
+  const what = state.hrTrack?.activity ?? (state.intervalRun ? state.intervalRun.cfg.name : 'Workout');
+  (want ? fs.startForegroundService({ id: N.recording, title: 'Recording heart rate', body: what, smallIcon: 'ic_stat_afp', serviceType: 16, silent: true })
+    : fs.stopForegroundService()).catch(e => { recording = !want; console.warn('foreground service', e); });
+}
+// The back button: close a sheet, then step back out of a page, then leave the app in the background.
+function nativeBack() {
+  if (ui.sheet) return closeSheet();
+  const back = [[() => ui.heart?.detail, () => { ui.heart.detail = null; }], [() => ui.setPage, () => { ui.setPage = null; }], [() => ui.history, () => { ui.history = null; }],
+    [() => ui.tomorrow, () => { ui.tomorrow = null; }], [() => ui.program, () => { ui.program = null; }], [() => ui.plan, () => { ui.plan = null; }], [() => ui.mobRoutine, () => { ui.mobRoutine = null; }],
+    [() => ui.tab !== 'today', () => { ui.tab = 'today'; }]].find(([is]) => is());
+  if (back) { back[1](); render(); window.scrollTo(0, 0); return; }
+  Nat().App.minimizeApp().catch(() => {});
+}
+async function startNative() {
+  const n = Nat();
+  if (!n) return;
+  n.App.addListener('backButton', nativeBack);
+  try { if ((await n.LocalNotifications.checkPermissions()).display === 'prompt') await n.LocalNotifications.requestPermissions(); } catch { /* asked later */ }
+  onSave(scheduleReminders);
+  HR.onChange(syncRecording);
+  scheduleReminders();
+  toeNotify();
 }
 
 async function enableNotifications(el) {
@@ -713,6 +828,7 @@ function renderWork(t) {
 setInterval(tickTimer, 250);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return syncTimerToWorker(true);
+  if (NATIVE) syncTimerToWorker(true); // back in the app: the scheduled alerts aren't needed
   if (wantAwake()) setWakeLock(true); // the browser drops the lock when the page is hidden: take it again on the way back
   tickTimer();
 });
@@ -767,6 +883,7 @@ function render() {
   renderSheet();
   renderTimer();
   syncSlides();
+  syncRecording();
   U.screen(screenName());
   if (ui.focus) {
     const el = appEl.querySelector(ui.focus);
@@ -2087,7 +2204,8 @@ function viewOnboard(d) {
   const famName = id => famOf(id)?.name ?? '?';
   let body = '';
   if (step === 'welcome') {
-    body = `<p>A few questions to set up your weekly goals. About two minutes.</p>
+    body = `${NATIVE ? `<div class="card"><b>Used it in Chrome?</b><p class="meta">Bring your data: sign in to your account, or paste a backup.</p>
+        <button data-act="obMove">Bring my data</button></div>` : ''}<p>A few questions to set up your weekly goals. About two minutes.</p>
       <button class="primary big" data-act="obNext">Start</button>
       <div class="actions"><button data-act="obImport">Import from FitNotes</button><button data-act="obSkip">${state.settings.onboarded ? 'Cancel' : 'Skip'}</button></div>`;
   } else if (step === 'you') {
@@ -2727,13 +2845,14 @@ const SETTINGS_PAGES = [
   ['data', 'Backup and data'],
   ['fitnotes', 'Import from FitNotes'],
   ['usage', 'Usage'],
+  ['reminders', 'Reminders'],
 ];
 
 function viewSettings() {
   const page = ui.setPage;
   if (!page) return viewSettingsMenu();
   const title = SETTINGS_PAGES.find(p => p[0] === page)[1];
-  const body = { usage: settingsUsage, you: settingsYou, maxes: settingsMaxes, timer: settingsTimer, locations: settingsLocations, tiers: settingsTiers, schemes: settingsSchemes, data: settingsData, fitnotes: settingsFitnotes }[page]();
+  const body = { reminders: settingsReminders, usage: settingsUsage, you: settingsYou, maxes: settingsMaxes, timer: settingsTimer, locations: settingsLocations, tiers: settingsTiers, schemes: settingsSchemes, data: settingsData, fitnotes: settingsFitnotes }[page]();
   return `<header class="top sub"><button class="back" data-act="setPage" data-p="">‹ Settings</button></header><h1 class="pagetitle">${title}</h1>${body}`;
 }
 
@@ -2761,7 +2880,7 @@ function viewSettingsMenu() {
       <button class="menurow" data-act="setupAgain"><span class="grow"><span class="name">Set up again</span>
         <span class="meta">replaces your goals</span></span><span class="chev">›</span></button></div>
     <div class="label">App</div>
-    <div class="menu">${menuRow('usage', 'Usage', state.settings.trackUsage === false ? 'off' : 'what you use, kept on this phone')}<button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
+    <div class="menu">${NATIVE ? menuRow('reminders', 'Reminders', ['morning', 'foot'].filter(k => state.settings.reminders?.[k]).map(k => `${k === 'morning' ? 'Morning check' : 'Foot strength'} ${state.settings.reminders[k]}`).join(' · ') || 'off') : ''}${menuRow('usage', 'Usage', state.settings.trackUsage === false ? 'off' : 'what you use, kept on this phone')}<button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
       <span class="meta">${ui.swVersion ? `you have ${esc(String(ui.swVersion).replace(/^afp-/, ''))} · ` : ''}your data stays</span></span></button></div>`;
 }
 
@@ -2816,6 +2935,15 @@ function hrSettingsRows() {
   if (b) rows.push(...HR.ZONES.map(z => `<div class="frow"><span class="grow"><span class="name"><span class="ztag z${z.n}">Z${z.n}</span> ${esc(z.name)}</span>
     <span class="meta">${z.lo}-${z.hi}%</span></span><b>${HR.bpmAt(b, z.lo)}-${HR.bpmAt(b, z.hi)}</b></div>`));
   return rows.join('');
+}
+
+// Reminders (the Android app): a time for each, blank for none. Skipped on a day it's already done.
+function settingsReminders() {
+  const r = state.settings.reminders ?? {};
+  const row = (k, label, hint) => frow(label, `<input type="time" class="num wide" data-bind="settings.reminders.${esc(k)}" value="${esc(r[k] ?? '')}">`, hint);
+  return `${NATIVE ? '' : '<p class="muted">Reminders come with the Android app.</p>'}
+    <div class="menu">${row('morning', 'Morning check', 'energy and the toe')}${row('foot', 'Foot strength', 'not if it’s done already')}</div>
+    <p class="meta pad">Clear a time to turn it off. The rest timer and interval timer notify you too when the phone is locked.</p>`;
 }
 
 // How you use the app (js/usage.js): days, time, screens, actions, sheets you back out of, what you never use, errors;
@@ -4570,6 +4698,7 @@ const actions = {
     }
     try {
       const name = await HR.connect();
+      if (HR.live.id && state.settings.hrStrapId !== HR.live.id) { state.settings.hrStrapId = HR.live.id; save(); }
       if (state.settings.hrStrap !== name) { state.settings.hrStrap = name; save(); }
       toast(`${name} connected`);
     } catch (e) { toast(e.message); }
@@ -5133,6 +5262,8 @@ const actions = {
   obNext: () => { readObInputs(); ui.onboard.step = Math.min(O.STEPS.length - 1, ui.onboard.step + 1); render(); window.scrollTo(0, 0); },
   obBack: () => { readObInputs(); ui.onboard.step = Math.max(0, ui.onboard.step - 1); render(); window.scrollTo(0, 0); },
   obSkip: () => { if (!state.settings.onboarded) { state.settings.onboarded = true; save(); } ui.onboard = null; render(); requestPersist(); },
+  // The Android app, first run: skip setup and go to Backup and data (sign in, or paste a backup from the browser version).
+  obMove: () => { state.settings.onboarded = true; save(); ui.onboard = null; ui.tab = 'more'; actions.setPage({ p: 'data' }); },
   obImport: () => { state.settings.onboarded = true; save(); ui.onboard = null; ui.tab = 'more'; actions.setPage({ p: 'fitnotes' }); requestPersist(); },
   obSet: d => { readObInputs(); ui.onboard[d.k] = d.v; render(); },
   obToggle: d => {
@@ -5930,5 +6061,6 @@ render();
 if (!ui.onboard) requestPersist();
 Sync.start(handleSync);
 if (wantAwake()) setWakeLock(true); // opened again mid-workout, mid-timer or mid-activity
-if (state.settings.hrStrap && HR.supported()) HR.reconnect(state.settings.hrStrap).then(ok => { if (ok) render(); });
+if (state.settings.hrStrap && HR.supported()) HR.reconnect(state.settings.hrStrap, state.settings.hrStrapId).then(ok => { if (ok) render(); });
+startNative();
 if (ui.setPage === 'data') openDataPage();

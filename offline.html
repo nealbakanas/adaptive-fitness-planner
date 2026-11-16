@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Offline</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #101317; color: #e6e9ee; font: 16px/1.5 system-ui, sans-serif; text-align: center; padding: 24px; }
+    button { margin-top: 16px; font: inherit; padding: 12px 20px; border-radius: 12px; border: 0; background: #4fb3ff; color: #06121c; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <!-- The Android app loads the live site; this shows only the first time it opens without a connection. After that the
+       site's own offline copy takes over. -->
+  <div><h1>No connection</h1><p>The app needs to be online the first time it opens. After that it works offline.</p>
+    <button onclick="location.reload()">Try again</button></div>
+</body>
+</html>

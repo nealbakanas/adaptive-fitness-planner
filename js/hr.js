@@ -69,11 +69,17 @@ export const points = rec => (rec?.v ?? []).map((v, i) => ({ t: rec.t0 + i * rec
 
 // ---------- the strap ----------
 
+// Two ways in: Web Bluetooth in Chrome, and in the Android app (whose WebView has none) the native Bluetooth LE plugin
+// (window.AFPNative.BleClient, loaded by app.js). Same readings either way.
 const bt = () => globalThis.navigator?.bluetooth;
-export const supported = () => !!bt()?.requestDevice;
+const ble = () => globalThis.AFPNative?.BleClient ?? null;
+export const supported = () => !!ble() || !!bt()?.requestDevice;
+const HR_SERVICE = '0000180d-0000-1000-8000-00805f9b34fb', HR_MEASUREMENT = '00002a37-0000-1000-8000-00805f9b34fb';
+let bleReady = null;
+const bleInit = () => (bleReady ??= ble().initialize({ androidNeverForLocation: true }).catch(e => { bleReady = null; throw e; }));
 
 let device = null, chr = null, listeners = [], retry = 0, retryTimer = null, wanted = false;
-export const live = { status: 'off', bpm: null, at: 0, name: null }; // status: off, connecting, live, lost
+export const live = { status: 'off', bpm: null, at: 0, name: null, id: null }; // status: off, connecting, live, lost; id: the app's strap id
 export function onChange(fn) { listeners.push(fn); return () => { listeners = listeners.filter(x => x !== fn); }; }
 const tell = () => { for (const fn of listeners) { try { fn(live); } catch (e) { console.warn(e); } } };
 const set = patch => { Object.assign(live, patch); tell(); };
@@ -84,7 +90,19 @@ function onValue(e) {
   set({ status: 'live', bpm, at: Date.now() });
 }
 
+// The native plugin: `d` is { native: true, deviceId, name }. Notifications arrive as DataViews, like Web Bluetooth's.
+async function attachNative(d) {
+  device = d;
+  set({ status: 'connecting', name: d.name || 'Heart rate strap', id: d.deviceId });
+  await bleInit();
+  await ble().connect(d.deviceId, () => onDrop());
+  await ble().startNotifications(d.deviceId, HR_SERVICE, HR_MEASUREMENT, value => onValue({ target: { value } }));
+  retry = 0;
+  set({ status: 'live', at: Date.now() });
+}
+
 async function attach(d) {
+  if (d.native) return attachNative(d);
   device = d;
   set({ status: 'connecting', name: d.name || 'Heart rate strap' });
   d.removeEventListener?.('gattserverdisconnected', onDrop);
@@ -115,6 +133,15 @@ function onDrop() {
 export async function connect() {
   if (!supported()) throw new Error('This browser can’t reach Bluetooth. Use Chrome on Android or a computer.');
   wanted = true;
+  if (ble()) {
+    // In the app: Android's device list, straps with the heart-rate service only.
+    let n;
+    try { await bleInit(); n = await ble().requestDevice({ services: [HR_SERVICE] }); }
+    catch (e) { wanted = !!device; throw new Error(/cancel/i.test(e?.message ?? '') ? 'No strap picked. Wet the strap’s pads, put it on, and try again.' : /permission|denied/i.test(e?.message ?? '') ? 'Bluetooth permission is off: allow it for this app in Android settings.' : e?.message || 'Couldn’t connect.'); }
+    try { await attachNative({ native: true, deviceId: n.deviceId, name: n.name }); }
+    catch { set({ status: 'off' }); throw new Error(`Couldn’t connect to ${n.name || 'the strap'}. Put it on (it sleeps when it’s off you) and try again.`); }
+    return live.name;
+  }
   let d;
   try { d = await bt().requestDevice({ filters: [{ services: ['heart_rate'] }] }); }
   catch (e) { wanted = !!device; throw new Error(e?.name === 'NotFoundError' ? 'No strap picked. Wet the strap’s pads, put it on, and try again.' : e?.message || 'Couldn’t connect.'); }
@@ -123,9 +150,16 @@ export async function connect() {
   return live.name;
 }
 
-// Without a tap: the strap you picked before, where Chrome lets a page find it again (getDevices). True when it's live.
-export async function reconnect(name = null) {
-  if (!bt()?.getDevices || live.status === 'live' || live.status === 'connecting') return live.status === 'live';
+// Without a tap: the strap you picked before, where Chrome lets a page find it again (getDevices), or in the app by its
+// id (`id`, remembered from last time). True when it's live.
+export async function reconnect(name = null, id = null) {
+  if (live.status === 'live' || live.status === 'connecting') return live.status === 'live';
+  if (ble()) {
+    if (!id) return false;
+    try { wanted = true; await attachNative({ native: true, deviceId: id, name }); return true; }
+    catch { wanted = false; set({ status: 'off' }); return false; }
+  }
+  if (!bt()?.getDevices) return false;
   try {
     const ds = await bt().getDevices();
     const d = ds.find(x => !name || x.name === name) ?? null;
@@ -141,6 +175,7 @@ export function disconnect() {
   clearTimeout(retryTimer);
   try { chr?.removeEventListener('characteristicvaluechanged', onValue); } catch { /* gone already */ }
   try { device?.gatt?.disconnect(); } catch { /* gone already */ }
+  if (device?.native) ble()?.disconnect(device.deviceId).catch(() => {});
   device = null; chr = null;
   set({ status: 'off', bpm: null });
 }

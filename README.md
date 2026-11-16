@@ -94,6 +94,37 @@ A new install opens with a short setup (`js/onboard.js`); anyone can rerun it fr
 
 The service worker (`sw.js`) loads files from the network first, always revalidating (never the browser's 10-minute cache), and falls back to the saved copy after 2.5 seconds on a slow signal. When the newer copy arrives after that, the page shows **A newer version of the app is ready. Reload**. A home-screen app that resumes without reloading checks for a new version each time you come back to it, and reloads itself after 30 minutes away. **Settings → App → Get the latest version** clears the saved files and reloads fresh (your data stays), and shows which version you have (the worker's cache name, `afp-vN`). **Bump `CACHE` in `sw.js` with every release** so a new worker installs and the version shown changes.
 
+## Android app (Capacitor)
+
+The same app, installed as an Android app (`com.nealbakanas.afp`, "Adaptive Fitness") for what a browser can't do. It loads
+the live site (`capacitor.config.json` → `server.url`), so ordinary changes still ship by merging; a new APK is needed only
+when the native side changes. In the app, `js/app.js` loads `vendor/capacitor/native.js` (the plugins, bundled from
+`js/native-entry.js` by `npm run native`) and uses:
+
+- **Bluetooth LE** (`@capacitor-community/bluetooth-le`) for the heart-rate strap: Android's WebView has no Web Bluetooth.
+  The strap's id is remembered (`settings.hrStrapId`) so it reconnects without the device list.
+- **A foreground service** (`@capawesome-team/capacitor-android-foreground-service`, type *connected device*) while the strap
+  is connected and something is recording (an activity, a timer, a workout), with a "Recording heart rate" notification:
+  so recording can carry on with the screen off.
+- **Local notifications**: with the app in the background, *Rest over* when the rest timer ends and each interval phase
+  (Work · round 2 of 8, Rest, Done) at its time, cancelled when you come back; **reminders** (Settings → Reminders) for the
+  morning check and foot strength at your times, the next 7 days, skipping today once it's done; the toe warning.
+- **Keep-awake** in place of the Screen Wake Lock, and the **back button**: closes a sheet, steps out of a page, goes to
+  Today, then puts the app in the background.
+
+**Installing it** (once):
+1. Add the signing password as a repository secret: GitHub → the repo → Settings → Secrets and variables → Actions → New
+   repository secret, name `AFP_KEYSTORE_PASSWORD`. The key itself (`android/app/afp-release.p12`) is in the repo,
+   encrypted with that password, so every build is signed the same way and updates install over the old app.
+2. Actions → *Android app* → Run workflow (it also runs when the native side changes on main). It publishes
+   `adaptive-fitness.apk` to the **Android app** release.
+3. On the phone, open the release, tap the APK, allow installs from the browser, install.
+4. Moving data from the browser version: the app's first screen has *Bring my data*: sign in to the account (cloud
+   backup), or paste a backup from the browser version (Settings → Backup and data there).
+
+**Building locally**: `npm install`, then `npm run apk` with the Android SDK (`ANDROID_HOME`) and `AFP_KEYSTORE_PASSWORD`
+set; the APK is in `android/app/build/outputs/apk/release/`. `native.html` tests the native side with stand-in plugins.
+
 ## Data safety
 
 - If saved data can't be opened (for example an upgrade step fails), the app keeps it untouched, pauses saving, and shows a message with **Copy the saved data** and **Start fresh**. It never saves the starter data over it.

@@ -20,6 +20,10 @@ Done items move to the changelog in the PRs, not here.
 - **Tests pin the data version number** in a dozen places; every version bump edits them all.
 - **Pace** (`js/pace.js`) still names the jumps tier (it can't import the tier table without a circular import).
 
+- **Android app, untested on a phone yet:** heart rate over the native Bluetooth plugin, and whether it keeps recording
+  with the screen off (the foreground service holds the connection; whether the WebView's JavaScript keeps receiving
+  readings while the screen is off is the open question). If not, the next step is recording in the service itself.
+
 ## Things to check with real use
 
 - **Pace learning** needs cleanly logged workouts (each set ticked as you finish it). Revisit the estimates after a

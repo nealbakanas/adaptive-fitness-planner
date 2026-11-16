@@ -1,3 +1,12 @@
 # Backups hold personal training history: keep them out of the repo.
 *.fitnotes
 fitness-backup-*.json
+
+# The Android app: installed packages, the copied web files, build output.
+node_modules/
+www/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/release/
