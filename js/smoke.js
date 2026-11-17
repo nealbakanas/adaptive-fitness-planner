@@ -1528,13 +1528,13 @@ step('categories: split Arms into Biceps and Triceps, add exercises, pick a cate
 
 step('Count it in History: a finished workout\'s exercise fills its goal', () => {
   const st = () => store.state;
-  const at = Date.now() - 3600e3;
+  const at = Date.now() - Math.min(3600e3, (Date.now() - L.startOfDay()) / 2); // earlier today, even just after midnight
   // Its own exercise and goal, so nothing logged earlier today fills it first.
   st().exercises.push({ ...L.byId(st().exercises, 'ex-incline-bench'), id: 'ex-ci', name: 'Count-it press' });
   st().slots.push({ id: 'sl-ci', familyId: 'fam-incline', exerciseId: 'ex-ci', tier: 'T2', quota: 1, priority: 1 });
   const block = { id: 'cib', tier: 'T2', slotId: 'sl-ci', exerciseId: 'ex-ci', schemeId: 's-t2-4x6', swaps: [] };
   st().sessions.push({ id: 'cis', day: L.dayKey(at), status: 'done', source: 'suggested', checkinAt: at - 60e3, firstSetAt: at, blocks: [block] });
-  st().sets.push(...[3, 3, 5].map((r, i) => ({ id: `ci${i}`, sessionId: 'cis', blockId: 'cib', exerciseId: 'ex-ci', tier: 'T2', schemeId: 's-t2-4x6', load: 135, reps: r, done: true, loggedAt: at + i * 60e3 })));
+  st().sets.push(...[3, 3, 5].map((r, i) => ({ id: `ci${i}`, sessionId: 'cis', blockId: 'cib', exerciseId: 'ex-ci', tier: 'T2', schemeId: 's-t2-4x6', load: 135, reps: r, done: true, loggedAt: at + i * 1000 })));
   const met = () => L.creditWeek(st()).slots.get('sl-ci').todayMet;
   const before = met();
   click('[data-act=nav][data-tab=week]');

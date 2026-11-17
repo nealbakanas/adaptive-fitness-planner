@@ -16,6 +16,7 @@ Object.keys(localStorage).filter(k => k === KEY || k.startsWith(`${KEY}.`)).forE
 const calls = [];
 const rec = name => (...args) => { calls.push([name, ...args]); return Promise.resolve(); };
 let notify = null, dropped = null, back = null;
+const appListeners = {}, channels = [];
 const scheduled = new Map();
 globalThis.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
 globalThis.AFPNative = {
@@ -31,15 +32,18 @@ globalThis.AFPNative = {
     requestPermissions: async () => { calls.push(['notif.ask']); return { display: 'granted' }; },
     schedule: async ({ notifications }) => { for (const n of notifications) scheduled.set(n.id, n); },
     cancel: async ({ notifications }) => { for (const n of notifications) scheduled.delete(n.id); },
+    createChannel: async ch => { channels.push(ch); },
   },
   KeepAwake: { keepAwake: rec('awake.on'), allowSleep: rec('awake.off') },
-  App: { addListener: (ev, fn) => { if (ev === 'backButton') back = fn; return Promise.resolve({ remove() {} }); }, minimizeApp: rec('app.minimize') },
+  App: { addListener: (ev, fn) => { if (ev === 'backButton') back = fn; (appListeners[ev] ??= []).push(fn); return Promise.resolve({ remove() {} }); }, minimizeApp: rec('app.minimize') },
   ForegroundService: { startForegroundService: rec('fg.start'), stopForegroundService: rec('fg.stop') },
 };
 const beat = bpm => { const b = new DataView(new ArrayBuffer(2)); b.setUint8(0, 0); b.setUint8(1, bpm); notify(b); };
 let vis = 'visible';
 Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => vis });
-const setVis = v => { vis = v; document.dispatchEvent(new Event('visibilitychange')); };
+// Going to the background as the app sees it: Capacitor's pause and resume. The page stays "visible" (Capacitor keeps
+// it running), and its timers keep ticking.
+const setVis = v => { for (const fn of appListeners[v === 'hidden' ? 'pause' : 'resume'] ?? []) fn(); };
 
 await (await import('./vault.js')).wipe();
 await import('./app.js');
@@ -88,6 +92,9 @@ try {
   S().timer = { endsAt: Date.now() + 90e3, total: 90, blockId: 'b', setId: 's', next: 'Back squat · set 2' };
   setVis('hidden'); await tick(50);
   check('the rest timer: "Rest over" when it ends', scheduled.get(7001)?.title === 'Rest over' && /Back squat · set 2/.test(scheduled.get(7001).body) && Math.abs(scheduled.get(7001).schedule.at - S().timer.endsAt) < 5);
+  await tick(1200);
+  check('…and it stays scheduled while the timer keeps ticking in the background', scheduled.has(7001) && vis === 'visible', [...scheduled.keys()].join());
+  check('on the timers channel: pops up, with sound and vibration', scheduled.get(7001)?.channelId === 'timers' && channels.some(c => c.id === 'timers' && c.importance === 5 && c.vibration));
   setVis('visible'); S().timer = null; await tick(50);
 
   // Reminders.
@@ -98,7 +105,9 @@ try {
   const inp = q('input[data-bind="settings.reminders.foot"]'); inp.value = hhmm; inp.dispatchEvent(new Event('change', { bubbles: true }));
   await tick(1800);
   const foot = [...scheduled.values()].filter(n => n.id >= 7111 && n.id < 7118);
-  check('a foot strength reminder for each of the next 7 days, at your time', foot.length === 7 && foot.every(n => n.title === 'Foot strength' && new Date(n.schedule.at).getMinutes() === t.getMinutes()), `${foot.length} ${hhmm}`);
+  // Each of the next 7 days at that time, from today if it's still to come (near midnight "an hour from now" is tomorrow).
+  const due = Array.from({ length: 7 }, (_, d) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(t.getHours(), t.getMinutes(), 0, 0); return x.getTime(); }).filter(x => x > Date.now()).length;
+  check('a foot strength reminder for each of the next 7 days, at your time', foot.length === due && due >= 6 && foot.every(n => n.title === 'Foot strength' && new Date(n.schedule.at).getMinutes() === t.getMinutes()), `${foot.length}/${due} ${hhmm}`);
   const m = new Date(Date.now() + 7200e3);
   const mi = q('input[data-bind="settings.reminders.morning"]'); mi.value = `${String(m.getHours()).padStart(2, '0')}:${String(m.getMinutes()).padStart(2, '0')}`; mi.dispatchEvent(new Event('change', { bubbles: true }));
   S().morning.log.unshift({ id: 'x', day: (await import('./logic.js')).dayKey(), at: Date.now(), energy: 4, pain: {} }); store.save();
