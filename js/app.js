@@ -21,6 +21,9 @@ import * as U from './usage.js';
 const NATIVE = !!globalThis.Capacitor?.isNativePlatform?.();
 if (NATIVE && !globalThis.AFPNative) { try { await import('../vendor/capacitor/native.js'); } catch (e) { console.warn('Native plugins not loaded', e); } }
 const Nat = () => globalThis.AFPNative ?? null;
+// Whether the app is in the background (Capacitor's pause and resume: the page never turns "hidden" in the app, since
+// Capacitor keeps it running). While it is, the notifications stand in for the beeps, so the beeps stay quiet.
+let nativeAway = false;
 import * as Sync from './sync.js';
 import * as L from './logic.js';
 import * as FN from './fitnotes.js';
@@ -456,7 +459,7 @@ function unlockAudio() {
 // volume still caps it: the beeps and your music share that slider.
 let loudOut = null;
 function beep(count = 1, freq = 880) {
-  if (!audioCtx || !timerCfg().sound) return;
+  if (!audioCtx || !timerCfg().sound || nativeAway) return;
   const loud = timerCfg().loud !== false;
   if (loud && !loudOut) {
     const comp = audioCtx.createDynamicsCompressor();
@@ -643,8 +646,16 @@ function tickWork(t) {
 
 // Hand the timer to the service worker so it can notify while the page is hidden.
 let syncedEndsAt;
+let syncedNative = null;
 function syncTimerToWorker(force = false) {
-  if (Nat()?.LocalNotifications) return nativeTimerAlerts(document.visibilityState !== 'visible');
+  // The app: only when the rest timer or an interval run changes (this runs on every tick, background included), and
+  // scheduled only while the app is away; back in the app, cancelled.
+  if (Nat()?.LocalNotifications) {
+    const r = state.intervalRun, key = `${state.timer?.endsAt ?? ''}|${r ? `${r.startedAt}|${r.pausedAt ?? ''}` : ''}|${nativeAway}`;
+    if (!force && key === syncedNative) return;
+    syncedNative = key;
+    return nativeTimerAlerts(nativeAway || document.visibilityState !== 'visible');
+  }
   const endsAt = state.timer?.endsAt ?? null;
   if (!force && endsAt === syncedEndsAt) return;
   syncedEndsAt = endsAt;
@@ -664,7 +675,7 @@ const cancelIds = ids => notif()?.cancel({ notifications: ids.map(id => ({ id })
 const range = (a, n) => Array.from({ length: n }, (_, i) => a + i);
 async function notifyAt(list) {
   if (!list.length || !notif()) return;
-  try { await notif().schedule({ notifications: list.map(x => ({ ...x, smallIcon: 'ic_stat_afp', schedule: x.at ? { at: new Date(x.at), allowWhileIdle: true } : x.schedule, at: undefined })) }); }
+  try { await notif().schedule({ notifications: list.map(x => ({ channelId: x.id < N.morning ? 'timers' : 'reminders', ...x, smallIcon: 'ic_stat_afp', schedule: x.at ? { at: new Date(x.at), allowWhileIdle: true } : x.schedule, at: undefined })) }); }
   catch (e) { console.warn('notification', e); }
 }
 // With the app in the background (screen off, another app): the rest timer's end, and the interval timer's next phases,
@@ -752,7 +763,14 @@ async function startNative() {
   const n = Nat();
   if (!n) return;
   n.App.addListener('backButton', nativeBack);
+  n.App.addListener('pause', () => { nativeAway = true; nativeTimerAlerts(true); U.pause(); flushVault(); });
+  n.App.addListener('resume', () => { nativeAway = false; nativeTimerAlerts(false); U.resume(); tickTimer(); render(); });
   try { if ((await n.LocalNotifications.checkPermissions()).display === 'prompt') await n.LocalNotifications.requestPermissions(); } catch { /* asked later */ }
+  // Timers pop up on screen with sound and vibration; reminders just sound.
+  try {
+    await n.LocalNotifications.createChannel({ id: 'timers', name: 'Rest and interval timers', description: 'Rest over, and each interval phase, while the app is in the background', importance: 5, visibility: 1, vibration: true });
+    await n.LocalNotifications.createChannel({ id: 'reminders', name: 'Reminders', description: 'The morning check and foot strength', importance: 4, visibility: 1, vibration: true });
+  } catch (e) { console.warn('notification channels', e); }
   onSave(scheduleReminders);
   HR.onChange(syncRecording);
   scheduleReminders();

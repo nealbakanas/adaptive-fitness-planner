@@ -55,7 +55,10 @@
 
     <!-- Reminders and the rest timer: notifications, on time (exact alarms). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- USE_EXACT_ALARM is granted on install (Android 13+), where SCHEDULE_EXACT_ALARM starts off denied: without either,
+         Android delays a "rest over" by minutes. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Recording with the screen off: a foreground service for the connected strap, and the screen kept on when asked. -->
