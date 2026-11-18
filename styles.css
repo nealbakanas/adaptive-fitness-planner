@@ -642,3 +642,11 @@ button.good { color: var(--good); border-color: var(--good); }
 .pips .pip { width: 11px; height: 11px; }
 .banner.warn { border-color: var(--warn); color: var(--warn); }
 b.warn { color: var(--warn); } b.good { color: var(--good); }
+
+/* Library select mode: tick rows, and a bar with what to do with them. */
+.exrow.tick { width: 100%; background: none; border: 0; border-radius: 0; text-align: left; display: flex; gap: 10px; align-items: center; padding: 8px 0; color: var(--text); min-height: 44px; }
+.exrow.tick .box { font-size: 20px; color: var(--muted); }
+.exrow.tick.on .box { color: var(--accent); }
+.selbar { position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-top: 8px; box-shadow: 0 -4px 16px #0006; }
+.selbar span { flex: 1 1 auto; }

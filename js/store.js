@@ -1,7 +1,7 @@
 // Local persistence. The whole app state is one JSON blob so a backend can replace this later.
 import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BASEMENT, JUMP_TIER, JUMP_SCHEMES, COND_TIER, COND_SCHEMES, COND_FAMILY, condExercise, DEFAULT_PRESETS } from './seed.js';
 import { addThpPlan } from './thp.js';
-import { splitCategories } from './categories.js';
+import { splitCategories, splitLunges } from './categories.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
 import { gsMobilityExercises, addMcgill } from './mobility.js';
 import { addFoot } from './foot.js';
@@ -390,6 +390,11 @@ export function migrate(s) {
     // morning check.
     addFoot(s);
     s.version = 34;
+  }
+  if (s.version < 35) {
+    // v35: lunges, split squats, step-ups and single-leg squats get a category of their own (js/categories.js splitLunges).
+    splitLunges(s);
+    s.version = 35;
   }
   return s;
 }

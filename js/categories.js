@@ -80,3 +80,26 @@ export function splitCategories(s) {
   for (const eq of ['cable', 'bands', 'dumbbells', 'barbell', 'bench']) if (s.equipment && !s.equipment.includes(eq)) s.equipment.push(eq);
   return s;
 }
+
+// Lunges, split squats, step-ups and single-leg squats: out of Squat pattern into a category of their own (data version
+// 35), so a squat and a lunge can come up in the same workout (one exercise per category per workout). Goals naming one
+// go with it; a family-wide Squat pattern goal goes too when your recent workouts used it for lunge-type lifts (it was
+// your lunge goal). Nothing happens if you already have a category by that name.
+export const LUNGES = /lunge|split[- ]?squat|bulgarian|step[- ]?ups?\b|single[- ]leg|pistol|skater|cossack|curtsy|rfess|rear[- ]foot/i;
+export const LUNGE_FAMILY = { id: 'fam-lunge', name: 'Lunges & single-leg' };
+export function splitLunges(s) {
+  if (!s.families.some(f => f.id === 'fam-squat')) return s;
+  const list = members(s, 'fam-squat').filter(e => LUNGES.test(e.name));
+  if (!list.length) return s;
+  const fam = addFamily(s, LUNGE_FAMILY);
+  if (!fam) return s;
+  const ids = new Set(list.map(e => e.id));
+  const blocks = (s.sessions || []).flatMap(x => x.blocks || []);
+  for (const sl of s.slots.filter(x => x.familyId === 'fam-squat' && !x.exerciseId)) {
+    const used = blocks.filter(b => b.slotId === sl.id).slice(-4);
+    if (used.length && used.filter(b => ids.has(b.exerciseId)).length * 2 > used.length) sl.familyId = fam.id;
+  }
+  move(s, list, fam.id);
+  fam.defaultExerciseId = list.find(e => e.id === 'ex-bss' && !e.archived)?.id ?? members(s, fam.id).find(e => !e.archived)?.id ?? null;
+  return s;
+}
