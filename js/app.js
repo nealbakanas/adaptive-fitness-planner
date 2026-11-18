@@ -2781,7 +2781,8 @@ function viewLibrary() {
   if (ui.libMode === 'mobility') return viewMobLibrary();
   const q = ui.libQuery.trim().toLowerCase();
   const archivedCount = state.exercises.filter(e => e.archived).length;
-  let h = `<header class="top"><h1>Library</h1><div class="hbtns inline"><button class="small" data-act="catNew">+ Category</button><button class="primary" data-act="quickAdd">+ Exercise</button></div></header>${libModeSeg()}
+  const sel = ui.libSel; // Select mode: tick exercises, then move or archive them all at once
+  let h = `<header class="top"><h1>Library</h1><div class="hbtns inline"><button class="small ${sel ? 'on' : ''}" data-act="libSelect">${sel ? 'Done' : 'Select'}</button>${sel ? '' : `<button class="small" data-act="catNew">+ Category</button><button class="primary" data-act="quickAdd">+ Exercise</button>`}</div></header>${libModeSeg()}
     <input class="search" id="libq" placeholder="Search exercises or categories" value="${esc(ui.libQuery)}" data-libq>
     ${partChips(state.exercises.filter(e => ui.showArchived || !e.archived), ui.libPart, 'libPart')}
     ${archivedCount ? `<button class="small quiet libarch" data-act="libArchived">${ui.showArchived ? 'Hide' : 'Show'} archived (${archivedCount})</button>` : ''}`;
@@ -2792,6 +2793,12 @@ function viewLibrary() {
     const members = all.filter(e => (ui.showArchived || !e.archived) && (!q || famMatch || e.name.toLowerCase().includes(q))
       && (!ui.libPart || L.bodyPart(state, e) === ui.libPart));
     if (!members.length && (q || ui.libPart || all.length)) continue; // nothing to show; truly empty families stay so you can add to them
+    if (sel) {
+      const allOn = members.length && members.every(e => sel.includes(e.id));
+      h += `<div class="card"><h3 class="cathead">${esc(f.name)}${members.length ? `<button class="small quiet" data-act="libTickAll" data-ids="${esc(members.map(e => e.id).join(','))}">${allOn ? 'None' : 'All'}</button>` : ''}</h3>
+        ${members.map(e => `<button class="exrow tick ${esc(sel.includes(e.id) ? 'on' : '')}" data-act="libTick" data-id="${esc(e.id)}"><span class="box">${sel.includes(e.id) ? '☑' : '☐'}</span><span class="name">${esc(e.name)}${e.archived ? '<span class="meta">archived</span>' : ''}</span></button>`).join('') || '<p class="muted">Empty category.</p>'}</div>`;
+      continue;
+    }
     h += `<div class="card"><h3 class="cathead">${esc(f.name)}<button class="icon" data-act="catEdit" data-id="${esc(f.id)}" aria-label="Edit ${esc(f.name)}">✎</button></h3>${members.map(e => {
       const max = e.metric === 'load_reps' ? L.estimatedMax(state, e.id) : null;
       const meta = [max ? `e1RM ${round(max)}` : '', e.equipment.join(', '), e.archived ? 'archived' : ''].filter(Boolean).join(' · ');
@@ -2801,8 +2808,27 @@ function viewLibrary() {
     }).join('') || '<p class="muted">Empty category.</p>'}
     <button class="small" data-act="quickAdd" data-fam="${esc(f.id)}">+ Add</button></div>`;
   }
+  if (sel) {
+    const n = sel.length, arch = n && sel.every(id => exOf(id)?.archived);
+    h += `<div class="selbar"><span><b>${esc(n)}</b> selected</span>
+      <button class="primary" data-act="libBulkMove" ${n ? '' : 'disabled'}>Move to…</button>
+      <button data-act="libBulkArchive" ${n ? '' : 'disabled'}>${arch ? 'Unarchive' : 'Archive'}</button></div>`;
+  }
   return h;
 }
+
+// Select mode, moving many at once: to a category you pick, or a new one you name. Goals naming a moved exercise go with it.
+function sheetBulkMove(sh) {
+  const n = ui.libSel?.length ?? 0;
+  return `<h3>Move ${esc(n)} exercise${n === 1 ? '' : 's'}</h3>
+    <div class="field"><label for="bulk-new">To a new category</label><input id="bulk-new" placeholder="e.g. Lunges & single-leg" value="${esc(sh.name ?? '')}"></div>
+    <button class="primary" data-act="libBulkTo" data-id="__new">Make it and move</button>
+    <div class="label">Or to one you have</div>
+    <div class="list">${[...state.families].sort((a, b) => a.name.localeCompare(b.name)).map(f => `<button class="row" data-act="libBulkTo" data-id="${esc(f.id)}"><span>${esc(f.name)}</span><span class="meta">${esc(L.familyMembers(state, f.id).length)}</span></button>`).join('')}</div>`;
+}
+// What a bulk change touches, for Undo: the exercises, the goals, the categories.
+const libSnap = () => ({ exercises: structuredClone(state.exercises), slots: structuredClone(state.slots), families: structuredClone(state.families) });
+const libRestore = snap => { Object.assign(state, structuredClone(snap)); save(); render(); };
 
 function exerciseOptions(sel) {
   return [...state.families].sort((a, b) => a.name.localeCompare(b.name)).map(f =>
@@ -3446,7 +3472,7 @@ function renderSheet() {
   const s = ui.sheet;
   U.sheetShown(s?.type ?? null);
   if (!s) { sheetEl.hidden = true; sheetEl.innerHTML = ''; return; }
-  const body = { footProgress: sheetFootProgress, workoutDone: sheetWorkoutDone, swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
+  const body = { bulkMove: sheetBulkMove, footProgress: sheetFootProgress, workoutDone: sheetWorkoutDone, swapEx: sheetSwapEx, swapScheme: sheetSwapScheme, plans: sheetPlans, quickAdd: sheetQuickAdd, editEx: sheetEditEx, rest: sheetRest,
     confirm: sheetConfirm, backupText: sheetBackupText, reviewText: sheetReviewText, pasteImport: sheetPasteImport,
     addEx: sheetAddEx, category: sheetCategory, max: sheetMax, tier: sheetTier, goal: sheetGoal, scheme: sheetScheme, pair: sheetPair, finishAsk: sheetFinishAsk, moreTime: sheetMoreTime, mobPick: sheetMobPick, mobEx: sheetMobEx, exHist: sheetExHist, cloudAsk: sheetCloudAsk }[s.type](s);
   sheetEl.innerHTML = `<div class="panel"><button class="close" data-act="sheetClose" aria-label="Close">✕</button>${body}</div>`;
@@ -4095,6 +4121,7 @@ function moveExercise(e, familyId) {
 const actions = {
   nav: d => {
     ui.tab = d.tab;
+    ui.libSel = null;
     ui.plan = ui.tab === 'plans' ? ui.plan : null;
     ui.setPage = null;
     if (d.tab !== 'week') ui.goalsUndo = null;
@@ -5402,6 +5429,35 @@ const actions = {
   },
 
   libArchived: () => { ui.showArchived = !ui.showArchived; render(); },
+  libSelect: () => { ui.libSel = ui.libSel ? null : []; render(); },
+  libTick: d => { const s = ui.libSel; const i = s.indexOf(d.id); if (i >= 0) s.splice(i, 1); else s.push(d.id); render(); },
+  libTickAll: d => {
+    const ids = d.ids.split(','), s = ui.libSel, on = ids.every(id => s.includes(id));
+    ui.libSel = on ? s.filter(id => !ids.includes(id)) : [...new Set([...s, ...ids])];
+    render();
+  },
+  libBulkMove: () => { if (ui.libSel?.length) openSheet({ type: 'bulkMove' }); },
+  libBulkTo: d => {
+    const ids = [...ui.libSel], snap = libSnap();
+    let fam = d.id === '__new' ? null : famOf(d.id);
+    if (d.id === '__new') {
+      const name = (document.getElementById('bulk-new')?.value ?? '').trim();
+      if (!name) return toast('Name the new category');
+      fam = state.families.find(f => f.name.toLowerCase() === name.toLowerCase());
+      if (!fam) { fam = { id: L.uid(), name, defaultExerciseId: null }; state.families.push(fam); }
+    }
+    for (const id of ids) moveExercise(exOf(id), fam.id);
+    ui.sheet = null; ui.libSel = null; ui.libQuery = ''; ui.libPart = null;
+    save(); render();
+    toast(`Moved ${ids.length} to ${fam.name}`, () => libRestore(snap));
+  },
+  libBulkArchive: () => {
+    const ids = [...ui.libSel], snap = libSnap(), off = ids.every(id => exOf(id)?.archived);
+    for (const id of ids) { const e = exOf(id); if (e) e.archived = !off; }
+    ui.libSel = null;
+    save(); render();
+    toast(`${off ? 'Unarchived' : 'Archived'} ${ids.length}`, () => libRestore(snap));
+  },
 
   fnToggle: d => {
     const id = Number(d.id);

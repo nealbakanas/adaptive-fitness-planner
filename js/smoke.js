@@ -1226,6 +1226,33 @@ step('the morning check: energy and pain, then no jumps on a sore morning', () =
   check('editing it clears the warning', st().morning.log[0].pain.Knee === 1 && !/no jumps today/.test(text()));
 });
 
+step('library: select many, move them to a new category or archive them, with Undo', () => {
+  const st = () => store.state;
+  click('[data-act=nav][data-tab=library]');
+  check('the lunges have their own category', /Lunges & single-leg/.test(text()) && L.byId(st().exercises, 'ex-bss').familyId === 'fam-lunge');
+  click('[data-act=libSelect]');
+  check('Select mode: ticks instead of edit buttons, and a bar', qa('[data-act=libTick]').length > 10 && !q('[data-act=catNew]') && /0 selected/.test(text()));
+  const card = qa('.card').find(c => /Lunges & single-leg/.test(c.textContent));
+  const ticks = [...card.querySelectorAll('[data-act=libTick]')].slice(0, 2).map(b => b.dataset.id);
+  for (const id of ticks) click(`[data-act=libTick][data-id="${id}"]`);
+  check('ticking counts them', /2 selected/.test(text()));
+  click('[data-act=libBulkMove]');
+  q('#bulk-new').value = 'Test moves';
+  click('#sheet [data-act=libBulkTo][data-id=__new]');
+  const nf = st().families.find(f => f.name === 'Test moves');
+  check('moved into the new category', !!nf && ticks.every(id => L.byId(st().exercises, id).familyId === nf.id) && /Moved 2 to Test moves/.test(document.body.textContent));
+  click(qa('.toast button.link').at(-1));
+  check('Undo puts them back, and the new category goes', ticks.every(id => L.byId(st().exercises, id).familyId === 'fam-lunge') && !st().families.some(f => f.name === 'Test moves'));
+  click('[data-act=libSelect]');
+  click(`[data-act=libTick][data-id="${ticks[0]}"]`);
+  click('[data-act=libBulkArchive]');
+  check('archive many', L.byId(st().exercises, ticks[0]).archived === true);
+  click(qa('.toast button.link').at(-1));
+  check('and Undo', !L.byId(st().exercises, ticks[0]).archived);
+  for (const t of qa('.toast')) t.remove();
+  click('[data-act=nav][data-tab=today]');
+});
+
 step('foot strength: the desk part, then the rest, left and right apart, control, the week, and the toe', () => {
   const st = () => store.state;
   const DESKS = ['foot-toe-yoga', 'foot-toe-abduction', 'foot-short-foot', 'foot-toe-press'];
