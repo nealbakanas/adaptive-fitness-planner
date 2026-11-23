@@ -35,7 +35,8 @@ globalThis.AFPNative = {
     createChannel: async ch => { channels.push(ch); },
   },
   KeepAwake: { keepAwake: rec('awake.on'), allowSleep: rec('awake.off') },
-  App: { addListener: (ev, fn) => { if (ev === 'backButton') back = fn; (appListeners[ev] ??= []).push(fn); return Promise.resolve({ remove() {} }); }, minimizeApp: rec('app.minimize') },
+  App: { addListener: (ev, fn) => { if (ev === 'backButton') back = fn; (appListeners[ev] ??= []).push(fn); return Promise.resolve({ remove() {} }); }, minimizeApp: rec('app.minimize'),
+    getInfo: async () => ({ build: String(installed), version: `1.${installed}` }) },
   ForegroundService: { startForegroundService: rec('fg.start'), stopForegroundService: rec('fg.stop') },
   // Pop-out: the app's own plugin. `pip` is what Android would report; pipChange is fired by hand, as Android would.
   Capacitor: { isPluginAvailable: n => n === 'Pip' },
@@ -47,6 +48,13 @@ globalThis.AFPNative = {
   },
 };
 const pip = { pip: false, resumed: true };
+// The release on GitHub, as the update check sees it: build 7 published, 5 installed.
+let installed = 5;
+const realFetch = globalThis.fetch;
+globalThis.fetch = (url, opts) => (String(url).startsWith('https://api.github.com/')
+  ? Promise.resolve(new Response(JSON.stringify({ body: 'The app.\nBuild 7 from abc123.', html_url: 'https://github.com/o/r/releases/tag/android',
+    assets: [{ name: 'adaptive-fitness.apk', browser_download_url: 'https://github.com/o/r/releases/download/android/adaptive-fitness.apk' }] })))
+  : realFetch(url, opts));
 const pipChange = on => { for (const fn of appListeners['pip.pipChange'] ?? []) fn({ on }); };
 const lastAuto = () => calls.filter(c => c[0] === 'pip.auto').at(-1)?.[1];
 const beat = bpm => { const b = new DataView(new ArrayBuffer(2)); b.setUint8(0, 0); b.setUint8(1, bpm); notify(b); };
@@ -146,6 +154,15 @@ try {
   check('…and it stays scheduled while the timer keeps ticking in the background', scheduled.has(7001) && vis === 'visible', [...scheduled.keys()].join());
   check('on the timers channel: pops up, with sound and vibration', scheduled.get(7001)?.channelId === 'timers' && channels.some(c => c.id === 'timers' && c.importance === 5 && c.vibration));
   setVis('visible'); S().timer = null; await tick(50);
+
+  // A new APK: a banner on Today with the download, Later hides it; Settings keeps the link.
+  click('[data-act=nav][data-tab=today]'); await tick(50);
+  const dl = [...document.querySelectorAll('#app a')].find(a => /Download/.test(a.textContent));
+  check('a newer build on the release: a banner with the download', /app update is ready/.test(text()) && dl?.href.endsWith('/adaptive-fitness.apk'), text().slice(0, 200));
+  click('[data-act=updateLater]');
+  check('Later hides it', !/app update is ready/.test(text()));
+  click('[data-act=nav][data-tab=more]');
+  check('Settings still has it', /Update the app/.test(text()) && /build 7 is ready · you have 5/.test(text()));
 
   // Reminders.
   click('[data-act=nav][data-tab=more]');

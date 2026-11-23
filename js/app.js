@@ -760,6 +760,33 @@ function nativeBack() {
   if (Pip() && pipAutoOn()) return Pip().enter().catch(() => Nat().App.minimizeApp().catch(() => {}));
   Nat().App.minimizeApp().catch(() => {});
 }
+// ---------- a new APK (the app only) ----------
+// The app loads the live site, so most changes need nothing installed; a change to the native side needs a new APK. The
+// "Android app" release says which build it holds ("Build N", the APK's versionCode): checked against this one on start
+// and when you come back (every 6 hours at most), with a banner on Today to download it. Later hides it until a newer one.
+const RELEASE_API = 'https://api.github.com/repos/nealbakanas/adaptive-fitness-planner/releases/tags/android';
+const UPDATE_KEY = `${globalThis.AFP_STORAGE_KEY ?? 'afp.v1'}.appUpdate`;
+let updateCheckedAt = 0;
+async function checkAppUpdate(force = false) {
+  const app = Nat()?.App;
+  if (!app?.getInfo || (!force && Date.now() - updateCheckedAt < 6 * 3600e3)) return;
+  updateCheckedAt = Date.now();
+  try {
+    const [info, res] = await Promise.all([app.getInfo(), fetch(RELEASE_API, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } })]);
+    if (!res.ok) throw new Error(`release ${res.status}`);
+    const rel = await res.json();
+    ui.appUpdate = {
+      installed: Number(info.build) || 0, latest: Number(/Build (\d+)/.exec(rel.body ?? '')?.[1]) || 0,
+      url: rel.assets?.find(a => /\.apk$/.test(a.name))?.browser_download_url ?? rel.html_url,
+    };
+  } catch (e) { if (force) toast('Couldn’t check: are you online?'); updateCheckedAt = 0; return; }
+  render();
+  if (force && !updateDue()) toast('The app is up to date');
+}
+const updateDue = () => { const u = ui.appUpdate; return !!u && u.latest > u.installed; };
+// (A plain link: the app opens other sites in the browser, which downloads the APK; opening it installs over this one.)
+const updateLink = (label, cls = 'link') => `<a class="${esc(cls)}" href="${esc(ui.appUpdate.url)}">${label}</a>`;
+
 // ---------- pop-out (picture-in-picture: the app's PipPlugin) ----------
 // The app in a small window over other apps (a video full screen): the clock and heart rate, big. The ⧉ button pops it
 // out, and so does going home while a timer runs or an activity is being tracked (Timer → Pop out when I leave). In the
@@ -827,7 +854,7 @@ async function startNative() {
     const st = await Pip()?.status().catch(() => null);
     if (!st?.pip) setAway(true);
   });
-  n.App.addListener('resume', () => { showPip(false); setAway(false); U.resume(); tickTimer(); render(); });
+  n.App.addListener('resume', () => { showPip(false); setAway(false); U.resume(); tickTimer(); render(); checkAppUpdate(); });
   // The window closed (✕, or swiped away) leaves the app in the background; opened full screen, it resumes.
   Pip()?.addListener('pipChange', async ({ on }) => {
     showPip(!!on);
@@ -845,6 +872,7 @@ async function startNative() {
   HR.onChange(syncRecording);
   scheduleReminders();
   toeNotify();
+  checkAppUpdate();
 }
 
 async function enableNotifications(el) {
@@ -1015,6 +1043,10 @@ function globalBanners() {
 
 function banners() {
   let h = '';
+  if (updateDue() && localStorage.getItem(UPDATE_KEY) !== String(ui.appUpdate.latest)) {
+    h += `<div class="banner">An app update is ready. Download it, then open it to install over this one; your data stays.
+      ${updateLink('Download')} <button class="link" data-act="updateLater">Later</button></div>`;
+  }
   if (!state.settings.bodyweight) {
     h += `<div class="banner">Set your bodyweight in Settings so weighted pull-ups and dips get loads. <button class="link" data-act="nav" data-tab="more">Settings</button></div>`;
   }
@@ -3046,7 +3078,9 @@ function viewSettingsMenu() {
       <button class="menurow" data-act="setupAgain"><span class="grow"><span class="name">Set up again</span>
         <span class="meta">replaces your goals</span></span><span class="chev">›</span></button></div>
     <div class="label">App</div>
-    <div class="menu">${NATIVE ? menuRow('reminders', 'Reminders', ['morning', 'foot'].filter(k => state.settings.reminders?.[k]).map(k => `${k === 'morning' ? 'Morning check' : 'Foot strength'} ${state.settings.reminders[k]}`).join(' · ') || 'off') : ''}${menuRow('usage', 'Usage', state.settings.trackUsage === false ? 'off' : 'what you use, kept on this phone')}<button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
+    <div class="menu">${NATIVE ? menuRow('reminders', 'Reminders', ['morning', 'foot'].filter(k => state.settings.reminders?.[k]).map(k => `${k === 'morning' ? 'Morning check' : 'Foot strength'} ${state.settings.reminders[k]}`).join(' · ') || 'off') : ''}${menuRow('usage', 'Usage', state.settings.trackUsage === false ? 'off' : 'what you use, kept on this phone')}${NATIVE ? (updateDue()
+      ? updateLink(`<span class="grow"><span class="name">Update the app</span><span class="meta">build ${esc(ui.appUpdate.latest)} is ready · you have ${esc(ui.appUpdate.installed)} · your data stays</span></span>`, 'menurow')
+      : `<button class="menurow" data-act="appCheck"><span class="grow"><span class="name">Android app</span><span class="meta">${ui.appUpdate ? `build ${esc(ui.appUpdate.installed)} · up to date` : 'check for an update'}</span></span></button>`) : ''}<button class="menurow" data-act="refreshApp"><span class="grow"><span class="name">Get the latest version</span>
       <span class="meta">${ui.swVersion ? `you have ${esc(String(ui.swVersion).replace(/^afp-/, ''))} · ` : ''}your data stays</span></span></button></div>`;
 }
 
@@ -4807,6 +4841,8 @@ const actions = {
     toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}${kc ? ` · ${kc} kcal` : ''}` : 'Nothing to log');
   },
   ivDiscard: () => { ui.ivLog = null; render(); },
+  updateLater: () => { localStorage.setItem(UPDATE_KEY, String(ui.appUpdate?.latest ?? '')); render(); },
+  appCheck: () => checkAppUpdate(true),
   pipGo: () => Pip()?.enter().catch(e => toast(e?.message || 'Couldn’t pop out')),
   // Intervals or one steady stretch. Steady starts as zone 2 until you stop; intervals as 4 rounds of 4 minutes on, 1 off.
   ivMode: d => {
