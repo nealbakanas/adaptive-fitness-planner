@@ -694,7 +694,7 @@ async function nativeTimerAlerts(hidden) {
       let start = now + (I.phaseStart(list, at.i + 1) - ms);
       for (let i = at.i + 1; i <= list.length && out.length < 50; i++) {
         const p = list[i];
-        out.push({ id: N.phases + out.length, title: p ? `${IV_LABEL[p.kind]}${p.kind === 'work' && run.cfg.rounds > 1 ? ` · round ${p.round} of ${run.cfg.rounds}` : ''}` : 'Done', body: run.cfg.name, at: start });
+        out.push({ id: N.phases + out.length, title: p ? phaseName(run.cfg, p) : 'Done', body: p?.cue ?? run.cfg.name, at: start });
         if (!p) break;
         start += p.secs * 1000;
       }
@@ -757,14 +757,84 @@ function nativeBack() {
     [() => ui.tomorrow, () => { ui.tomorrow = null; }], [() => ui.program, () => { ui.program = null; }], [() => ui.plan, () => { ui.plan = null; }], [() => ui.mobRoutine, () => { ui.mobRoutine = null; }],
     [() => ui.tab !== 'today', () => { ui.tab = 'today'; }]].find(([is]) => is());
   if (back) { back[1](); render(); window.scrollTo(0, 0); return; }
+  if (Pip() && pipAutoOn()) return Pip().enter().catch(() => Nat().App.minimizeApp().catch(() => {}));
   Nat().App.minimizeApp().catch(() => {});
 }
+// ---------- pop-out (picture-in-picture: the app's PipPlugin) ----------
+// The app in a small window over other apps (a video full screen): the clock and heart rate, big. The ⧉ button pops it
+// out, and so does going home while a timer runs or an activity is being tracked (Timer → Pop out when I leave). In the
+// window the app isn't away: beeps and the voice carry on, and the timer needs no notifications.
+const Pip = () => (Nat()?.Pip && Nat().Capacitor?.isPluginAvailable?.('Pip') ? Nat().Pip : null);
+const pipEl = Object.assign(document.createElement('div'), { id: 'pip', hidden: true });
+document.body.append(pipEl);
+let pipOn = false, pipAuto = null;
+const pipAutoOn = () => timerCfg().pip !== false && !!(state.intervalRun || state.timer || state.hrTrack);
+const pipBtn = () => (Pip() ? '<button class="pipbtn" data-act="pipGo" aria-label="Pop out over other apps">⧉</button>' : '');
+function syncPipAuto() {
+  const p = Pip(), want = pipAutoOn();
+  if (!p || want === pipAuto) return;
+  pipAuto = want;
+  p.setAuto({ on: want }).catch(() => {});
+}
+// What the window shows: the interval timer's phase and clock, else the rest (or hold) timer, else the activity being
+// tracked; and the heart rate with its % of max, coloured by zone.
+function pipInner() {
+  const run = state.intervalRun, t = state.timer, tr = state.hrTrack;
+  let phase = '', big = '', sub = '', kind = '';
+  if (run) {
+    const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
+    if (at) {
+      kind = at.phase.kind;
+      phase = `${phaseName(run.cfg, at.phase)}${run.pausedAt ? ' · paused' : ''}`;
+      big = clock(at.phase.open ? Math.floor((ms - I.phaseStart(list, at.i)) / 1000) : at.rem);
+      sub = at.next ? `Next: ${phaseName(run.cfg, at.next)}` : '';
+    } else { phase = run.cfg.name; big = 'Done'; }
+  } else if (t?.kind === 'work') {
+    const ph = workPhase(t);
+    if (ph) { kind = ph.p.hold ? 'work' : 'prep'; phase = ph.p.label; big = clock(ph.rem); }
+  } else if (t) {
+    const rem = Math.round((t.endsAt - Date.now()) / 1000);
+    kind = rem <= 0 ? 'work' : 'rest'; phase = rem <= 0 ? 'Go' : 'Rest'; big = rem <= 0 ? `+${clock(-rem)}` : clock(rem); sub = t.next ? `Next: ${t.next}` : '';
+  } else if (tr) { phase = tr.activity; big = clock(Math.floor((Date.now() - tr.startedAt) / 1000)); }
+  const b = hrBasis(), bpm = HR.fresh() ? HR.live.bpm : null, z = HR.zoneOf(b, bpm);
+  const hr = bpm ? `<div class="piphr ${z ? `z${z}` : ''}">♥ ${esc(bpm)}${b ? `<small>${esc(Math.round(HR.pctOf(b, bpm)))}%</small>` : ''}</div>`
+    : HR.live.status !== 'off' ? '<div class="piphr">♥ …</div>' : '';
+  if (!big && !hr) return '<div class="pipin"><div class="pipphase">Nothing running</div></div>';
+  return `<div class="pipin ${esc(kind)} ${big ? '' : 'hronly'}">${phase ? `<div class="pipphase">${esc(phase)}</div>` : ''}${big ? `<div class="pipclock">${esc(big)}</div>` : ''}${hr}${sub ? `<div class="pipsub">${esc(sub)}</div>` : ''}</div>`;
+}
+function showPip(on) {
+  pipOn = on;
+  document.body.classList.toggle('pip', on);
+  pipEl.hidden = !on;
+  pipEl.innerHTML = on ? pipInner() : '';
+}
+setInterval(() => { if (pipOn) pipEl.innerHTML = pipInner(); }, 250);
+// Away (in the background, not in the window): notifications for the timer, beeps off. Back: the other way round.
+function setAway(v) {
+  if (nativeAway === v) return;
+  nativeAway = v;
+  syncTimerToWorker(true);
+  if (!v) { tickTimer(); render(); }
+}
+
 async function startNative() {
   const n = Nat();
   if (!n) return;
   n.App.addListener('backButton', nativeBack);
-  n.App.addListener('pause', () => { nativeAway = true; nativeTimerAlerts(true); U.pause(); flushVault(); });
-  n.App.addListener('resume', () => { nativeAway = false; nativeTimerAlerts(false); U.resume(); tickTimer(); render(); });
+  // Going into the window pauses the app too: it's only away when it isn't in the window.
+  n.App.addListener('pause', async () => {
+    U.pause(); flushVault();
+    const st = await Pip()?.status().catch(() => null);
+    if (!st?.pip) setAway(true);
+  });
+  n.App.addListener('resume', () => { showPip(false); setAway(false); U.resume(); tickTimer(); render(); });
+  // The window closed (✕, or swiped away) leaves the app in the background; opened full screen, it resumes.
+  Pip()?.addListener('pipChange', async ({ on }) => {
+    showPip(!!on);
+    if (on) return setAway(false);
+    const st = await Pip().status().catch(() => null);
+    if (st && !st.resumed && !st.pip) setAway(true);
+  });
   try { if ((await n.LocalNotifications.checkPermissions()).display === 'prompt') await n.LocalNotifications.requestPermissions(); } catch { /* asked later */ }
   // Timers pop up on screen with sound and vibration; reminders just sound.
   try {
@@ -794,6 +864,7 @@ async function enableNotifications(el) {
 
 function tickTimer() {
   syncTimerToWorker();
+  syncPipAuto();
   const t = state.timer;
   if (!t) return;
   if (t.kind === 'work') return tickWork(t);
@@ -825,7 +896,7 @@ function renderTimer() {
   timerEl.innerHTML = `<div class="fill" style="width:${esc(pct)}%"></div>
     <div class="tbody"><div class="tmain"><span class="tclock">${over ? '+' + clock(-rem) : clock(rem)}</span>
       <span class="tlabel">${HR.fresh() ? `<span class="hrinline">♥ ${esc(HR.live.bpm)}</span> ` : ''}${over ? 'Go' : 'Rest'}${t.next ? ` · next: ${esc(t.next)}` : ''}</span></div>
-      <div class="tbtns">${over ? '' : `<button data-act="timerAdj" data-d="-15">−15</button><button data-act="timerAdj" data-d="15">+15</button>`}
+      <div class="tbtns">${pipBtn()}${over ? '' : `<button data-act="timerAdj" data-d="-15">−15</button><button data-act="timerAdj" data-d="15">+15</button>`}
       <button data-act="timerStop">${over ? 'Done' : 'Skip'}</button></div></div>`;
 }
 
@@ -838,7 +909,7 @@ function renderWork(t) {
   timerEl.innerHTML = `<div class="fill" style="width:${esc(Math.min(100, ph.frac * 100))}%"></div>
     <div class="tbody"><div class="tmain"><span class="tclock">${clock(ph.rem)}</span>
       <span class="tlabel">${esc(ph.p.label)} · ${esc(t.name)}</span></div>
-      <div class="tbtns"><button data-act="workAdd">+15</button>
+      <div class="tbtns">${pipBtn()}<button data-act="workAdd">+15</button>
       ${held ? `<button data-act="workLog">Log ${clock(held)}</button>` : ''}
       <button data-act="workCancel" aria-label="Cancel the timer">✕</button></div></div>`;
 }
@@ -1123,6 +1194,7 @@ function viewTimer() {
   if (ui.ivLog) return viewIntervalLog(ui.ivLog);
   const d = ivDraft();
   const presets = state.intervals?.presets ?? [];
+  if (d.mode === 'test') return viewMaxHrSetup(d, presets);
   const steady = d.mode === 'steady';
   const field = (k, label, val, hint = '', mode = 'text', ph = '') => `<div class="field"><label for="iv-${esc(k)}">${label}${hint ? ` <span class="hint">${hint}</span>` : ''}</label>
     <input id="iv-${esc(k)}" class="num" inputmode="${esc(mode)}" data-iv="${esc(k)}" value="${esc(val)}" ${ph ? `placeholder="${esc(ph)}"` : ''}></div>`;
@@ -1140,7 +1212,7 @@ function viewTimer() {
       <div class="row2 fields">${field('prep', 'Get ready', clock(d.prep))}<div class="field"><label for="iv-name">Name</label><input id="iv-name" data-iv="name" value="${esc(d.name)}"></div></div>
     </details>`;
   return `<header class="top"><h1>Timer</h1><div class="hbtns">${hrPill()}</div></header>
-    <div class="chips">${presets.map(p => `<button class="chip ${esc(d.presetId === p.id ? 'on' : '')}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>
+    ${presetChips(d, presets)}
     <div class="card">
       <div class="seg ivmode"><button class="${esc(steady ? '' : 'on')}" data-act="ivMode" data-v="intervals">Intervals</button><button class="${esc(steady ? 'on' : '')}" data-act="ivMode" data-v="steady">Steady</button></div>
       <p class="meta">${steady ? 'One steady stretch, timing you in your target.' : 'Rounds of work and rest.'}</p>
@@ -1154,6 +1226,24 @@ function viewTimer() {
     </div>
     ${timerSoundCard()}
     ${photosCard()}`;
+}
+
+// The max heart-rate test: its steps, what you'll need, and Start. Not editable or saved: it's always the same test.
+const presetChips = (d, presets) => `<div class="chips">${presets.map(p => `<button class="chip ${esc(d.presetId === p.id ? 'on' : '')}" data-act="ivPreset" data-id="${esc(p.id)}">${esc(p.name)}</button>`).join('')}</div>`;
+function viewMaxHrSetup(d, presets) {
+  const max = Number(state.settings.hrMax) || null;
+  return `<header class="top"><h1>Timer</h1><div class="hbtns">${hrPill()}</div></header>
+    ${presetChips(d, presets)}
+    <div class="card">
+      <div class="seg ivmode"><button data-act="ivMode" data-v="intervals">Intervals</button><button data-act="ivMode" data-v="steady">Steady</button></div>
+      <b>Max heart rate test</b>
+      <p class="meta">About 25 minutes on a bike, rower or run, with your strap on. Your heart rate peaks in the last minute; the highest reading becomes your max, and your zones follow.</p>
+      <div class="menu flush">${I.MAX_HR_TEST.map(x => `<div class="frow"><span class="grow"><span class="name">${esc(x.label)}</span><span class="meta">${esc(x.cue)}</span></span><b>${clock(x.secs)}</b></div>`).join('')}</div>
+      <div class="field"><label for="iv-ex-0">Exercise</label><select id="iv-ex-0" data-ivex="0">${ivExerciseOptions(I.exerciseFor(d, 1))}</select></div>
+      <p class="meta">${HR.live.status === 'off' ? '<b>Connect your strap first:</b> the test needs it. ' : ''}Your max now: ${max ? `<b>${esc(max)}</b>` : 'not set'}. Only if you're healthy and used to hard efforts; stop if you feel dizzy, sick or any chest pain.</p>
+      <div class="brow"><button class="primary big" data-act="ivStart">Start the test</button></div>
+    </div>
+    ${timerSoundCard()}`;
 }
 
 // The timer's heart-rate target: a range for the work, whether the clock waits for you to reach it, and beeps.
@@ -1190,7 +1280,7 @@ function viewHeart() {
   const hs = (ui.heart ??= { range: '12w', detail: null, activity: 'Volleyball' });
   if (hs.detail) return viewHeartSession(hs.detail);
   const b = hrBasis(), tr = state.hrTrack, open = currentSession();
-  let h = `<header class="top"><div><h1>Heart</h1>${b ? `<div class="sub">Max ${esc(b.max)}${b.reserve ? ` · resting ${esc(b.rest)}` : ''} · zones from ${b.reserve ? 'reserve' : 'max'}</div>` : ''}</div><div class="hbtns">${hrPill()}</div></header>`;
+  let h = `<header class="top"><div><h1>Heart</h1>${b ? `<div class="sub">Max ${esc(b.max)}${b.reserve ? ` · resting ${esc(b.rest)}` : ''} · zones from ${b.reserve ? 'reserve' : 'max'}</div>` : ''}</div><div class="hbtns inline">${HR.live.status !== 'off' || tr ? pipBtn() : ''}${hrPill()}</div></header>`;
   if (!HR.supported()) h += `<div class="card muted">No Bluetooth in this browser: use Chrome on Android to connect a strap.</div>`;
   if (!b) h += `<div class="banner">Add your max heart rate or age for zones and calories. <button class="link" data-act="setGo" data-p="you">Settings</button></div>`;
   h += `<div class="card heartlive" id="heart-live">${heartLiveInner()}</div>`;
@@ -1387,13 +1477,14 @@ function timerSoundCard() {
   return `<div class="label">Sound</div><div class="menu">
       ${frow('Loud beeps', switchIn('settings.timer.loud', tc.loud !== false), 'sharp tones that cut through music')}
       ${frow('Say what’s next', switchIn('settings.timer.voice', !!tc.voice))}
-      <button class="menurow" data-act="timerTest"><span class="grow"><span class="name">Test the sound</span><span class="meta">with your music on</span></span></button></div>`;
+      <button class="menurow" data-act="timerTest"><span class="grow"><span class="name">Test the sound</span><span class="meta">with your music on</span></span></button></div>
+    ${Pip() ? `<div class="label">Pop-out</div><div class="menu">${frow('Pop out when I leave the app', switchIn('settings.timer.pip', tc.pip !== false), 'while a timer runs: the clock and heart rate stay on top, over a video too. Or tap ⧉.')}</div>` : ''}`;
 }
 
 function viewIntervalRun(run) {
   const list = I.phases(run.cfg), ms = I.elapsed(run), at = I.phaseAt(list, ms);
   const pics = slidesOn();
-  return `<header class="top"><h1>${esc(run.cfg.name)}</h1><div class="hbtns">${hrPill()}</div></header>
+  return `<header class="top"><h1>${esc(run.cfg.name)}</h1><div class="hbtns inline">${pipBtn()}${hrPill()}</div></header>
     <div class="ivrun ${esc(at?.phase.kind ?? 'done')}" id="iv-run">${ivRunInner(run, list, at)}</div>
     <div class="ivhr" id="iv-hr">${hrBigInner()}</div>
     <div class="brow ivbtns">${run.pausedAt ? '<button class="primary big" data-act="ivResume">Resume</button>' : '<button class="big" data-act="ivPause">Pause</button>'}
@@ -1402,6 +1493,8 @@ function viewIntervalRun(run) {
 }
 
 const IV_LABEL = { prep: 'Get ready', work: 'Work', rest: 'Rest', setRest: 'Rest between sets' };
+// A phase's name: the test's step, else its kind (with the round when there are several).
+const phaseName = (cfg, p) => p.label ?? (p.steady ? 'Steady' : `${IV_LABEL[p.kind]}${p.kind === 'work' && cfg.rounds > 1 ? ` · round ${p.round} of ${cfg.rounds}` : ''}`);
 function ivRunInner(run, list, at) {
   if (!at) return '<div class="ivclock">Done</div>';
   const c = run.cfg, p = at.phase;
@@ -1417,6 +1510,13 @@ function ivRunInner(run, list, at) {
       <div class="ivsub">${esc(ex)}</div>
       ${c.hr ? `<div class="ivtarget ${esc(goal && inT >= goal ? 'met' : '')}">${esc(c.hr.lo === 60 && c.hr.hi === 70 ? 'Zone 2' : HR.targetText(c.hr))}: <b>${clock(inT)}</b>${goal ? ` of ${clock(goal)}${inT >= goal ? ' ✓' : ''}` : ''}</div>` : ''}`;
   }
+  if (p.test) {
+    return `<div class="ivfill" style="width:${esc(Math.min(100, at.frac * 100))}%"></div>
+      <div class="ivphase">${esc(p.label)}${run.pausedAt ? ' · paused' : ''}</div>
+      <div class="ivclock">${clock(at.rem)}</div>
+      <div class="ivsub">${esc(p.cue)}</div>
+      <div class="ivnext">${at.next ? `Next: ${esc(at.next.label)} · ${clock(at.next.secs)}` : 'Last one'}</div>`;
+  }
   const next = at.next ? `Next: ${IV_LABEL[at.next.kind]}${at.next.kind === 'work' ? ` · ${esc(exOf(at.next.exerciseId)?.name ?? '')}` : ''}` : 'Last one';
   return `<div class="ivfill" style="width:${esc(Math.min(100, at.frac * 100))}%"></div>
     <div class="ivphase">${IV_LABEL[p.kind]}${run.pausedAt ? ' · paused' : ''}${waiting ? ' · waiting' : ''}</div>
@@ -1428,19 +1528,40 @@ function ivRunInner(run, list, at) {
 // After a run: what you did, ready to log. Totals are per set (calories for the bike, else reps); blank still logs the rounds.
 function viewIntervalLog(lg) {
   const done = I.roundsDone(I.phases(lg.cfg), lg.ms);
-  if (!done.length) return `<header class="top"><h1>Timer</h1></header><div class="card"><p>No rounds finished.</p>
+  const test = lg.cfg.mode === 'test' ? maxHrResult(lg) : '';
+  if (!done.length) return `<header class="top"><h1>Timer</h1></header>${test}<div class="card"><p>${test ? 'Under a minute: nothing to log.' : 'No rounds finished.'}</p>
     <div class="brow"><button class="primary" data-act="ivDiscard">OK</button></div></div>`;
   const open = currentSession();
-  return `<header class="top"><h1>Log it</h1></header>
+  return `<header class="top"><h1>Log it</h1></header>${test}
     <div class="card"><p class="meta">${esc(lg.cfg.name)} · ${clock(Math.round(lg.ms / 1000))} · ${open ? 'into your open workout' : 'as its own workout'}</p>
     ${done.map(d => {
       const ex = exOf(d.exerciseId);
       const unitWord = ex?.repUnit ?? (ex?.metric === 'time' ? null : 'reps');
-      return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')}${lg.cfg.mode === 'steady' ? '' : ` · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}`}</label>
+      return `<div class="field"><label for="iv-total-${esc(d.set)}">${lg.cfg.sets > 1 ? `Set ${d.set}: ` : ''}${esc(ex?.name ?? '?')}${I.oneGo(lg.cfg) ? '' : ` · ${d.rounds.length} round${d.rounds.length === 1 ? '' : 's'}`}</label>
         ${unitWord ? `<input id="iv-total-${esc(d.set)}" class="num" inputmode="numeric" data-ivtotal="${esc(d.set)}" value="${esc(lg.totals?.[d.set] ?? '')}" placeholder="total ${esc(unitWord)}">` : `<span class="meta">${lg.cfg.work}s a round</span>`}</div>`;
     }).join('')}
-    ${ivRoundsTable(lg)}
-    <div class="brow"><button class="primary big" data-act="ivLog">${lg.cfg.mode === 'steady' ? `Log ${clock(Math.round(lg.ms / 1000))}` : `Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds`}</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
+    ${lg.cfg.mode === 'test' ? '' : ivRoundsTable(lg)}
+    <div class="brow"><button class="primary big" data-act="ivLog">${I.oneGo(lg.cfg) ? `Log ${clock(Math.round(lg.ms / 1000))}` : `Log ${done.reduce((n, d) => n + d.rounds.length, 0)} rounds`}</button><button class="quiet" data-act="ivDiscard">Discard</button></div></div>`;
+}
+
+// The test's result: the peak, each step's average and peak, and the max to keep.
+function maxHrResult(lg) {
+  const rec = lg.hr ?? currentSession()?.hr, end = (lg.endAt ?? Date.now()) + 1;
+  const list = I.phases(lg.cfg), marks = (lg.marks ?? []).filter(m => list[m.i]?.test);
+  const sm = rec && marks.length ? HR.summary(rec, marks[0].at, end) : null;
+  if (!sm) return `<div class="card"><b>No heart rate recorded</b><p class="meta">The test needs your strap connected. Connect it and run the test again.</p></div>`;
+  const allOut = list.findIndex(p => p.peak);
+  const finished = lg.ms >= I.phaseStart(list, allOut + 1);
+  const max = Number(state.settings.hrMax) || null, peak = sm.max;
+  const rows = marks.map((m, k) => { const x = HR.summary(rec, m.at, marks[k + 1]?.at ?? end); return x ? `<tr><td>${esc(list[m.i].label)}</td><td>${esc(x.avg)}</td><td>${esc(x.max)}</td></tr>` : ''; }).join('');
+  const verdict = !max ? 'Your max isn’t set yet.'
+    : peak > max ? `Higher than your max of ${esc(max)}.`
+    : peak === max ? 'The same as your max.'
+    : `Under your max of ${esc(max)}: keep yours unless you’re sure you went all out.`;
+  return `<div class="card maxhr"><div class="meta">Peak heart rate</div><div class="hrbig">♥ ${esc(peak)}</div>
+      <p class="meta">${verdict}${finished ? '' : ' Stopped before the all-out minute was over, so this may be low.'}</p>
+      ${peak !== max ? `<div class="brow"><button class="${peak > (max ?? 0) ? 'primary' : ''}" data-act="hrUseTop" data-v="${esc(peak)}">Use ${esc(peak)} as my max</button></div>` : ''}
+      <table class="hrtable"><thead><tr><th>Step</th><th>Avg</th><th>Peak</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // The run's heart rate, round by round (with a recording): average, time at the target, and the drop over the rest.
@@ -1461,7 +1582,7 @@ function ivRoundsTable(lg) {
 
 // A scheme for a block of timer rounds (kept, so the block has one; never suggested: manualOnly).
 function intervalScheme(cfg, tier, reps, ms = 0) {
-  if (cfg.mode === 'steady') {
+  if (I.oneGo(cfg)) {
     const m = Math.max(1, Math.round(ms / 60000)), id = `s-i-steady-${m}-${tier}`;
     let st = schOf(id);
     if (!st) { st = { id, name: `Steady ${m} min`, sets: 1, reps: reps || 1, restSec: 0, minutes: m, tiers: [tier], manualOnly: true }; state.schemes.push(st); }
@@ -1485,7 +1606,7 @@ function logIntervals(lg) {
   const open = currentSession();
   const stats = ivStats(lg);
   const s = open ?? { id: L.uid(), day: L.dayKey(lg.startedAt), checkinAt: lg.startedAt, firstSetAt: null, status: 'done', source: 'interval',
-    locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round((cfg.mode === 'steady' ? lg.ms / 1000 : I.totalSecs(cfg)) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
+    locationId: ui.ci.locationId, locationIds: ui.ci.locationIds, minutes: Math.max(1, Math.round((I.oneGo(cfg) ? lg.ms / 1000 : I.totalSecs(cfg)) / 60)), durationMin: Math.max(1, Math.round(lg.ms / 60000)), blocks: [] };
   let n = 0;
   for (const d of done) {
     const ex = exOf(d.exerciseId);
@@ -1500,8 +1621,8 @@ function logIntervals(lg) {
     s.blocks.push(b);
     d.rounds.forEach((r, i) => {
       state.sets.push({ id: L.uid(), sessionId: s.id, blockId: b.id, exerciseId: ex.id, tier, schemeId: sc.id, load: null,
-        reps: ['reps', 'load_reps'].includes(ex.metric) ? reps[i] : null, time: ex.metric === 'time' ? (cfg.mode === 'steady' ? Math.round(lg.ms / 1000) : cfg.work) : null, distance: null,
-        done: true, loggedAt: cfg.mode === 'steady' && lg.endAt ? lg.endAt : lg.startedAt + r.endMs, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}) });
+        reps: ['reps', 'load_reps'].includes(ex.metric) ? reps[i] : null, time: ex.metric === 'time' ? (I.oneGo(cfg) ? Math.round(lg.ms / 1000) : cfg.work) : null, distance: null,
+        done: true, loggedAt: I.oneGo(cfg) && lg.endAt ? lg.endAt : lg.startedAt + r.endMs, ...(state.settings.bodyweight ? { bw: state.settings.bodyweight } : {}) });
       n++;
     });
   }
@@ -1558,9 +1679,10 @@ function tickInterval() {
   if (ivLast !== at.i) {
     if (ivLast != null) {
       const c = run.cfg, p = at.phase;
-      if (p.kind === 'work') { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(250); }
+      if (p.peak) { beep(3, 1320); if (timerCfg().vibrate) navigator.vibrate?.([200, 80, 200, 80, 200]); }
+      else if (p.kind === 'work') { beep(1, 990); if (timerCfg().vibrate) navigator.vibrate?.(250); }
       else { beep(2, 520); if (timerCfg().vibrate) navigator.vibrate?.([120, 80, 120]); }
-      say(p.kind === 'work' ? (p.steady ? 'Go' : c.rounds > 1 ? `${p.round === c.rounds ? 'Last round' : `Round ${p.round}`}, go` : 'Go')
+      say(p.say ? p.say : p.kind === 'work' ? (p.steady ? 'Go' : c.rounds > 1 ? `${p.round === c.rounds ? 'Last round' : `Round ${p.round}`}, go` : 'Go')
         : p.kind === 'setRest' ? 'Rest. Next set coming' : 'Rest');
     }
     ivLast = at.i;
@@ -2968,7 +3090,7 @@ function hrSettingsRows() {
   const st = state.settings, b = hrBasis();
   const top = Math.max(0, ...state.sessions.map(s => s.hr?.max ?? HR.summary(s.hr)?.max ?? 0));
   const rows = [
-    frow('Max heart rate', numIn('settings.hrMax', st.hrMax, 'data-rerender placeholder="—"'), top ? `highest the strap has seen: ${top}` : 'or about 208 − 0.7 × your age'),
+    frow('Max heart rate', numIn('settings.hrMax', st.hrMax, 'data-rerender placeholder="—"'), top ? `highest the strap has seen: ${top}` : 'or about 208 − 0.7 × your age, or the test in Timer'),
     top && top !== st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(top)}"><span class="grow"><span class="name">Use ${esc(top)} as your max</span></span></button>` : '',
     frow('Age', numIn('settings.hrAge', st.hrAge, 'data-rerender placeholder="—"'), 'for calories'),
     HR.maxFromAge(st.hrAge) && !st.hrMax ? `<button class="menurow" data-act="hrUseTop" data-v="${esc(HR.maxFromAge(st.hrAge))}"><span class="grow"><span class="name">Use ${esc(HR.maxFromAge(st.hrAge))} as your max</span><span class="meta">estimated from your age</span></span></button>` : '',
@@ -4685,6 +4807,7 @@ const actions = {
     toast(n ? `Logged ${n} round${n === 1 ? '' : 's'}${kc ? ` · ${kc} kcal` : ''}` : 'Nothing to log');
   },
   ivDiscard: () => { ui.ivLog = null; render(); },
+  pipGo: () => Pip()?.enter().catch(e => toast(e?.message || 'Couldn’t pop out')),
   // Intervals or one steady stretch. Steady starts as zone 2 until you stop; intervals as 4 rounds of 4 minutes on, 1 off.
   ivMode: d => {
     const v = ivDraft();

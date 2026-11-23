@@ -229,7 +229,7 @@ export function seed() {
   ];
 
   const s = splitCategories({
-    version: 35,
+    version: 36,
     savedAt: null, // when this data was last saved (store.js save()); compared with the IndexedDB copy
     settings: {
       weekStartDay: 1, // Monday

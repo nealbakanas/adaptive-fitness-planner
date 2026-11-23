@@ -396,6 +396,16 @@ export function migrate(s) {
     splitLunges(s);
     s.version = 35;
   }
+  if (s.version < 36) {
+    // v36: the max heart-rate test, after the other heart-rate timers (unless you have one with its id).
+    const presets = (s.intervals ??= { presets: [], last: null }).presets ??= [];
+    const t = DEFAULT_PRESETS.find(p => p.id === 'iv-maxhr');
+    if (t && !presets.some(p => p.id === t.id)) {
+      const after = presets.findLastIndex(p => p.hr && p.id?.startsWith('iv-'));
+      presets.splice(after >= 0 ? after + 1 : presets.length, 0, structuredClone(t));
+    }
+    s.version = 36;
+  }
   return s;
 }
 
