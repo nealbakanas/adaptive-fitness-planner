@@ -650,3 +650,20 @@ b.warn { color: var(--warn); } b.good { color: var(--good); }
 .selbar { position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-top: 8px; box-shadow: 0 -4px 16px #0006; }
 .selbar span { flex: 1 1 auto; }
+
+/* Pop-out (the app's picture-in-picture window): just the clock and heart rate, filling the little window. */
+#pip { position: fixed; inset: 0; z-index: 1000; background: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#pip[hidden] { display: none; }
+body.pip > :not(#pip) { display: none !important; }
+.pipin { width: 100%; padding: 3vh 4vw; text-align: center; line-height: 1.05; }
+.pipphase, .pipsub { font-size: 12vh; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pipsub { font-size: 10vh; margin-top: 2vh; }
+.pipclock { font-size: 38vh; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pipin.work .pipclock { color: #4ade80; } .pipin.rest .pipclock, .pipin.setRest .pipclock { color: #60a5fa; } .pipin.prep .pipclock { color: #fbbf24; }
+.piphr { font-size: 22vh; font-weight: 700; color: #ff6b6b; font-variant-numeric: tabular-nums; }
+.piphr small { font-size: .55em; color: var(--muted); margin-left: .25em; }
+.piphr.z1 { color: #a3adba; } .piphr.z2 { color: #5aa5f5; } .piphr.z3 { color: #2fc58f; } .piphr.z4 { color: #f0b13f; } .piphr.z5 { color: #ff6b4a; }
+.pipin.hronly .piphr { font-size: 42vh; }
+@media (max-height: 160px) { .pipsub { display: none; } .pipclock { font-size: 44vh; } }
+.pipbtn { font-size: 18px; line-height: 1; padding: 6px 10px; }
+.maxhr .hrbig { font-size: 56px; margin: 4px 0; }

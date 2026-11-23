@@ -23,6 +23,8 @@ Done items move to the changelog in the PRs, not here.
 - **Android app, untested on a phone yet:** heart rate over the native Bluetooth plugin, and whether it keeps recording
   with the screen off (the foreground service holds the connection; whether the WebView's JavaScript keeps receiving
   readings while the screen is off is the open question). If not, the next step is recording in the service itself.
+- **Pop-out, untested on a phone yet:** going home mid-timer pops out on Android 12+ (auto-enter), and the window stays
+  over YouTube full screen; whether the WebView keeps the clock and beeps going in the window. Needs the new APK.
 
 ## Things to check with real use
 

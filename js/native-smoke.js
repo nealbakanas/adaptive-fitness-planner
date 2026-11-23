@@ -37,7 +37,18 @@ globalThis.AFPNative = {
   KeepAwake: { keepAwake: rec('awake.on'), allowSleep: rec('awake.off') },
   App: { addListener: (ev, fn) => { if (ev === 'backButton') back = fn; (appListeners[ev] ??= []).push(fn); return Promise.resolve({ remove() {} }); }, minimizeApp: rec('app.minimize') },
   ForegroundService: { startForegroundService: rec('fg.start'), stopForegroundService: rec('fg.stop') },
+  // Pop-out: the app's own plugin. `pip` is what Android would report; pipChange is fired by hand, as Android would.
+  Capacitor: { isPluginAvailable: n => n === 'Pip' },
+  Pip: {
+    status: async () => ({ supported: true, ...pip }),
+    enter: async () => { calls.push(['pip.enter']); return { ok: true }; },
+    setAuto: async o => { calls.push(['pip.auto', o.on]); },
+    addListener: (ev, fn) => { (appListeners[`pip.${ev}`] ??= []).push(fn); return Promise.resolve({ remove() {} }); },
+  },
 };
+const pip = { pip: false, resumed: true };
+const pipChange = on => { for (const fn of appListeners['pip.pipChange'] ?? []) fn({ on }); };
+const lastAuto = () => calls.filter(c => c[0] === 'pip.auto').at(-1)?.[1];
 const beat = bpm => { const b = new DataView(new ArrayBuffer(2)); b.setUint8(0, 0); b.setUint8(1, bpm); notify(b); };
 let vis = 'visible';
 Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => vis });
@@ -88,7 +99,46 @@ try {
   check('locked mid-Tabata: each phase as a notification at its time', phases.length >= 15 && /^Work · round 1 of 8/.test(phases[0].title) && phases[0].schedule.at > Date.now() && phases.at(-1).title === 'Done' && phases.every(n => n.smallIcon === 'ic_stat_afp'), JSON.stringify(phases.slice(0, 3).map(n => n.title)));
   setVis('visible'); await tick(50);
   check('back in the app: they\'re cancelled', ![...scheduled.keys()].some(id => id >= 7001 && id < 7060));
-  click('[data-act=ivStop]'); click('[data-act=ivDiscard]');
+
+  // Pop-out: going home mid-timer pops the app out over other apps; in the window the timer carries on itself.
+  check('a running timer turns pop-out-on-leaving on', lastAuto() === true, JSON.stringify(calls.filter(c => c[0] === 'pip.auto')));
+  check('and the timer has a pop-out button', !!q('[data-act=pipGo]'));
+  click('[data-act=pipGo]'); await tick(20);
+  check('…which pops out', calls.some(c => c[0] === 'pip.enter'));
+  Object.assign(pip, { pip: true, resumed: false });
+  pipChange(true); setVis('hidden'); await tick(300);
+  const pv = q('#pip');
+  check('the window shows just the phase, the clock and the heart rate', document.body.classList.contains('pip') && !pv.hidden && /Get ready|Work/.test(pv.textContent) && /\d:\d\d/.test(pv.textContent) && /♥ 128/.test(pv.textContent), pv.textContent);
+  check('in the window the app isn\'t away: no notifications, beeps carry on', ![...scheduled.keys()].some(id => id >= 7010 && id < 7060));
+  Object.assign(pip, { pip: false, resumed: false });
+  pipChange(false); await tick(50);
+  check('closing the window leaves it in the background: notifications again', [...scheduled.keys()].some(id => id >= 7010 && id < 7060) && !document.body.classList.contains('pip'));
+  Object.assign(pip, { pip: false, resumed: true });
+  setVis('visible'); await tick(50);
+  check('back in the app: cancelled, the full app back', ![...scheduled.keys()].some(id => id >= 7010 && id < 7060) && q('#pip').hidden);
+  click('[data-act=ivStop]'); click('[data-act=ivDiscard]'); await tick(300);
+  check('nothing running: going home just goes home', lastAuto() === false);
+  check('Timer has the pop-out setting', !!q('input[data-bind="settings.timer.pip"]'));
+
+  // The max heart-rate test, with the strap: its steps, the peak at the end, and the max set from it.
+  click('[data-act=ivPreset][data-id=iv-maxhr]');
+  check('the test: its steps and a warning', /Max heart rate test/.test(text()) && /All out/.test(text()) && /chest pain/.test(text()) && !q('[data-act=ivSave]'));
+  click('[data-act=ivStart]'); await tick(300);
+  const skipTo = async label => { for (let i = 0; i < 8 && !new RegExp(label).test(q('#iv-run .ivphase')?.textContent ?? ''); i++) { click('[data-act=ivSkip]'); await tick(300); } };
+  await skipTo('Warm up');
+  beat(122); await tick(1100); beat(124);
+  check('each step with its cue', /Warm up/.test(q('#iv-run').textContent) && /steady pace/.test(q('#iv-run').textContent) && /Next: Hard · 3:00/.test(q('#iv-run').textContent), q('#iv-run').textContent);
+  // (Heart rate is kept as 5-second averages: a reading 5 s into a step lands in that step.)
+  await skipTo('Hard'); await tick(5100); beat(171);
+  await skipTo('All out'); await tick(5100); beat(193); await tick(5100); beat(196); await tick(300);
+  click('[data-act=ivStop]');
+  check('the result: the peak, higher than your max', /Peak heart rate/.test(text()) && /♥ 196/.test(text()) && /Higher than your max of 190/.test(text()) && /may be low/.test(text()), text().slice(0, 300));
+  check('…each step\'s average and peak', /Warm up\s*12\d/.test(text()) && /All out\s*19\d\s*196/.test(text()), text().slice(0, 500));
+  click('[data-act=hrUseTop][data-v="196"]');
+  check('one tap makes it your max', S().settings.hrMax === 196);
+  check('and it logs as one stretch', /Log \d+:\d\d/.test(q('[data-act=ivLog]')?.textContent ?? ''));
+  click('[data-act=ivDiscard]');
+  S().settings.hrMax = 190;
   S().timer = { endsAt: Date.now() + 90e3, total: 90, blockId: 'b', setId: 's', next: 'Back squat · set 2' };
   setVis('hidden'); await tick(50);
   check('the rest timer: "Rest over" when it ends', scheduled.get(7001)?.title === 'Rest over' && /Back squat · set 2/.test(scheduled.get(7001).body) && Math.abs(scheduled.get(7001).schedule.at - S().timer.endsAt) < 5);
@@ -129,6 +179,11 @@ try {
   check('back: other tabs go to Today', q('#nav button.on')?.dataset.tab === 'today');
   back();
   check('back on Today: the app goes to the background', calls.some(c => c[0] === 'app.minimize'));
+  const entered = calls.filter(c => c[0] === 'pip.enter').length;
+  S().timer = { endsAt: Date.now() + 90e3, total: 90, blockId: 'b', setId: 's', next: 'Back squat · set 2' };
+  back(); await tick(20);
+  check('…but with a timer running it pops out instead', calls.filter(c => c[0] === 'pip.enter').length === entered + 1);
+  S().timer = null;
 } catch (e) {
   out.push(['FAIL', `native — ${e.message} ${e.stack?.split('\n')[1] ?? ''}`]);
 }

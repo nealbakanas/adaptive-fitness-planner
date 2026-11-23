@@ -1,6 +1,6 @@
 // The interval timer (the Timer tab): Tabata, EMOM, 30/30 and anything between, or one steady stretch (zone 2 for 45
 // minutes, or until you stop). Pure: no DOM, no storage.
-// A config is { name, mode, work, rest, rounds, sets, setRest, prep, exercises, hr }. `mode` 'steady' is one work stretch
+// A config is { name, mode ('intervals', 'steady' or 'test'), work, rest, rounds, sets, setRest, prep, exercises, hr }. `mode` 'steady' is one work stretch
 // of `work` seconds, 0 meaning until you stop (and `hr.goal`: minutes at the heart-rate target to aim for). (seconds; `exercises`: an exercise id per set,
 // repeating when there are fewer than sets; `hr`: a heart-rate target for the work, { lo, hi } in % of max with a heart-rate
 // strap, plus `hold` (the work clock only runs at the target) and `alert` (beep when you drift out of it)). A run is laid out as phases ahead of time, so where you are is just a
@@ -16,7 +16,22 @@ export const DEFAULT_PRESETS = [
   { id: 'iv-z2-45', name: 'Zone 2 · 45 min', mode: 'steady', work: 2700, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: 10, hr: { lo: 60, hi: 70, alert: true } },
   { id: 'iv-4x4-80', name: '4 × 4 min at 80%+', work: 240, rest: 60, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 80, hi: null, hold: true } },
   { id: 'iv-4x4-nor', name: 'Norwegian 4 × 4', work: 240, rest: 180, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 85, hi: 95 } },
+  { id: 'iv-maxhr', name: 'Max heart rate test', mode: 'test', prep: 10 },
 ];
+
+// The max heart-rate test (mode 'test'): a field test on a bike, rower or run, its steps fixed. A long warm-up, three
+// minutes as hard as you can hold, an easy spell, then a two-minute build into a minute all out: your heart rate peaks
+// at the end, within a few beats of your max. `say` is what the voice says as the step starts.
+export const MAX_HR_TEST = [
+  { kind: 'work', label: 'Warm up', secs: 600, cue: 'Easy, building to a steady pace you could talk at', say: 'Warm up. Easy, building slowly' },
+  { kind: 'work', label: 'Hard', secs: 180, cue: 'As hard as you can hold for three minutes', say: 'Three minutes hard. As hard as you can hold' },
+  { kind: 'rest', label: 'Easy', secs: 180, cue: 'Keep moving, easy', say: 'Easy. Keep moving' },
+  { kind: 'work', label: 'Build', secs: 120, cue: 'Hard, and harder every 30 seconds', say: 'Build. Harder every thirty seconds' },
+  { kind: 'work', label: 'All out', secs: 60, cue: 'Everything you have, right to the end', say: 'All out. Everything you have', peak: true },
+  { kind: 'rest', label: 'Cool down', secs: 300, cue: 'Easy until your breathing settles', say: 'Cool down. Easy' },
+];
+// One go rather than rounds (steady, or the test): logged as one stretch of the time it ran.
+export const oneGo = cfg => cfg?.mode === 'steady' || cfg?.mode === 'test';
 // The heart-rate target kept clean: lo 40-100%, hi above it or none; null without a lo.
 export function cleanHr(hr) {
   const lo = Math.round(Number(hr?.lo));
@@ -32,6 +47,13 @@ const n = (v, lo, hi, d) => { const x = Math.round(Number(v)); return Number.isF
 
 // A config with every number in range (work at least 5 s; rest, set rest and prep may be 0).
 export function clean(cfg = {}) {
+  if (cfg.mode === 'test') {
+    return {
+      name: String(cfg.name ?? '').trim() || 'Max heart rate test', mode: 'test', test: 'maxhr',
+      work: 0, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: n(cfg.prep, 0, 60, 10),
+      exercises: Array.isArray(cfg.exercises) ? cfg.exercises.filter(Boolean).slice(0, 1) : [], hr: null,
+    };
+  }
   if (cfg.mode === 'steady') {
     // One stretch: no rest, rounds or sets. Clock runs only at the target makes no sense here (nothing to wait for).
     const hr = cleanHr(cfg.hr);
@@ -60,6 +82,10 @@ export const exerciseFor = (cfg, set) => (cfg.exercises?.length ? cfg.exercises[
 export function phases(raw) {
   const cfg = clean(raw), out = [];
   if (cfg.prep) out.push({ kind: 'prep', secs: cfg.prep, set: 1, round: 1, exerciseId: exerciseFor(cfg, 1) });
+  if (cfg.mode === 'test') {
+    MAX_HR_TEST.forEach((x, i) => out.push({ ...x, set: 1, round: i + 1, exerciseId: exerciseFor(cfg, 1), test: true }));
+    return out;
+  }
   if (cfg.mode === 'steady') {
     out.push({ kind: 'work', secs: cfg.work || OPEN_SECS, set: 1, round: 1, exerciseId: exerciseFor(cfg, 1), steady: true, ...(cfg.work ? {} : { open: true }) });
     return out;
@@ -97,6 +123,10 @@ export const phaseStart = (list, i) => list.slice(0, i).reduce((t, p) => t + p.s
 // (a steady stretch: a minute is enough, however long it was meant to be).
 // Returns [{ set, exerciseId, rounds: [{ round, endMs }] }] for sets with at least one round.
 export function roundsDone(list, ms) {
+  if (list.some(p => p.test)) {
+    const total = list.reduce((t, p) => t + p.secs * 1000, 0), from = list[0]?.kind === 'prep' ? list[0].secs * 1000 : 0;
+    return ms - from >= 60e3 ? [{ set: 1, exerciseId: list.at(-1).exerciseId, rounds: [{ round: 1, endMs: Math.min(total, ms) }] }] : [];
+  }
   const sets = new Map();
   let at = 0;
   for (const p of list) {
@@ -121,6 +151,7 @@ export function spread(total, rounds) {
 const clock = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 export function describe(raw) {
   const c = clean(raw);
+  if (c.mode === 'test') return `${MAX_HR_TEST.map(x => `${x.label} ${x.secs >= 60 ? `${x.secs / 60} min` : `${x.secs}s`}`).join(' · ')} · ${clock(totalSecs(c))}`;
   if (c.mode === 'steady') {
     const t = c.hr ? ` at ${c.hr.hi ? `${c.hr.lo}-${c.hr.hi}%` : `${c.hr.lo}%+`} of max${c.hr.goal ? `, aiming for ${c.hr.goal} min there` : ''}` : '';
     return `${c.work ? `${Math.round(c.work / 60)} min` : 'Until you stop'}${t}`;
