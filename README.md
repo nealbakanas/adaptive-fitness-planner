@@ -116,6 +116,11 @@ when the native side changes. In the app, `js/app.js` loads `vendor/capacitor/na
   clock and the heart rate. Going home (or back on Today) while a timer runs or an activity is tracked pops it out too
   (Timer → *Pop out when I leave the app*, on by default). In the window beeps and the voice carry on and no
   notifications are scheduled; closing it leaves the app in the background as usual.
+- **Update notice**: most changes need nothing installed, but a new APK does when the native side changes. On start and
+  on coming back (every 6 hours at most) the app compares its build (the APK's versionCode, the workflow's run number)
+  with the one the release notes name ("Build N"), and if there's a newer one shows a banner on Today with *Download*
+  (opens the APK in the browser; open it to install over the app) and *Later* (hidden until a newer one). Settings → App
+  keeps the link, or checks by hand.
 - **Keep-awake** in place of the Screen Wake Lock, and the **back button**: closes a sheet, steps out of a page, goes to
   Today, then puts the app in the background.
 
