@@ -16,6 +16,9 @@ export const DEFAULT_PRESETS = [
   { id: 'iv-z2-45', name: 'Zone 2 · 45 min', mode: 'steady', work: 2700, rest: 0, rounds: 1, sets: 1, setRest: 0, prep: 10, hr: { lo: 60, hi: 70, alert: true } },
   { id: 'iv-4x4-80', name: '4 × 4 min at 80%+', work: 240, rest: 60, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 80, hi: null, hold: true } },
   { id: 'iv-4x4-nor', name: 'Norwegian 4 × 4', work: 240, rest: 180, rounds: 4, sets: 1, setRest: 0, prep: 10, hr: { lo: 85, hi: 95 } },
+  // Rønnestad 30/15: 3 series of 13 × 30 s hard / 15 s easy, 3 minutes between. Hard means the best you can hold for
+  // all 39 (the last few of each series very hard); heart rate climbs past 90% and stays there.
+  { id: 'iv-ronnestad', name: 'Rønnestad 30/15', work: 30, rest: 15, rounds: 13, sets: 3, setRest: 180, prep: 10, hr: { lo: 90, hi: null } },
   { id: 'iv-maxhr', name: 'Max heart rate test', mode: 'test', prep: 10 },
 ];
 

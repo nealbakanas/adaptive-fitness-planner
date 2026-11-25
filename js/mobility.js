@@ -5,7 +5,7 @@ import { GS_MOBILITY, gsVideo } from './library.js';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-export const BODY_PARTS = ['Hamstrings', 'Hip flexors', 'Adductors', 'Glutes', 'Quads & knees', 'Calves & ankles', 'Feet & toes', 'Spine', 'Thoracic', 'Shoulders', 'Lats'];
+export const BODY_PARTS = ['Hamstrings', 'Hip flexors', 'Adductors', 'Glutes', 'Quads & knees', 'Calves & ankles', 'Feet & toes', 'Spine', 'Thoracic', 'Shoulders', 'Lats', 'Chest', 'Arms & wrists'];
 
 // A search phrase opens YouTube results; a link opens as is.
 export const videoSearch = q => (!q ? null : /^https?:\/\//i.test(q) ? q : `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
@@ -194,7 +194,8 @@ export function mobilitySeed() {
     { id: 'mobr-day3', name: 'Day 3: Bend Don\'t Break', items: ['mob-cobra', 'mob-bridge-pushup', 'mob-prayer-stretch', 'mob-reverse-hyper-hold'] },
     { id: 'mobr-day4', name: 'Day 4: Primal Roots', items: ['mob-bar-hang', 'mob-db-pullover', 'mob-seiza', 'mob-atg-stepup'] },
   ];
-  return { exercises: [...exercises, ...gsMobilityExercises(), ...mcgillExercises()], routines: [...routines, { ...MCGILL_ROUTINE, items: [...MCGILL_ROUTINE.items] }], sessions: [] };
+  return { exercises: [...exercises, ...gsMobilityExercises(), ...mcgillExercises(), ...flowExercises()],
+    routines: [...routines, { ...MCGILL_ROUTINE, items: [...MCGILL_ROUTINE.items] }, { ...FLOW_ROUTINE, items: [...FLOW_ROUTINE.items] }], sessions: [] };
 }
 
 // Stuart McGill's Big 3 for the low back: 10-second holds, fewer reps each set (5, 3, 1 on his reverse pyramid).
@@ -222,6 +223,72 @@ export function addMcgill(s) {
     ids.push(have?.id ?? m.id);
   }
   if (!s.mobility.routines.some(r => r.id === MCGILL_ROUTINE.id)) s.mobility.routines.push({ ...MCGILL_ROUTINE, items: ids });
+}
+
+// Mash & flow: a daily routine of flows, stretches and soft-tissue work ("mash": a lacrosse ball or foam roller, slow,
+// pausing on the tight spots), one round of each, timed holds. About 25-30 minutes.
+const flow = (id, name, parts, hold, holdMax, perSide, cues, video) =>
+  mx(id, name, parts, { sets: 1, hold, holdMax, perSide }, 10, { hold: true }, cues, video);
+export const flowExercises = () => [
+  flow('mob-flow-ohs-dogs', 'Overhead squat + up dog + down dog', ['Shoulders', 'Thoracic', 'Hamstrings', 'Calves & ankles'], 45, 60, false,
+    'Overhead squat with arms long, hands to the floor, walk out to up dog (hips down, chest open), push back to down dog (heels down), walk in and stand. Keep it moving.',
+    'overhead squat to upward dog downward dog mobility flow'),
+  flow('mob-flow-lunge-twist', 'Lunge + thoracic spine twist', ['Hip flexors', 'Thoracic'], 30, null, true,
+    'Long lunge, back knee down or up; same-side hand inside the front foot, rotate the other arm up to the ceiling and follow it with your eyes.',
+    'lunge with thoracic spine rotation stretch'),
+  flow('mob-flow-wrist', 'Wrist flow', ['Arms & wrists'], 45, 60, false,
+    'On hands and knees: fingers forward, sideways and back, rocking gently; palms up; circles. Ease in, no forcing.',
+    'wrist mobility flow routine on all fours'),
+  flow('mob-flow-scorpion', 'Scorpion', ['Spine', 'Hip flexors', 'Thoracic'], 30, 45, false,
+    'Face down, arms out. Swing one heel across toward the opposite hand, shoulders staying on the floor; alternate, slow.',
+    'scorpion stretch prone'),
+  flow('mob-flow-upper-stretch', 'Best upper stretch in the world', ['Thoracic', 'Shoulders', 'Lats', 'Chest'], 30, 45, false,
+    'Kneeling, hands on a bench or the floor in front, sink the chest down between the arms and breathe into the upper back; turn the palms up to feel it in the lats.',
+    'best upper body stretch in the world thoracic lat'),
+  flow('mob-mash-foot', 'Foot mash', ['Feet & toes'], 30, 45, true,
+    'Standing, a lacrosse ball under the arch: lean in, roll heel to toes, pause on the sore spots. Go easy around the big toe joint.',
+    'lacrosse ball foot mash plantar fascia'),
+  flow('mob-mash-calf', 'Calf mash', ['Calves & ankles'], 45, 60, true,
+    'Calf on a roller or ball, other leg crossed on top for pressure. Roll slowly, stop on a tight spot and turn the foot side to side.',
+    'calf smash foam roller lacrosse ball'),
+  flow('mob-mash-glute', 'Glute mash', ['Glutes'], 45, 60, true,
+    'Sit on the ball, ankle crossed over the other knee, lean into the working side; small circles, then hold on the tight spots.',
+    'lacrosse ball glute smash'),
+  flow('mob-mash-quad', 'Quad mash', ['Quads & knees'], 45, 60, true,
+    'Face down on a roller or ball, one thigh at a time; roll slowly from above the knee to the hip, bend and straighten the knee on a tight spot.',
+    'quad smash foam roller'),
+  flow('mob-flow-couch', 'Couch stretch', ['Hip flexors', 'Quads & knees'], 30, 45, true,
+    'Back knee on the floor against a wall or couch, shin up it; front foot forward. Squeeze the back glute, ribs down, torso upright.',
+    'couch stretch kelly starrett'),
+  flow('mob-mash-shoulder', 'Shoulder mash', ['Shoulders'], 30, 45, true,
+    'Ball between the back of the shoulder and a wall or the floor; small movements, then reach the arm across and back over it.',
+    'lacrosse ball posterior shoulder smash'),
+  flow('mob-mash-pec', 'Pec mash', ['Chest', 'Shoulders'], 30, 45, true,
+    'Ball against a wall just in from the front of the shoulder; lean in and slowly move the arm up, down and behind you.',
+    'lacrosse ball pec smash wall'),
+  flow('mob-mash-trap', 'Trap mash', ['Shoulders'], 45, 60, true,
+    'On your back, ball on the top of the shoulder blade beside the neck; lift the hips to load it, reach the arm overhead and back.',
+    'lacrosse ball upper trap smash'),
+  flow('mob-mash-lat', 'Lat mash', ['Lats'], 30, 45, true,
+    'On your side, roller under the armpit, arm overhead; roll down the side of the back a few inches at a time, rolling slightly forward and back.',
+    'foam roll lats'),
+  flow('mob-mash-bicep', 'Bicep mash', ['Arms & wrists'], 30, null, true,
+    'Ball on a table or the floor under the front of the upper arm; lean in and straighten and bend the elbow slowly.',
+    'lacrosse ball bicep smash'),
+  flow('mob-mash-tricep', 'Tricep mash', ['Arms & wrists'], 30, null, true,
+    'On your side, back of the upper arm on a roller or ball, elbow bent; roll from the elbow to the armpit, bend and straighten on a tight spot.',
+    'foam roller triceps smash'),
+  flow('mob-mash-forearm', 'Forearm mash', ['Arms & wrists'], 30, null, true,
+    'Forearm on a ball on the table, other hand pressing down; roll from wrist to elbow, both sides, opening and closing the hand.',
+    'lacrosse ball forearm smash'),
+];
+export const FLOW_ROUTINE = { id: 'mobr-mash-flow', name: 'Mash & flow', items: flowExercises().map(e => e.id) };
+
+// Adds Mash & flow to existing data (data version 37). Nothing you have is changed.
+export function addFlow(s) {
+  s.mobility ??= { exercises: [], routines: [], sessions: [] };
+  for (const e of flowExercises()) if (!s.mobility.exercises.some(x => x.id === e.id)) s.mobility.exercises.push(e);
+  if (!s.mobility.routines.some(r => r.id === FLOW_ROUTINE.id)) s.mobility.routines.push({ ...FLOW_ROUTINE, items: [...FLOW_ROUTINE.items] });
 }
 
 // Mobility drills from the Garage Strength Movement Library, at 2 × 10 to start.
