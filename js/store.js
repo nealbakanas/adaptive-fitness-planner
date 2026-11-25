@@ -3,7 +3,7 @@ import { seed, defaultAnytime, HYPER_PRO_ONLY, gsExercise, EQUIPMENT, NOT_IN_BAS
 import { addThpPlan } from './thp.js';
 import { splitCategories, splitLunges } from './categories.js';
 import { GS_EQUIPMENT, GS_FAMILIES, GS_EXERCISES, GS_VIDEOS, gsVideo, EXERCISE_ROLES, PATTERN_OVERRIDES } from './library.js';
-import { gsMobilityExercises, addMcgill } from './mobility.js';
+import { gsMobilityExercises, addMcgill, addFlow } from './mobility.js';
 import { addFoot } from './foot.js';
 import { guessRegion, guessExplosive, guessRole, isJump } from './logic.js';
 import * as Vault from './vault.js';
@@ -405,6 +405,17 @@ export function migrate(s) {
       presets.splice(after >= 0 ? after + 1 : presets.length, 0, structuredClone(t));
     }
     s.version = 36;
+  }
+  if (s.version < 37) {
+    // v37: Mash & flow in Mobility (js/mobility.js addFlow), and the Rønnestad 30/15 timer before the max heart-rate test.
+    addFlow(s);
+    const presets = (s.intervals ??= { presets: [], last: null }).presets ??= [];
+    const r = DEFAULT_PRESETS.find(p => p.id === 'iv-ronnestad');
+    if (r && !presets.some(p => p.id === r.id)) {
+      const at = presets.findIndex(p => p.id === 'iv-maxhr');
+      presets.splice(at >= 0 ? at : presets.length, 0, structuredClone(r));
+    }
+    s.version = 37;
   }
   return s;
 }
